@@ -17,6 +17,15 @@ const SandpackWorkspace = dynamic(
   },
 );
 
+// crypto.randomUUID exists only in a secure context (HTTPS/localhost); fall
+// back so the app also works when served over plain HTTP.
+function genId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 type AgentEvent =
   | { type: "project"; id: string }
   | { type: "assistant_text"; text: string }
@@ -79,10 +88,10 @@ export function Workspace({
 
   const onSend = useCallback(
     async (text: string) => {
-      const assistantId = crypto.randomUUID();
+      const assistantId = genId();
       setMessages((prev) => [
         ...prev,
-        { id: crypto.randomUUID(), role: "user", content: text },
+        { id: genId(), role: "user", content: text },
         { id: assistantId, role: "assistant", content: "" },
       ]);
       setStreaming(true);
