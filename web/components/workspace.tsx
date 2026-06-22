@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import dynamic from "next/dynamic";
 import { ChatPanel, type ChatMessage } from "./chat-panel";
+import { WorkspaceToolbar, type Version } from "./workspace-toolbar";
 
 // Sandpack is heavy and browser-only — load it client-side only.
 const SandpackWorkspace = dynamic(
@@ -41,6 +42,7 @@ type AgentEvent =
   | { type: "file_changed"; path: string; content: string }
   | { type: "file_deleted"; path: string }
   | { type: "files"; files: { path: string; content: string }[] }
+  | { type: "version"; id: string; label: string | null; createdAt: string }
   | { type: "error"; message: string }
   | { type: "done" };
 
@@ -48,14 +50,18 @@ export function Workspace({
   projectId,
   initialFiles,
   initialMessages,
+  initialVersions,
 }: {
   projectId: string;
   initialFiles: Record<string, string>;
   initialMessages: ChatMessage[];
+  initialVersions: Version[];
 }) {
   const [files, setFiles] = useState<Record<string, string>>(initialFiles);
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [versions, setVersions] = useState<Version[]>(initialVersions);
   const [streaming, setStreaming] = useState(false);
+  const [restoring, setRestoring] = useState(false);
 
   const appendMessage = useCallback(
     (role: ChatMessage["role"], content: string) => {
@@ -106,12 +112,56 @@ export function Workspace({
             Object.fromEntries(event.files.map((f) => [f.path, f.content])),
           );
           break;
+        case "version":
+          setVersions((prev) => [
+            { id: event.id, label: event.label, createdAt: event.createdAt },
+            ...prev,
+          ]);
+          break;
         case "error":
           appendMessage("assistant", `⚠️ ${event.message}`);
           break;
       }
     },
     [appendMessage],
+  );
+
+  const onDownload = useCallback(() => {
+    const html = files["/index.html"];
+    if (!html) return;
+    const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    const a = Object.assign(document.createElement("a"), {
+      href: url,
+      download: "index.html",
+    });
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, [files]);
+
+  const onRestore = useCallback(
+    async (versionId: string) => {
+      setRestoring(true);
+      try {
+        const res = await fetch("/api/projects/restore", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectId, versionId }),
+        });
+        if (!res.ok) throw new Error(`Restore failed (${res.status})`);
+        const data = (await res.json()) as { files: Record<string, string> };
+        setFiles(data.files);
+      } catch (error) {
+        appendMessage(
+          "assistant",
+          `⚠️ ${error instanceof Error ? error.message : "Restore failed"}`,
+        );
+      } finally {
+        setRestoring(false);
+      }
+    },
+    [projectId, appendMessage],
   );
 
   const onSend = useCallback(
@@ -161,8 +211,17 @@ export function Workspace({
   return (
     <div className="grid h-full grid-cols-[minmax(300px,380px)_1fr]">
       <ChatPanel messages={messages} streaming={streaming} onSend={onSend} />
-      <div className="h-full overflow-hidden">
-        <SandpackWorkspace files={files} />
+      <div className="flex h-full min-h-0 flex-col overflow-hidden">
+        <WorkspaceToolbar
+          canDownload={!!files["/index.html"]}
+          onDownload={onDownload}
+          versions={versions}
+          onRestore={onRestore}
+          busy={restoring || streaming}
+        />
+        <div className="min-h-0 flex-1">
+          <SandpackWorkspace files={files} />
+        </div>
       </div>
     </div>
   );

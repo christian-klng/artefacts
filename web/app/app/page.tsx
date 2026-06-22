@@ -1,6 +1,11 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { ensureDefaultProject, listFiles, getMessages } from "@/lib/projects";
+import {
+  ensureDefaultProject,
+  listFiles,
+  getMessages,
+  listVersions,
+} from "@/lib/projects";
 import { Workspace } from "@/components/workspace";
 import type { ChatMessage } from "@/components/chat-panel";
 
@@ -9,9 +14,10 @@ export default async function AppHomePage() {
   if (!session?.user) redirect("/login");
 
   const project = await ensureDefaultProject(session.user.id);
-  const [fileRows, messageRows] = await Promise.all([
+  const [fileRows, messageRows, versionRows] = await Promise.all([
     listFiles(project.id),
     getMessages(project.id),
+    listVersions(project.id),
   ]);
 
   const files = Object.fromEntries(fileRows.map((f) => [f.path, f.content]));
@@ -20,6 +26,11 @@ export default async function AppHomePage() {
     role: m.role as ChatMessage["role"],
     content: m.content,
   }));
+  const versions = versionRows.map((v) => ({
+    id: v.id,
+    label: v.label,
+    createdAt: v.createdAt.toISOString(),
+  }));
 
   return (
     <div className="h-full">
@@ -27,6 +38,7 @@ export default async function AppHomePage() {
         projectId={project.id}
         initialFiles={files}
         initialMessages={messages}
+        initialVersions={versions}
       />
     </div>
   );

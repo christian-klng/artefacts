@@ -4,6 +4,7 @@ import {
   getOwnedProject,
   addMessage,
   listFiles,
+  createVersion,
 } from "@/lib/projects";
 import { runAgent } from "@/lib/agent/run";
 
@@ -42,11 +43,15 @@ export async function POST(request: Request) {
       send({ type: "project", id: project.id });
 
       let assistantText = "";
+      let filesChanged = false;
       try {
         const run = runAgent({
           projectId: project.id,
           prompt: message,
-          onFileEvent: (event) => send(event),
+          onFileEvent: (event) => {
+            filesChanged = true;
+            send(event);
+          },
         });
 
         for await (const msg of run) {
@@ -69,6 +74,16 @@ export async function POST(request: Request) {
           await addMessage(project.id, "assistant", assistantText);
         }
         send({ type: "files", files: await listFiles(project.id) });
+        // Snapshot the result so the user can restore it later.
+        if (filesChanged) {
+          const version = await createVersion(project.id);
+          send({
+            type: "version",
+            id: version.id,
+            label: version.label,
+            createdAt: version.createdAt,
+          });
+        }
         send({ type: "done" });
       } catch (error) {
         send({

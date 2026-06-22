@@ -1,7 +1,7 @@
 import "server-only";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { projects, files, messages } from "@/lib/db/schema";
+import { projects, files, messages, artifactVersions } from "@/lib/db/schema";
 
 // Service layer for per-user projects and their virtual filesystem. Every read
 // and write is scoped by userId/projectId, which is what enforces multi-tenant
@@ -131,6 +131,64 @@ export async function getMessages(projectId: string) {
     .from(messages)
     .where(eq(messages.projectId, projectId))
     .orderBy(asc(messages.createdAt));
+}
+
+// --- Artifact versions: snapshots of the whole virtual filesystem ---------
+
+/** Snapshots the project's current files as a new restorable version. */
+export async function createVersion(projectId: string, label?: string) {
+  const all = await listFiles(projectId);
+  const snapshot = JSON.stringify(
+    Object.fromEntries(all.map((f) => [f.path, f.content])),
+  );
+  const [row] = await db
+    .insert(artifactVersions)
+    .values({ projectId, label: label ?? null, snapshot })
+    .returning({
+      id: artifactVersions.id,
+      label: artifactVersions.label,
+      createdAt: artifactVersions.createdAt,
+    });
+  return row;
+}
+
+export async function listVersions(projectId: string) {
+  return db
+    .select({
+      id: artifactVersions.id,
+      label: artifactVersions.label,
+      createdAt: artifactVersions.createdAt,
+    })
+    .from(artifactVersions)
+    .where(eq(artifactVersions.projectId, projectId))
+    .orderBy(desc(artifactVersions.createdAt));
+}
+
+/** Replaces the project's files with a stored version's snapshot. */
+export async function restoreVersion(
+  projectId: string,
+  versionId: string,
+): Promise<Record<string, string>> {
+  const version = await db.query.artifactVersions.findFirst({
+    where: and(
+      eq(artifactVersions.id, versionId),
+      eq(artifactVersions.projectId, projectId),
+    ),
+  });
+  if (!version) throw new Error("Version not found");
+
+  const snapshot = JSON.parse(version.snapshot) as Record<string, string>;
+  await db.transaction(async (tx) => {
+    await tx.delete(files).where(eq(files.projectId, projectId));
+    const entries = Object.entries(snapshot);
+    if (entries.length > 0) {
+      await tx
+        .insert(files)
+        .values(entries.map(([path, content]) => ({ projectId, path, content })));
+    }
+  });
+  await touchProject(projectId);
+  return snapshot;
 }
 
 async function touchProject(projectId: string) {
