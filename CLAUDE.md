@@ -29,7 +29,7 @@ A self-hosted, multi-tenant **"Claude Code in the browser"**: a chat-driven agen
 - Coolify: set `AUTH_SECRET`, `ANTHROPIC_API_KEY`, `POSTGRES_PASSWORD`; assign a domain and set `AUTH_URL` to the public `https://…` URL. Serve over **HTTPS** (secure context needed for `crypto.randomUUID` etc.).
 
 ## Phase status
-0 (auth/DB/Docker), 1 (agent + SSE), 2 (workspace UI), 3 (download standalone HTML + artifact version history) done. Next: Phase 4 = multiple projects per user. Versions auto-snapshot after each agent turn that changes files (`createVersion`); restore via `POST /api/projects/restore`.
+All planned phases done: 0 (auth/DB/Docker), 1 (agent + SSE), 2 (workspace UI), 3 (download standalone HTML + version history), 4 (multiple projects per user). Versions auto-snapshot after each agent turn that changes files (`createVersion`); restore via `POST /api/projects/restore`. Projects: `/app` redirects to the latest project; `/app/[projectId]` is the workspace; `ProjectSwitcher` (header) + `app/actions/projects.ts` handle create/rename/delete.
 
 ## Conventions
 - Match existing code style; keep multi-tenant scoping on every query. Commit/push only when the user asks.

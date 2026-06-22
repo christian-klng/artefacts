@@ -32,6 +32,32 @@ export async function ensureDefaultProject(userId: string) {
   return created;
 }
 
+export async function createProject(userId: string, name = "Untitled app") {
+  const [created] = await db
+    .insert(projects)
+    .values({ userId, name })
+    .returning();
+  return created;
+}
+
+export async function renameProject(
+  projectId: string,
+  userId: string,
+  name: string,
+) {
+  await db
+    .update(projects)
+    .set({ name, updatedAt: new Date() })
+    .where(and(eq(projects.id, projectId), eq(projects.userId, userId)));
+}
+
+/** Deletes a project; files/messages/versions cascade via FK. */
+export async function deleteProject(projectId: string, userId: string) {
+  await db
+    .delete(projects)
+    .where(and(eq(projects.id, projectId), eq(projects.userId, userId)));
+}
+
 /** Throws if the project does not belong to the user. */
 export async function getOwnedProject(projectId: string, userId: string) {
   const project = await db.query.projects.findFirst({
