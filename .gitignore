@@ -1,0 +1,10 @@
+# Local env files (keep the .example templates tracked)
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+
+# OS
+.DS_Store

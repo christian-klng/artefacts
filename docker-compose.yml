@@ -1,0 +1,51 @@
+# Standalone stack for Coolify (or `docker compose up`).
+# Coolify auto-creates the network and injects env vars from its UI; the
+# defaults below let it also run locally.
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-artefacts}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-artefacts}
+      POSTGRES_DB: ${POSTGRES_DB:-artefacts}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-artefacts}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot: applies the Drizzle schema, then exits. `web` waits for it.
+  migrate:
+    build:
+      context: ./web
+      target: migrator
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-artefacts}:${POSTGRES_PASSWORD:-artefacts}@db:5432/${POSTGRES_DB:-artefacts}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  web:
+    build:
+      context: ./web
+      target: runner
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-artefacts}:${POSTGRES_PASSWORD:-artefacts}@db:5432/${POSTGRES_DB:-artefacts}
+      AUTH_SECRET: ${AUTH_SECRET}
+      AUTH_TRUST_HOST: "true"
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "3000:3000"
+
+volumes:
+  db-data:
