@@ -3,7 +3,11 @@
 import { useCallback, useState } from "react";
 import dynamic from "next/dynamic";
 import { ChatPanel, type ChatMessage } from "./chat-panel";
-import { WorkspaceToolbar, type Version } from "./workspace-toolbar";
+import {
+  WorkspaceToolbar,
+  type Version,
+  type ViewMode,
+} from "./workspace-toolbar";
 
 // Sandpack is heavy and browser-only — load it client-side only.
 const SandpackWorkspace = dynamic(
@@ -62,6 +66,7 @@ export function Workspace({
   const [versions, setVersions] = useState<Version[]>(initialVersions);
   const [streaming, setStreaming] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [view, setView] = useState<ViewMode>("preview");
 
   const appendMessage = useCallback(
     (role: ChatMessage["role"], content: string) => {
@@ -213,6 +218,8 @@ export function Workspace({
       <ChatPanel messages={messages} streaming={streaming} onSend={onSend} />
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
         <WorkspaceToolbar
+          view={view}
+          onViewChange={setView}
           canDownload={!!files["/index.html"]}
           onDownload={onDownload}
           versions={versions}
@@ -220,7 +227,7 @@ export function Workspace({
           busy={restoring || streaming}
         />
         <div className="min-h-0 flex-1">
-          <SandpackWorkspace files={files} />
+          <SandpackWorkspace files={files} view={view} />
         </div>
       </div>
     </div>
