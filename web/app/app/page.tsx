@@ -1,11 +1,33 @@
-export default function AppHomePage() {
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
+import { ensureDefaultProject, listFiles, getMessages } from "@/lib/projects";
+import { Workspace } from "@/components/workspace";
+import type { ChatMessage } from "@/components/chat-panel";
+
+export default async function AppHomePage() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+
+  const project = await ensureDefaultProject(session.user.id);
+  const [fileRows, messageRows] = await Promise.all([
+    listFiles(project.id),
+    getMessages(project.id),
+  ]);
+
+  const files = Object.fromEntries(fileRows.map((f) => [f.path, f.content]));
+  const messages: ChatMessage[] = messageRows.map((m) => ({
+    id: m.id,
+    role: m.role as ChatMessage["role"],
+    content: m.content,
+  }));
+
   return (
-    <div className="mx-auto max-w-2xl px-4 py-16">
-      <h1 className="text-2xl font-semibold">Your workspace</h1>
-      <p className="mt-2 text-neutral-500">
-        The chat + live-preview workspace lands in Phase 2. For now this
-        confirms the authenticated shell is wired up.
-      </p>
+    <div className="h-full">
+      <Workspace
+        projectId={project.id}
+        initialFiles={files}
+        initialMessages={messages}
+      />
     </div>
   );
 }

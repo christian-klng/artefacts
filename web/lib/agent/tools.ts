@@ -10,10 +10,9 @@ import {
 } from "@/lib/projects";
 
 // Event emitted to the route so it can push live file updates over SSE.
-export type VfsEvent = { type: "file_changed"; path: string } | {
-  type: "file_deleted";
-  path: string;
-};
+export type VfsEvent =
+  | { type: "file_changed"; path: string; content: string }
+  | { type: "file_deleted"; path: string };
 
 function ok(text: string) {
   return { content: [{ type: "text" as const, text }] };
@@ -68,7 +67,7 @@ export function buildVfsServer(
         { path: z.string(), content: z.string() },
         async ({ path, content }) => {
           await writeFile(projectId, path, content);
-          onEvent({ type: "file_changed", path });
+          onEvent({ type: "file_changed", path, content });
           return ok(`Wrote ${path}`);
         },
       ),
@@ -84,7 +83,11 @@ export function buildVfsServer(
         async ({ path, old_string, new_string }) => {
           const result = await editFile(projectId, path, old_string, new_string);
           if (!result.ok) return err(result.error);
-          onEvent({ type: "file_changed", path });
+          onEvent({
+            type: "file_changed",
+            path,
+            content: (await readFile(projectId, path)) ?? "",
+          });
           return ok(`Edited ${path}`);
         },
       ),

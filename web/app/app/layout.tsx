@@ -13,7 +13,7 @@ export default async function AppLayout({
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex h-screen flex-col overflow-hidden">
       <header className="flex items-center justify-between border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
         <span className="font-semibold">artefacts</span>
         <div className="flex items-center gap-4 text-sm">
@@ -25,7 +25,7 @@ export default async function AppLayout({
           </form>
         </div>
       </header>
-      <main className="flex-1">{children}</main>
+      <main className="min-h-0 flex-1">{children}</main>
     </div>
   );
 }
