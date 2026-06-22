@@ -26,9 +26,18 @@ function genId() {
   return `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+const TOOL_ICONS: Record<string, string> = {
+  write_file: "✏️",
+  edit_file: "✏️",
+  read_file: "👀",
+  list_files: "📂",
+  delete_file: "🗑️",
+};
+
 type AgentEvent =
   | { type: "project"; id: string }
   | { type: "assistant_text"; text: string }
+  | { type: "tool_use"; tool: string; path?: string }
   | { type: "file_changed"; path: string; content: string }
   | { type: "file_deleted"; path: string }
   | { type: "files"; files: { path: string; content: string }[] }
@@ -48,52 +57,66 @@ export function Workspace({
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [streaming, setStreaming] = useState(false);
 
-  const handleEvent = useCallback((event: AgentEvent, assistantId: string) => {
-    switch (event.type) {
-      case "assistant_text":
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantId
-              ? { ...m, content: m.content + event.text }
-              : m,
-          ),
-        );
-        break;
-      case "file_changed":
-        setFiles((prev) => ({ ...prev, [event.path]: event.content }));
-        break;
-      case "file_deleted":
-        setFiles((prev) => {
-          const next = { ...prev };
-          delete next[event.path];
-          return next;
-        });
-        break;
-      case "files":
-        setFiles(
-          Object.fromEntries(event.files.map((f) => [f.path, f.content])),
-        );
-        break;
-      case "error":
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantId
-              ? { ...m, content: `⚠️ ${event.message}` }
-              : m,
-          ),
-        );
-        break;
-    }
-  }, []);
+  const appendMessage = useCallback(
+    (role: ChatMessage["role"], content: string) => {
+      setMessages((prev) => [...prev, { id: genId(), role, content }]);
+    },
+    [],
+  );
+
+  const handleEvent = useCallback(
+    (event: AgentEvent) => {
+      switch (event.type) {
+        case "assistant_text":
+          // Append to the in-progress assistant bubble, or start a new one if
+          // the previous item was a tool line / user message.
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            if (last?.role === "assistant") {
+              return prev.map((m, i) =>
+                i === prev.length - 1
+                  ? { ...m, content: m.content + event.text }
+                  : m,
+              );
+            }
+            return [
+              ...prev,
+              { id: genId(), role: "assistant", content: event.text },
+            ];
+          });
+          break;
+        case "tool_use": {
+          const icon = TOOL_ICONS[event.tool] ?? "🔧";
+          const label = `${icon} ${event.tool}${event.path ? ` ${event.path}` : ""}`;
+          appendMessage("tool", label);
+          break;
+        }
+        case "file_changed":
+          setFiles((prev) => ({ ...prev, [event.path]: event.content }));
+          break;
+        case "file_deleted":
+          setFiles((prev) => {
+            const next = { ...prev };
+            delete next[event.path];
+            return next;
+          });
+          break;
+        case "files":
+          setFiles(
+            Object.fromEntries(event.files.map((f) => [f.path, f.content])),
+          );
+          break;
+        case "error":
+          appendMessage("assistant", `⚠️ ${event.message}`);
+          break;
+      }
+    },
+    [appendMessage],
+  );
 
   const onSend = useCallback(
     async (text: string) => {
-      const assistantId = genId();
-      setMessages((prev) => [
-        ...prev,
-        { id: genId(), role: "user", content: text },
-        { id: assistantId, role: "assistant", content: "" },
-      ]);
+      appendMessage("user", text);
       setStreaming(true);
 
       try {
@@ -120,23 +143,19 @@ export function Workspace({
           for (const chunk of chunks) {
             const line = chunk.trim();
             if (!line.startsWith("data:")) continue;
-            const event = JSON.parse(line.slice(5).trim()) as AgentEvent;
-            handleEvent(event, assistantId);
+            handleEvent(JSON.parse(line.slice(5).trim()) as AgentEvent);
           }
         }
       } catch (error) {
-        handleEvent(
-          {
-            type: "error",
-            message: error instanceof Error ? error.message : "Agent error",
-          },
-          assistantId,
-        );
+        handleEvent({
+          type: "error",
+          message: error instanceof Error ? error.message : "Agent error",
+        });
       } finally {
         setStreaming(false);
       }
     },
-    [projectId, handleEvent],
+    [projectId, appendMessage, handleEvent],
   );
 
   return (

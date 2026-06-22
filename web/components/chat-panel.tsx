@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 export type ChatMessage = {
   id: string;
-  role: "user" | "assistant" | "system";
+  role: "user" | "assistant" | "system" | "tool";
   content: string;
 };
 
@@ -22,7 +24,7 @@ export function ChatPanel({
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, streaming]);
 
   function submit() {
     const text = input.trim();
@@ -31,30 +33,25 @@ export function ChatPanel({
     setInput("");
   }
 
+  const lastRole = messages[messages.length - 1]?.role;
+  const showWorking = streaming && lastRole !== "assistant";
+
   return (
-    <div className="flex h-full flex-col border-r border-neutral-200 dark:border-neutral-800">
-      <div className="flex-1 space-y-4 overflow-y-auto p-4">
+    <div className="flex h-full min-h-0 flex-col border-r border-neutral-200 dark:border-neutral-800">
+      <div className="flex-1 space-y-3 overflow-y-auto p-4">
         {messages.length === 0 && (
           <p className="text-sm text-neutral-500">
             Describe the app you want to build.
           </p>
         )}
         {messages.map((m) => (
-          <div
-            key={m.id}
-            className={m.role === "user" ? "text-right" : "text-left"}
-          >
-            <div
-              className={`inline-block max-w-[90%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm ${
-                m.role === "user"
-                  ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
-                  : "bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100"
-              }`}
-            >
-              {m.content || (streaming ? "…" : "")}
-            </div>
-          </div>
+          <MessageRow key={m.id} message={m} />
         ))}
+        {showWorking && (
+          <p className="animate-pulse pl-1 text-xs text-neutral-500">
+            arbeitet…
+          </p>
+        )}
         <div ref={endRef} />
       </div>
 
@@ -80,6 +77,46 @@ export function ChatPanel({
           >
             {streaming ? "…" : "Send"}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MessageRow({ message }: { message: ChatMessage }) {
+  if (message.role === "tool") {
+    return (
+      <div className="pl-1 font-mono text-xs text-neutral-500">
+        {message.content}
+      </div>
+    );
+  }
+
+  if (message.role === "user") {
+    return (
+      <div className="text-right">
+        <div className="inline-block max-w-[90%] whitespace-pre-wrap rounded-2xl bg-neutral-900 px-3 py-2 text-sm text-white dark:bg-white dark:text-neutral-900">
+          {message.content}
+        </div>
+      </div>
+    );
+  }
+
+  // assistant / system — render Markdown
+  return (
+    <div className="text-left">
+      <div className="inline-block max-w-[90%] rounded-2xl bg-neutral-100 px-3 py-2 text-sm text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100">
+        <div className="prose prose-sm max-w-none dark:prose-invert [&_*:first-child]:mt-0 [&_*:last-child]:mb-0 [&_pre]:overflow-x-auto">
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              a: (props) => (
+                <a {...props} target="_blank" rel="noopener noreferrer" />
+              ),
+            }}
+          >
+            {message.content}
+          </ReactMarkdown>
         </div>
       </div>
     </div>

@@ -55,6 +55,11 @@ export async function POST(request: Request) {
               if (block.type === "text" && block.text) {
                 assistantText += block.text;
                 send({ type: "assistant_text", text: block.text });
+              } else if (block.type === "tool_use") {
+                const tool = block.name.replace(/^mcp__vfs__/, "");
+                const path = (block.input as { path?: string } | undefined)
+                  ?.path;
+                send({ type: "tool_use", tool, path });
               }
             }
           }
