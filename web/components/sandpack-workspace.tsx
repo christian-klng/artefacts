@@ -12,12 +12,24 @@ import type { ViewMode } from "./workspace-toolbar";
 // iframe of the self-contained /index.html) or as a code view (Sandpack file
 // tree + read-only editor — both fully offline). We never use SandpackPreview:
 // its runtime is CodeSandbox-hosted and fails on a self-hosted deployment.
+// Cheap, stable content hash (djb2) so the preview iframe reloads exactly when
+// /index.html changes — no effect/state needed.
+function hashContent(s: string): number {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return h >>> 0;
+}
+
 export function SandpackWorkspace({
   files,
   view,
+  previewUrl,
 }: {
   files: Record<string, string>;
   view: ViewMode;
+  // When set, the preview is served from the project's own origin instead of
+  // an inline srcDoc (enables real DB/auth). Undefined → srcDoc fallback.
+  previewUrl?: string;
 }) {
   const indexHtml = files["/index.html"];
   const hasFiles = Object.keys(files).length > 0;
@@ -34,6 +46,26 @@ export function SandpackWorkspace({
         </EmptyState>
       );
     }
+    const iframeStyle = {
+      width: "100%",
+      height: "100%",
+      border: "none",
+      background: "white",
+    } as const;
+    if (previewUrl) {
+      const sep = previewUrl.includes("?") ? "&" : "?";
+      return (
+        <iframe
+          title="App preview"
+          src={`${previewUrl}${sep}v=${hashContent(indexHtml)}`}
+          // The app runs on its own origin (a different origin than the builder),
+          // so allow-same-origin is safe here — it cannot reach the builder —
+          // and is needed for the app's own cookies/storage/auth later.
+          sandbox="allow-scripts allow-forms allow-modals allow-popups allow-pointer-lock allow-same-origin"
+          style={iframeStyle}
+        />
+      );
+    }
     return (
       <iframe
         title="App preview"
@@ -41,12 +73,7 @@ export function SandpackWorkspace({
         // No allow-same-origin: the preview cannot reach our app's origin,
         // cookies, or storage. Scripts/forms run for the demo app.
         sandbox="allow-scripts allow-forms allow-modals allow-popups allow-pointer-lock"
-        style={{
-          width: "100%",
-          height: "100%",
-          border: "none",
-          background: "white",
-        }}
+        style={iframeStyle}
       />
     );
   }

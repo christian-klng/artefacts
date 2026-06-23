@@ -55,11 +55,13 @@ export function Workspace({
   initialFiles,
   initialMessages,
   initialVersions,
+  previewUrl,
 }: {
   projectId: string;
   initialFiles: Record<string, string>;
   initialMessages: ChatMessage[];
   initialVersions: Version[];
+  previewUrl?: string;
 }) {
   const [files, setFiles] = useState<Record<string, string>>(initialFiles);
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
@@ -227,7 +229,11 @@ export function Workspace({
           busy={restoring || streaming}
         />
         <div className="min-h-0 flex-1">
-          <SandpackWorkspace files={files} view={view} />
+          <SandpackWorkspace
+            files={files}
+            view={view}
+            previewUrl={previewUrl}
+          />
         </div>
       </div>
     </div>

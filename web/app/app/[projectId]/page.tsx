@@ -8,6 +8,8 @@ import {
 } from "@/lib/projects";
 import { Workspace } from "@/components/workspace";
 import type { ChatMessage } from "@/components/chat-panel";
+import { signPreviewToken } from "@/lib/preview-token";
+import { buildAppOrigin } from "@/lib/app-host";
 
 export default async function ProjectPage({
   params,
@@ -41,6 +43,16 @@ export default async function ProjectPage({
     createdAt: v.createdAt.toISOString(),
   }));
 
+  // When an apps sub-zone is configured, the preview is served from the
+  // project's own origin (real DB/auth possible). A signed token authorizes
+  // viewing cross-origin. Without APPS_DOMAIN we fall back to the srcDoc preview.
+  const appsDomain = process.env.APPS_DOMAIN;
+  const previewUrl = appsDomain
+    ? `${buildAppOrigin(appsDomain, `preview-${project.id}`)}/?pt=${encodeURIComponent(
+        signPreviewToken(project.id),
+      )}`
+    : undefined;
+
   return (
     <div className="h-full">
       {/* key remounts the workspace cleanly when switching projects */}
@@ -50,6 +62,7 @@ export default async function ProjectPage({
         initialFiles={files}
         initialMessages={messages}
         initialVersions={versions}
+        previewUrl={previewUrl}
       />
     </div>
   );
