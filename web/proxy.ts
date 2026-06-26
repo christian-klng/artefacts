@@ -19,6 +19,16 @@ export default auth((req) => {
 
   if (isAppHost(host, appsDomain)) {
     const { pathname } = req.nextUrl;
+    // Forward the real app host explicitly. NextResponse.rewrite re-derives the
+    // request's host from req.nextUrl (the internal/connection host, e.g.
+    // 127.0.0.1:3000), so after the rewrite the /serve route would no longer see
+    // the preview-<id>.apps.<domain> Host header it needs to resolve the project
+    // — it 404s. We pin the original host on a header the route trusts. Set it on
+    // every app-zone request (overwriting any client-supplied value) so it can't
+    // be spoofed on the pass-through paths either.
+    const requestHeaders = new Headers(req.headers);
+    requestHeaders.set("x-app-host", host ?? "");
+
     // Let the app's own data/auth API and Next internals through untouched;
     // everything else on this origin is the generated app itself.
     if (
@@ -26,11 +36,11 @@ export default auth((req) => {
       pathname === "/serve" ||
       pathname.startsWith("/_next")
     ) {
-      return NextResponse.next();
+      return NextResponse.next({ request: { headers: requestHeaders } });
     }
     const url = req.nextUrl.clone();
     url.pathname = "/serve"; // query (the preview token) is preserved
-    return NextResponse.rewrite(url);
+    return NextResponse.rewrite(url, { request: { headers: requestHeaders } });
   }
 
   // Builder / main domain.

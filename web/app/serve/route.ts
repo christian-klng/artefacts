@@ -22,7 +22,10 @@ function injectBootstrap(html: string, projectId: string): string {
 }
 
 export async function GET(request: Request) {
-  const host = request.headers.get("host");
+  // proxy.ts pins the real app host here before rewriting to /serve, because
+  // NextResponse.rewrite otherwise replaces the Host header with the internal
+  // host. Fall back to the Host header for direct /serve hits (no rewrite).
+  const host = request.headers.get("x-app-host") || request.headers.get("host");
   const appsDomain = process.env.APPS_DOMAIN ?? "";
 
   const label = parseAppLabel(host, appsDomain);
