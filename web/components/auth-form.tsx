@@ -53,6 +53,17 @@ export function AuthForm({
           minLength={8}
         />
 
+        {!isSignup && (
+          <p className="text-right text-sm">
+            <Link
+              href="/forgot-password"
+              className="text-neutral-500 underline"
+            >
+              Forgot password?
+            </Link>
+          </p>
+        )}
+
         {state?.error && (
           <p className="text-sm text-red-500" role="alert">
             {state.error}

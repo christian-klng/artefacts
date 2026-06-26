@@ -68,6 +68,24 @@ export const verificationTokens = pgTable(
   (vt) => [primaryKey({ columns: [vt.identifier, vt.token] })],
 );
 
+// Password reset tokens. We store only the SHA-256 hash of the token — the raw
+// token lives solely in the emailed link, so a DB leak can't be used to reset
+// passwords. Tokens are single-use (usedAt) and expire (expires).
+export const passwordResetTokens = pgTable(
+  "password_reset_token",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("tokenHash").notNull().unique(),
+    expires: timestamp("expires", { mode: "date" }).notNull(),
+    usedAt: timestamp("usedAt", { mode: "date" }),
+    createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [index("password_reset_user_idx").on(t.userId)],
+);
+
 // ---------------------------------------------------------------------------
 // Application tables: per-user projects, their virtual filesystem, chat
 // history, and published artifact versions.
