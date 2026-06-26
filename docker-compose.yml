@@ -46,6 +46,20 @@ services:
       AUTH_URL: ${AUTH_URL}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       APPS_DOMAIN: ${APPS_DOMAIN}
+      # Outgoing mail (welcome + password-reset). Referenced here so Coolify UI
+      # values actually reach the container. Template overrides are optional —
+      # when unset they fall back to the defaults in lib/mail-templates.ts.
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_SECURE: ${SMTP_SECURE}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      MAIL_FROM: ${MAIL_FROM}
+      MAIL_RESET_TTL_HOURS: ${MAIL_RESET_TTL_HOURS}
+      MAIL_WELCOME_SUBJECT: ${MAIL_WELCOME_SUBJECT}
+      MAIL_WELCOME_HTML: ${MAIL_WELCOME_HTML}
+      MAIL_RESET_SUBJECT: ${MAIL_RESET_SUBJECT}
+      MAIL_RESET_HTML: ${MAIL_RESET_HTML}
     depends_on:
       db:
         condition: service_healthy

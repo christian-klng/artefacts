@@ -7,7 +7,11 @@ import {
   renameProject,
   deleteProject,
   listProjects,
+  publishProject,
+  unpublishProject,
+  setPublishSlug,
 } from "@/lib/projects";
+import { buildAppOrigin } from "@/lib/app-host";
 
 async function requireUserId() {
   const session = await auth();
@@ -29,6 +33,49 @@ export async function renameProjectAction(formData: FormData) {
     await renameProject(projectId, userId, name);
   }
   redirect(projectId ? `/app/${projectId}` : "/app");
+}
+
+/** Publishes the project and returns its public URL (or an error message). */
+export async function publishProjectAction(
+  projectId: string,
+): Promise<{ url: string } | { error: string }> {
+  const userId = await requireUserId();
+  const appsDomain = process.env.APPS_DOMAIN;
+  if (!appsDomain) {
+    return { error: "Publishing is not configured on this instance." };
+  }
+  try {
+    const { slug } = await publishProject(projectId, userId);
+    return { url: buildAppOrigin(appsDomain, slug) };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Publish failed" };
+  }
+}
+
+/** Takes the project offline; keeps the slug for future re-publishing. */
+export async function unpublishProjectAction(projectId: string): Promise<void> {
+  const userId = await requireUserId();
+  await unpublishProject(projectId, userId);
+}
+
+/** Sets a custom public address; checks availability and returns the new URL. */
+export async function setPublishSlugAction(
+  projectId: string,
+  desired: string,
+): Promise<{ url: string } | { error: string }> {
+  const userId = await requireUserId();
+  const appsDomain = process.env.APPS_DOMAIN;
+  if (!appsDomain) {
+    return { error: "Publishing is not configured on this instance." };
+  }
+  try {
+    const result = await setPublishSlug(projectId, userId, desired);
+    if ("error" in result) return result;
+    return { url: buildAppOrigin(appsDomain, result.slug) };
+  } catch {
+    // Unique-constraint race: the slug was taken between check and write.
+    return { error: "Diese Adresse ist bereits vergeben." };
+  }
 }
 
 export async function deleteProjectAction(formData: FormData) {

@@ -8,6 +8,11 @@ import {
   type Version,
   type ViewMode,
 } from "./workspace-toolbar";
+import {
+  publishProjectAction,
+  unpublishProjectAction,
+  setPublishSlugAction,
+} from "@/app/actions/projects";
 
 // Sandpack is heavy and browser-only — load it client-side only.
 const SandpackWorkspace = dynamic(
@@ -56,12 +61,16 @@ export function Workspace({
   initialMessages,
   initialVersions,
   previewUrl,
+  publishEnabled = false,
+  initialPublishUrl,
 }: {
   projectId: string;
   initialFiles: Record<string, string>;
   initialMessages: ChatMessage[];
   initialVersions: Version[];
   previewUrl?: string;
+  publishEnabled?: boolean;
+  initialPublishUrl?: string;
 }) {
   const [files, setFiles] = useState<Record<string, string>>(initialFiles);
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
@@ -69,6 +78,10 @@ export function Workspace({
   const [streaming, setStreaming] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [view, setView] = useState<ViewMode>("preview");
+  const [publishUrl, setPublishUrl] = useState<string | undefined>(
+    initialPublishUrl,
+  );
+  const [publishing, setPublishing] = useState(false);
 
   const appendMessage = useCallback(
     (role: ChatMessage["role"], content: string) => {
@@ -171,6 +184,45 @@ export function Workspace({
     [projectId, appendMessage],
   );
 
+  const onPublish = useCallback(async () => {
+    setPublishing(true);
+    try {
+      const result = await publishProjectAction(projectId);
+      if ("error" in result) {
+        appendMessage("assistant", `⚠️ ${result.error}`);
+      } else {
+        setPublishUrl(result.url);
+      }
+    } catch {
+      appendMessage("assistant", "⚠️ Publish failed");
+    } finally {
+      setPublishing(false);
+    }
+  }, [projectId, appendMessage]);
+
+  const onUnpublish = useCallback(async () => {
+    setPublishing(true);
+    try {
+      await unpublishProjectAction(projectId);
+      setPublishUrl(undefined);
+    } catch {
+      appendMessage("assistant", "⚠️ Unpublish failed");
+    } finally {
+      setPublishing(false);
+    }
+  }, [projectId, appendMessage]);
+
+  // Returns an error string for inline display, or undefined on success.
+  const onSetSlug = useCallback(
+    async (desired: string): Promise<string | undefined> => {
+      const result = await setPublishSlugAction(projectId, desired);
+      if ("error" in result) return result.error;
+      setPublishUrl(result.url);
+      return undefined;
+    },
+    [projectId],
+  );
+
   const onSend = useCallback(
     async (text: string) => {
       appendMessage("user", text);
@@ -227,6 +279,13 @@ export function Workspace({
           versions={versions}
           onRestore={onRestore}
           busy={restoring || streaming}
+          publishEnabled={publishEnabled}
+          canPublish={!!files["/index.html"]}
+          publishing={publishing}
+          publishUrl={publishUrl}
+          onPublish={onPublish}
+          onUnpublish={onUnpublish}
+          onSetSlug={onSetSlug}
         />
         <div className="min-h-0 flex-1">
           <SandpackWorkspace

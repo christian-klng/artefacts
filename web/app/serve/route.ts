@@ -1,6 +1,10 @@
-import { readFile } from "@/lib/projects";
+import { readFile, readPublishedIndexHtml } from "@/lib/projects";
 import { verifyPreviewToken } from "@/lib/preview-token";
-import { parseAppLabel, previewProjectId } from "@/lib/app-host";
+import {
+  parseAppLabel,
+  previewProjectId,
+  publishSlugFromLabel,
+} from "@/lib/app-host";
 
 // Serves a generated app's self-contained /index.html on its own origin
 // (<label>.apps.<APPS_DOMAIN>), reached via the rewrite in proxy.ts. Preview
@@ -29,26 +33,46 @@ export async function GET(request: Request) {
   const appsDomain = process.env.APPS_DOMAIN ?? "";
 
   const label = parseAppLabel(host, appsDomain);
+
+  // Preview host (preview-<uuid>): the builder's own gated preview of the LIVE
+  // VFS, authorized by a signed token.
   const projectId = previewProjectId(label);
-  if (!projectId) return new Response("Not found", { status: 404 });
+  if (projectId) {
+    const token = new URL(request.url).searchParams.get("pt");
+    if (verifyPreviewToken(token) !== projectId) {
+      return new Response("Forbidden", { status: 403 });
+    }
 
-  const token = new URL(request.url).searchParams.get("pt");
-  if (verifyPreviewToken(token) !== projectId) {
-    return new Response("Forbidden", { status: 403 });
+    const html = await readFile(projectId, "/index.html");
+    if (html == null) {
+      return new Response("This app has no /index.html yet.", {
+        status: 404,
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      });
+    }
+
+    return htmlResponse(injectBootstrap(html, projectId));
   }
 
-  const html = await readFile(projectId, "/index.html");
-  if (html == null) {
-    return new Response("This app has no /index.html yet.", {
-      status: 404,
-      headers: { "content-type": "text/plain; charset=utf-8" },
-    });
+  // Published host (<slug>): the public, un-gated app, served from the FROZEN
+  // snapshot captured at publish time — never the live VFS.
+  const slug = publishSlugFromLabel(label);
+  if (slug) {
+    const published = await readPublishedIndexHtml(slug);
+    if (published) {
+      return htmlResponse(injectBootstrap(published.html, published.projectId));
+    }
   }
 
-  return new Response(injectBootstrap(html, projectId), {
+  return new Response("Not found", { status: 404 });
+}
+
+function htmlResponse(html: string): Response {
+  return new Response(html, {
     headers: {
       "content-type": "text/html; charset=utf-8",
-      // Always reflect the latest VFS; the builder busts the iframe per change.
+      // Always reflect the latest snapshot/VFS; the builder busts the iframe per
+      // change, and a re-publish should be visible immediately.
       "cache-control": "no-store",
     },
   });

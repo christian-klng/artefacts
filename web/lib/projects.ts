@@ -1,7 +1,9 @@
 import "server-only";
+import { randomInt } from "node:crypto";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { projects, files, messages, artifactVersions } from "@/lib/db/schema";
+import { publishSlugFromLabel } from "@/lib/app-host";
 
 // Service layer for per-user projects and their virtual filesystem. Every read
 // and write is scoped by userId/projectId, which is what enforces multi-tenant
@@ -215,6 +217,135 @@ export async function restoreVersion(
   });
   await touchProject(projectId);
   return snapshot;
+}
+
+// --- Publishing: serve a frozen snapshot publicly at <slug>.apps.<domain> ---
+
+/** Turns a project name into a URL-safe label, never colliding with preview-*. */
+function slugify(name: string): string {
+  const base = name
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^\x00-\x7F]/g, "") // drop non-ASCII (NFKD leaves base letters)
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40)
+    .replace(/-+$/g, "");
+  const cleaned = base || "app";
+  // The preview-<id> host namespace is reserved for gated previews.
+  return cleaned.startsWith("preview") ? `app-${cleaned}` : cleaned;
+}
+
+/** True if no other project holds this slug. */
+export async function isSlugFree(
+  slug: string,
+  projectId: string,
+): Promise<boolean> {
+  const taken = await db.query.projects.findFirst({
+    where: eq(projects.publishSlug, slug),
+  });
+  return !taken || taken.id === projectId;
+}
+
+/**
+ * The clean base slug if free, otherwise `base-<random 6 digits>`. A random
+ * suffix (vs. -2/-3) keeps another tenant's address un-guessable and sidesteps
+ * the enumerate-and-collide race.
+ */
+async function uniqueSlug(base: string, projectId: string): Promise<string> {
+  if (await isSlugFree(base, projectId)) return base;
+  for (let i = 0; i < 20; i += 1) {
+    const candidate = `${base}-${randomInt(100000, 1000000)}`;
+    if (await isSlugFree(candidate, projectId)) return candidate;
+  }
+  throw new Error("Could not allocate a unique address; pick a custom one");
+}
+
+/**
+ * Sets a user-chosen public address. Validates the shape, rejects taken slugs,
+ * and (when published) moves the live app to the new URL immediately.
+ */
+export async function setPublishSlug(
+  projectId: string,
+  userId: string,
+  desired: string,
+): Promise<{ slug: string } | { error: string }> {
+  await getOwnedProject(projectId, userId); // ownership guard
+  const slug = publishSlugFromLabel(desired.trim().toLowerCase());
+  if (!slug) {
+    return { error: "Ungültige Adresse: nur a–z, 0–9 und Bindestriche." };
+  }
+  if (!(await isSlugFree(slug, projectId))) {
+    return { error: "Diese Adresse ist bereits vergeben." };
+  }
+  await db
+    .update(projects)
+    .set({ publishSlug: slug, updatedAt: new Date() })
+    .where(and(eq(projects.id, projectId), eq(projects.userId, userId)));
+  return { slug };
+}
+
+/**
+ * Publishes the project: freezes the current files as a new version and serves
+ * that snapshot publicly. Reuses the existing slug on re-publish. Returns it.
+ */
+export async function publishProject(
+  projectId: string,
+  userId: string,
+): Promise<{ slug: string }> {
+  const project = await getOwnedProject(projectId, userId);
+  if ((await readFile(projectId, "/index.html")) == null) {
+    throw new Error("Nothing to publish: no /index.html yet");
+  }
+
+  const version = await createVersion(projectId, "Published");
+  const slug =
+    project.publishSlug ?? (await uniqueSlug(slugify(project.name), projectId));
+
+  await db
+    .update(projects)
+    .set({
+      published: true,
+      publishSlug: slug,
+      publishedVersionId: version.id,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(projects.id, projectId), eq(projects.userId, userId)));
+
+  return { slug };
+}
+
+/** Takes the app offline; keeps the slug so re-publishing reuses the URL. */
+export async function unpublishProject(projectId: string, userId: string) {
+  await db
+    .update(projects)
+    .set({ published: false, updatedAt: new Date() })
+    .where(and(eq(projects.id, projectId), eq(projects.userId, userId)));
+}
+
+/**
+ * Un-authenticated lookup for the serve route: the frozen /index.html behind a
+ * published slug, or null. Reads the snapshot, never the live VFS.
+ */
+export async function readPublishedIndexHtml(
+  slug: string,
+): Promise<{ projectId: string; html: string } | null> {
+  const project = await db.query.projects.findFirst({
+    where: and(eq(projects.publishSlug, slug), eq(projects.published, true)),
+  });
+  if (!project?.publishedVersionId) return null;
+
+  const version = await db.query.artifactVersions.findFirst({
+    where: and(
+      eq(artifactVersions.id, project.publishedVersionId),
+      eq(artifactVersions.projectId, project.id),
+    ),
+  });
+  if (!version) return null;
+
+  const snapshot = JSON.parse(version.snapshot) as Record<string, string>;
+  const html = snapshot["/index.html"];
+  return html == null ? null : { projectId: project.id, html };
 }
 
 async function touchProject(projectId: string) {

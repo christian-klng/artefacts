@@ -4,6 +4,7 @@ import {
   timestamp,
   uuid,
   integer,
+  boolean,
   primaryKey,
   index,
   uniqueIndex,
@@ -101,6 +102,17 @@ export const projects = pgTable(
     name: text("name").notNull().default("Untitled project"),
     // The Sandpack template this project bundles with (e.g. "react", "vanilla").
     template: text("template").notNull().default("react"),
+    // --- Publishing (Way 3 Phase 4) ---
+    // When published, the app is served publicly and un-gated at
+    // <publishSlug>.apps.<APPS_DOMAIN> (vs. the token-gated preview-<id> host).
+    published: boolean("published").notNull().default(false),
+    // Public address label; unique across all projects. Kept on unpublish so
+    // re-publishing reuses the same URL.
+    publishSlug: text("publish_slug").unique(),
+    // The frozen artifact_version served publicly. Plain id (no FK) to avoid a
+    // circular projects<->artifact_version constraint; versions are only ever
+    // removed by project cascade, so it can't dangle in practice.
+    publishedVersionId: uuid("published_version_id"),
     createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
   },

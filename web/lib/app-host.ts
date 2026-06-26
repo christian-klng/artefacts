@@ -48,6 +48,18 @@ export function previewProjectId(label: string | null): string | null {
   return UUID_RE.test(m[1]) ? m[1] : null;
 }
 
+const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
+
+/**
+ * Extracts a published-app slug from a sub-zone label, or null. Anything under
+ * the reserved `preview-` prefix belongs to the gated preview namespace and is
+ * never a public slug.
+ */
+export function publishSlugFromLabel(label: string | null): string | null {
+  if (!label || /^preview-/.test(label)) return null;
+  return SLUG_RE.test(label) ? label : null;
+}
+
 /** Builds the origin for a given app label, e.g. https://preview-<id>.apps.x. */
 export function buildAppOrigin(appsDomain: string, label: string): string {
   const proto = hostname(appsDomain).endsWith("localhost") ? "http" : "https";

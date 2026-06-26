@@ -53,6 +53,13 @@ export default async function ProjectPage({
       )}`
     : undefined;
 
+  // Publishing serves a frozen snapshot from <slug>.apps.<domain>; only offered
+  // when the apps sub-zone is configured.
+  const publishUrl =
+    appsDomain && project.published && project.publishSlug
+      ? buildAppOrigin(appsDomain, project.publishSlug)
+      : undefined;
+
   return (
     <div className="h-full">
       {/* key remounts the workspace cleanly when switching projects */}
@@ -63,6 +70,8 @@ export default async function ProjectPage({
         initialMessages={messages}
         initialVersions={versions}
         previewUrl={previewUrl}
+        publishEnabled={!!appsDomain}
+        initialPublishUrl={publishUrl}
       />
     </div>
   );
