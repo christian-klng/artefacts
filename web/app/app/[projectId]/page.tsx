@@ -7,6 +7,7 @@ import {
   listVersions,
   getPublishedSignature,
 } from "@/lib/projects";
+import { listAttachments } from "@/lib/attachments";
 import { Workspace } from "@/components/workspace";
 import type { ChatMessage } from "@/components/chat-panel";
 import { signPreviewToken } from "@/lib/preview-token";
@@ -26,11 +27,13 @@ export default async function ProjectPage({
   );
   if (!project) redirect("/app");
 
-  const [fileRows, messageRows, versionRows] = await Promise.all([
-    listFiles(project.id),
-    getMessages(project.id),
-    listVersions(project.id),
-  ]);
+  const [fileRows, messageRows, versionRows, attachmentRows] =
+    await Promise.all([
+      listFiles(project.id),
+      getMessages(project.id),
+      listVersions(project.id),
+      listAttachments(project.id),
+    ]);
 
   const files = Object.fromEntries(fileRows.map((f) => [f.path, f.content]));
   const messages: ChatMessage[] = messageRows.map((m) => ({
@@ -42,6 +45,15 @@ export default async function ProjectPage({
     id: v.id,
     label: v.label,
     createdAt: v.createdAt.toISOString(),
+  }));
+  const attachments = attachmentRows.map((a) => ({
+    id: a.id,
+    filename: a.filename,
+    mimeType: a.mimeType,
+    kind: a.kind,
+    size: a.size,
+    createdAt: a.createdAt.toISOString(),
+    preview: a.preview,
   }));
 
   // When an apps sub-zone is configured, the preview is served from the
@@ -75,6 +87,7 @@ export default async function ProjectPage({
         initialFiles={files}
         initialMessages={messages}
         initialVersions={versions}
+        initialAttachments={attachments}
         previewUrl={previewUrl}
         publishEnabled={!!appsDomain}
         initialPublishUrl={publishUrl}

@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { ChatPanel, type ChatMessage } from "./chat-panel";
+import { AttachmentsView, type AttachmentMeta } from "./attachments-view";
 import { filesSignature } from "@/lib/files-signature";
 import {
   WorkspaceToolbar,
@@ -43,6 +44,8 @@ const TOOL_ICONS: Record<string, string> = {
   read_file: "👀",
   list_files: "📂",
   delete_file: "🗑️",
+  list_attachments: "📎",
+  read_attachment: "📎",
 };
 
 type AgentEvent =
@@ -61,6 +64,7 @@ export function Workspace({
   initialFiles,
   initialMessages,
   initialVersions,
+  initialAttachments = [],
   previewUrl,
   publishEnabled = false,
   initialPublishUrl,
@@ -70,6 +74,7 @@ export function Workspace({
   initialFiles: Record<string, string>;
   initialMessages: ChatMessage[];
   initialVersions: Version[];
+  initialAttachments?: AttachmentMeta[];
   previewUrl?: string;
   publishEnabled?: boolean;
   initialPublishUrl?: string;
@@ -78,6 +83,8 @@ export function Workspace({
   const [files, setFiles] = useState<Record<string, string>>(initialFiles);
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [versions, setVersions] = useState<Version[]>(initialVersions);
+  const [attachments, setAttachments] =
+    useState<AttachmentMeta[]>(initialAttachments);
   const [streaming, setStreaming] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [view, setView] = useState<ViewMode>("preview");
@@ -99,6 +106,21 @@ export function Workspace({
     },
     [],
   );
+
+  // Re-fetch the attachment list after an upload or delete. The initial list is
+  // hydrated from the server (page.tsx), so no mount fetch is needed.
+  const refreshAttachments = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `/api/attachments?projectId=${encodeURIComponent(projectId)}`,
+      );
+      if (!res.ok) return;
+      const data = (await res.json()) as { attachments: AttachmentMeta[] };
+      setAttachments(data.attachments);
+    } catch {
+      // Non-fatal: the list just won't refresh.
+    }
+  }, [projectId]);
 
   const handleEvent = useCallback(
     (event: AgentEvent) => {
@@ -236,7 +258,7 @@ export function Workspace({
   );
 
   const onSend = useCallback(
-    async (text: string) => {
+    async (text: string, attachmentIds: string[] = []) => {
       appendMessage("user", text);
       setStreaming(true);
 
@@ -244,7 +266,7 @@ export function Workspace({
         const res = await fetch("/api/agent", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: text, projectId }),
+          body: JSON.stringify({ message: text, projectId, attachmentIds }),
         });
         if (!res.ok || !res.body) {
           throw new Error(`Request failed (${res.status})`);
@@ -281,7 +303,13 @@ export function Workspace({
 
   return (
     <div className="grid h-full grid-cols-[minmax(300px,380px)_1fr]">
-      <ChatPanel messages={messages} streaming={streaming} onSend={onSend} />
+      <ChatPanel
+        messages={messages}
+        streaming={streaming}
+        projectId={projectId}
+        onSend={onSend}
+        onAttachmentsChanged={refreshAttachments}
+      />
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
         <WorkspaceToolbar
           view={view}
@@ -301,11 +329,19 @@ export function Workspace({
           onSetSlug={onSetSlug}
         />
         <div className="min-h-0 flex-1">
-          <SandpackWorkspace
-            files={files}
-            view={view}
-            previewUrl={previewUrl}
-          />
+          {view === "files" ? (
+            <AttachmentsView
+              attachments={attachments}
+              projectId={projectId}
+              onDeleted={refreshAttachments}
+            />
+          ) : (
+            <SandpackWorkspace
+              files={files}
+              view={view}
+              previewUrl={previewUrl}
+            />
+          )}
         </div>
       </div>
     </div>

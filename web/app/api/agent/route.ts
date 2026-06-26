@@ -6,6 +6,7 @@ import {
   listFiles,
   createVersion,
 } from "@/lib/projects";
+import { listAttachments } from "@/lib/attachments";
 import { runAgent } from "@/lib/agent/run";
 
 // The Agent SDK needs Node APIs (and may spawn a subprocess) — never the edge
@@ -32,6 +33,12 @@ export async function POST(request: Request) {
     : await ensureDefaultProject(userId);
   await addMessage(project.id, "user", message);
 
+  // Make the agent aware of the project's uploaded reference files so it knows
+  // to reach for list_attachments / read_attachment. The note is prepended to
+  // the prompt (not stored as the user's message). attachmentIds flags the ones
+  // just attached this turn for extra emphasis.
+  const prompt = await withAttachmentContext(project.id, message, body);
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -47,7 +54,7 @@ export async function POST(request: Request) {
       try {
         const run = runAgent({
           projectId: project.id,
-          prompt: message,
+          prompt,
           onFileEvent: (event) => {
             filesChanged = true;
             send(event);
@@ -61,7 +68,10 @@ export async function POST(request: Request) {
                 assistantText += block.text;
                 send({ type: "assistant_text", text: block.text });
               } else if (block.type === "tool_use") {
-                const tool = block.name.replace(/^mcp__vfs__/, "");
+                const tool = block.name.replace(
+                  /^mcp__(?:vfs|attachments)__/,
+                  "",
+                );
                 const path = (block.input as { path?: string } | undefined)
                   ?.path;
                 send({ type: "tool_use", tool, path });
@@ -103,4 +113,35 @@ export async function POST(request: Request) {
       Connection: "keep-alive",
     },
   });
+}
+
+/** Prepends a note about available reference files so the agent uses its tools. */
+async function withAttachmentContext(
+  projectId: string,
+  message: string,
+  body: unknown,
+): Promise<string> {
+  const all = await listAttachments(projectId);
+  if (all.length === 0) return message;
+
+  const newIds = new Set(
+    Array.isArray((body as { attachmentIds?: unknown })?.attachmentIds)
+      ? ((body as { attachmentIds: unknown[] }).attachmentIds.filter(
+          (x): x is string => typeof x === "string",
+        ))
+      : [],
+  );
+
+  const list = all
+    .map(
+      (a) =>
+        `#${a.id} ${a.filename} (${a.kind})${newIds.has(a.id) ? " [just attached]" : ""}`,
+    )
+    .join(", ");
+
+  return (
+    `[Reference files the user uploaded for this project — read the relevant ones ` +
+    `with list_attachments / read_attachment before building: ${list}.]\n\n` +
+    message
+  );
 }

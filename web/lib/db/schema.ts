@@ -158,6 +158,36 @@ export const messages = pgTable(
   (message) => [index("message_project_idx").on(message.projectId)],
 );
 
+// User-uploaded reference files (design concepts, texts, foreign HTML/CSS, …).
+// Deliberately separate from the `file` VFS: these are read-only *context* for
+// the agent, NOT part of the app's files — so they never appear in the Sandpack
+// code tree, downloads, or artifact versions. The agent reaches them lazily via
+// dedicated MCP tools (list_attachments / read_attachment). Scoped by projectId
+// like everything else.
+export const attachments = pgTable(
+  "attachment",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("projectId")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    filename: text("filename").notNull(),
+    mimeType: text("mimeType").notNull(),
+    // "text" | "image" — drives whether the agent reads extracted text or gets
+    // an image content block (vision).
+    kind: text("kind").notNull(),
+    // Size of the original file in bytes.
+    size: integer("size").notNull(),
+    // The original file, base64-encoded. Covers both re-download and the image
+    // block for vision. Large — never select this in list queries.
+    dataBase64: text("dataBase64").notNull(),
+    // Extracted plain text for the agent; null for images (vision instead).
+    extractedText: text("extractedText"),
+    createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+  },
+  (a) => [index("attachment_project_idx").on(a.projectId)],
+);
+
 // A snapshot of the project at publish time, so versions can be restored — the
 // equivalent of Claude artifacts' version history.
 export const artifactVersions = pgTable(

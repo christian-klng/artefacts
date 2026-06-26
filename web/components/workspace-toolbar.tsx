@@ -8,7 +8,7 @@ export type Version = {
   label: string | null;
 };
 
-export type ViewMode = "preview" | "code";
+export type ViewMode = "preview" | "code" | "files";
 
 export function WorkspaceToolbar({
   view,
@@ -304,6 +304,14 @@ function ViewSwitch({
         aria-pressed={view === "code"}
       >
         Code
+      </button>
+      <button
+        type="button"
+        onClick={() => onViewChange("files")}
+        className={`${base} ${view === "files" ? activeCls : inactiveCls}`}
+        aria-pressed={view === "files"}
+      >
+        Dateien
       </button>
     </div>
   );
