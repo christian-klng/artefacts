@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { ChatPanel, type ChatMessage } from "./chat-panel";
+import { filesSignature } from "@/lib/files-signature";
 import {
   WorkspaceToolbar,
   type Version,
@@ -63,6 +64,7 @@ export function Workspace({
   previewUrl,
   publishEnabled = false,
   initialPublishUrl,
+  initialPublishedSignature,
 }: {
   projectId: string;
   initialFiles: Record<string, string>;
@@ -71,6 +73,7 @@ export function Workspace({
   previewUrl?: string;
   publishEnabled?: boolean;
   initialPublishUrl?: string;
+  initialPublishedSignature?: string;
 }) {
   const [files, setFiles] = useState<Record<string, string>>(initialFiles);
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
@@ -82,6 +85,13 @@ export function Workspace({
     initialPublishUrl,
   );
   const [publishing, setPublishing] = useState(false);
+  // Signature of the published snapshot; compared against the live files to tell
+  // whether the public app is behind the current code.
+  const [publishedSignature, setPublishedSignature] = useState<
+    string | undefined
+  >(initialPublishedSignature);
+  const currentSignature = useMemo(() => filesSignature(files), [files]);
+  const publishDirty = !!publishUrl && publishedSignature !== currentSignature;
 
   const appendMessage = useCallback(
     (role: ChatMessage["role"], content: string) => {
@@ -192,13 +202,15 @@ export function Workspace({
         appendMessage("assistant", `⚠️ ${result.error}`);
       } else {
         setPublishUrl(result.url);
+        // Publish froze exactly the current files → now in sync.
+        setPublishedSignature(currentSignature);
       }
     } catch {
       appendMessage("assistant", "⚠️ Publish failed");
     } finally {
       setPublishing(false);
     }
-  }, [projectId, appendMessage]);
+  }, [projectId, appendMessage, currentSignature]);
 
   const onUnpublish = useCallback(async () => {
     setPublishing(true);
@@ -283,6 +295,7 @@ export function Workspace({
           canPublish={!!files["/index.html"]}
           publishing={publishing}
           publishUrl={publishUrl}
+          publishDirty={publishDirty}
           onPublish={onPublish}
           onUnpublish={onUnpublish}
           onSetSlug={onSetSlug}

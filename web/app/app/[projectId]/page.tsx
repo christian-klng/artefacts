@@ -5,6 +5,7 @@ import {
   listFiles,
   getMessages,
   listVersions,
+  getPublishedSignature,
 } from "@/lib/projects";
 import { Workspace } from "@/components/workspace";
 import type { ChatMessage } from "@/components/chat-panel";
@@ -59,6 +60,11 @@ export default async function ProjectPage({
     appsDomain && project.published && project.publishSlug
       ? buildAppOrigin(appsDomain, project.publishSlug)
       : undefined;
+  // Fingerprint of the published snapshot, so the client can tell whether the
+  // live files have drifted since (→ "Aktualisieren" vs "Aktueller Stand").
+  const publishedSignature = project.published
+    ? ((await getPublishedSignature(project.id)) ?? undefined)
+    : undefined;
 
   return (
     <div className="h-full">
@@ -72,6 +78,7 @@ export default async function ProjectPage({
         previewUrl={previewUrl}
         publishEnabled={!!appsDomain}
         initialPublishUrl={publishUrl}
+        initialPublishedSignature={publishedSignature}
       />
     </div>
   );

@@ -4,6 +4,7 @@ import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { projects, files, messages, artifactVersions } from "@/lib/db/schema";
 import { publishSlugFromLabel } from "@/lib/app-host";
+import { filesSignature } from "@/lib/files-signature";
 
 // Service layer for per-user projects and their virtual filesystem. Every read
 // and write is scoped by userId/projectId, which is what enforces multi-tenant
@@ -313,6 +314,30 @@ export async function publishProject(
     .where(and(eq(projects.id, projectId), eq(projects.userId, userId)));
 
   return { slug };
+}
+
+/**
+ * Content fingerprint of the currently published snapshot, or null if the
+ * project isn't published. Compared client-side against the live files to tell
+ * whether a re-publish is needed (see lib/files-signature.ts).
+ */
+export async function getPublishedSignature(
+  projectId: string,
+): Promise<string | null> {
+  const project = await db.query.projects.findFirst({
+    where: eq(projects.id, projectId),
+  });
+  if (!project?.publishedVersionId) return null;
+
+  const version = await db.query.artifactVersions.findFirst({
+    where: and(
+      eq(artifactVersions.id, project.publishedVersionId),
+      eq(artifactVersions.projectId, projectId),
+    ),
+  });
+  if (!version) return null;
+
+  return filesSignature(JSON.parse(version.snapshot) as Record<string, string>);
 }
 
 /** Takes the app offline; keeps the slug so re-publishing reuses the URL. */

@@ -22,6 +22,7 @@ export function WorkspaceToolbar({
   canPublish,
   publishing,
   publishUrl,
+  publishDirty,
   onPublish,
   onUnpublish,
   onSetSlug,
@@ -37,6 +38,7 @@ export function WorkspaceToolbar({
   canPublish: boolean;
   publishing: boolean;
   publishUrl?: string;
+  publishDirty: boolean;
   onPublish: () => void;
   onUnpublish: () => void;
   onSetSlug: (desired: string) => Promise<string | undefined>;
@@ -55,6 +57,7 @@ export function WorkspaceToolbar({
             canPublish={canPublish}
             publishing={publishing}
             publishUrl={publishUrl}
+            publishDirty={publishDirty}
             onPublish={onPublish}
             onUnpublish={onUnpublish}
             onSetSlug={onSetSlug}
@@ -98,6 +101,7 @@ function PublishControls({
   canPublish,
   publishing,
   publishUrl,
+  publishDirty,
   onPublish,
   onUnpublish,
   onSetSlug,
@@ -105,6 +109,7 @@ function PublishControls({
   canPublish: boolean;
   publishing: boolean;
   publishUrl?: string;
+  publishDirty: boolean;
   onPublish: () => void;
   onUnpublish: () => void;
   onSetSlug: (desired: string) => Promise<string | undefined>;
@@ -179,14 +184,23 @@ function PublishControls({
       >
         {copied ? "✓" : "Kopieren"}
       </button>
-      <button
-        onClick={onPublish}
-        disabled={publishing}
-        className="rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:text-neutral-900 disabled:opacity-50 dark:hover:text-white"
-        title="Aktuellen Stand neu veröffentlichen"
-      >
-        {publishing ? "…" : "Aktualisieren"}
-      </button>
+      {publishDirty ? (
+        <button
+          onClick={onPublish}
+          disabled={publishing}
+          className="rounded px-1.5 py-0.5 text-xs font-medium text-emerald-700 hover:text-emerald-900 disabled:opacity-50 dark:text-emerald-400 dark:hover:text-emerald-300"
+          title="Es gibt Änderungen seit der Veröffentlichung — neu veröffentlichen"
+        >
+          {publishing ? "…" : "Aktualisieren"}
+        </button>
+      ) : (
+        <span
+          className="px-1.5 py-0.5 text-xs text-neutral-400"
+          title="Der veröffentlichte Stand entspricht dem aktuellen Code"
+        >
+          Aktueller Stand
+        </span>
+      )}
       <button
         onClick={onUnpublish}
         disabled={publishing}
