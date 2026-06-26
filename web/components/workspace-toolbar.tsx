@@ -49,7 +49,8 @@ export function WorkspaceToolbar({
       <ViewSwitch view={view} onViewChange={onViewChange} />
 
       <div className="flex items-center gap-2">
-        {publishEnabled && (
+        {/* Preview tab: publishing. Code tab: version history + download. */}
+        {view === "preview" && publishEnabled && (
           <PublishControls
             canPublish={canPublish}
             publishing={publishing}
@@ -59,31 +60,35 @@ export function WorkspaceToolbar({
             onSetSlug={onSetSlug}
           />
         )}
-        {total > 0 && (
-          <select
-            value=""
-            disabled={busy}
-            onChange={(e) => {
-              if (e.target.value) onRestore(e.target.value);
-            }}
-            className="rounded-md border border-neutral-300 bg-transparent px-2 py-1 text-xs outline-none disabled:opacity-50 dark:border-neutral-700"
-            aria-label="Restore a previous version"
-          >
-            <option value="">Restore version…</option>
-            {versions.map((v, i) => (
-              <option key={v.id} value={v.id}>
-                {`v${total - i} · ${new Date(v.createdAt).toLocaleString()}`}
-              </option>
-            ))}
-          </select>
+        {view === "code" && (
+          <>
+            {total > 0 && (
+              <select
+                value=""
+                disabled={busy}
+                onChange={(e) => {
+                  if (e.target.value) onRestore(e.target.value);
+                }}
+                className="rounded-md border border-neutral-300 bg-transparent px-2 py-1 text-xs outline-none disabled:opacity-50 dark:border-neutral-700"
+                aria-label="Restore a previous version"
+              >
+                <option value="">Restore version…</option>
+                {versions.map((v, i) => (
+                  <option key={v.id} value={v.id}>
+                    {`v${total - i} · ${new Date(v.createdAt).toLocaleString()}`}
+                  </option>
+                ))}
+              </select>
+            )}
+            <button
+              onClick={onDownload}
+              disabled={!canDownload}
+              className="rounded-md bg-neutral-900 px-3 py-1 text-xs font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900"
+            >
+              Download
+            </button>
+          </>
         )}
-        <button
-          onClick={onDownload}
-          disabled={!canDownload}
-          className="rounded-md bg-neutral-900 px-3 py-1 text-xs font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900"
-        >
-          Download HTML
-        </button>
       </div>
     </div>
   );
