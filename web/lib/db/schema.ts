@@ -106,9 +106,12 @@ export const projects = pgTable(
     // When published, the app is served publicly and un-gated at
     // <publishSlug>.apps.<APPS_DOMAIN> (vs. the token-gated preview-<id> host).
     published: boolean("published").notNull().default(false),
-    // Public address label; unique across all projects. Kept on unpublish so
+    // Public address label, unique across all projects (enforced by the unique
+    // INDEX below — NOT a column .unique() constraint, because drizzle-kit push
+    // prompts to truncate when adding a unique CONSTRAINT to a populated table,
+    // which hangs the non-TTY migrate container). Kept on unpublish so
     // re-publishing reuses the same URL.
-    publishSlug: text("publish_slug").unique(),
+    publishSlug: text("publish_slug"),
     // The frozen artifact_version served publicly. Plain id (no FK) to avoid a
     // circular projects<->artifact_version constraint; versions are only ever
     // removed by project cascade, so it can't dangle in practice.
@@ -116,7 +119,10 @@ export const projects = pgTable(
     createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
   },
-  (project) => [index("project_user_idx").on(project.userId)],
+  (project) => [
+    index("project_user_idx").on(project.userId),
+    uniqueIndex("project_publish_slug_unique").on(project.publishSlug),
+  ],
 );
 
 // One row per file in a project's virtual filesystem. The agent's file tools
