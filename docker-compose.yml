@@ -38,7 +38,14 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-artefacts}:${POSTGRES_PASSWORD:-artefacts}@db:5432/${POSTGRES_DB:-artefacts}
       AUTH_SECRET: ${AUTH_SECRET}
       AUTH_TRUST_HOST: "true"
+      # Public builder URL (Auth.js) and the wildcard sub-zone for generated-app
+      # previews. APPS_DOMAIN MUST match the host the previews are actually served
+      # on (e.g. apps.kubikraum.digital) — the /serve route 404s ("Not found") if
+      # the request host doesn't end with .<APPS_DOMAIN>. Explicitly wired here so
+      # a Coolify env change can't silently fail to reach the container.
+      AUTH_URL: ${AUTH_URL}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      APPS_DOMAIN: ${APPS_DOMAIN}
     depends_on:
       db:
         condition: service_healthy
