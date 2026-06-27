@@ -3,6 +3,7 @@ import {
   ensureDefaultProject,
   getOwnedProject,
   addMessage,
+  getMessages,
   getClientFiles,
   createVersion,
 } from "@/lib/projects";
@@ -27,17 +28,24 @@ export async function POST(request: Request) {
     return Response.json({ error: "message is required" }, { status: 400 });
   }
 
-  // Resolve the target project (scoped to this user) and record the turn.
+  // Resolve the target project (scoped to this user). Read the prior chat
+  // history BEFORE recording this turn, so the new message isn't duplicated in
+  // the transcript we feed back to the agent.
   const project = body?.projectId
     ? await getOwnedProject(body.projectId, userId)
     : await ensureDefaultProject(userId);
+  const history = await getMessages(project.id);
   await addMessage(project.id, "user", message);
 
   // Make the agent aware of the project's uploaded reference files so it knows
   // to reach for list_attachments / read_attachment. The note is prepended to
   // the prompt (not stored as the user's message). attachmentIds flags the ones
   // just attached this turn for extra emphasis.
-  const prompt = await withAttachmentContext(project.id, message, body);
+  const withAttachments = await withAttachmentContext(project.id, message, body);
+  // Each agent turn is a fresh SDK query() with no memory of prior turns, so we
+  // reconstruct the conversation from the persisted history and prepend it. This
+  // is what lets the agent iterate on the existing app instead of rebuilding it.
+  const prompt = withConversationContext(history, withAttachments);
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -144,5 +152,48 @@ async function withAttachmentContext(
     `[Reference files the user uploaded for this project — read the relevant ones ` +
     `with list_attachments / read_attachment before building: ${list}.]\n\n` +
     message
+  );
+}
+
+// How much prior conversation to replay. The actual app state lives in the VFS
+// (the agent reads it with its tools), so the transcript only needs to carry the
+// dialogue — we cap it to keep the prompt bounded on long-running projects.
+const HISTORY_MAX_MESSAGES = 24;
+const HISTORY_MAX_CHARS_PER_MESSAGE = 4000;
+
+/**
+ * Prepends the prior conversation so the agent treats this turn as a
+ * continuation of one evolving project rather than a standalone request. Without
+ * this, each SDK query() starts blind — the root cause of the agent rebuilding
+ * from scratch and ignoring earlier instructions. Code isn't included here: the
+ * agent reads the current files from the VFS itself.
+ */
+function withConversationContext(
+  history: { role: string; content: string }[],
+  currentPrompt: string,
+): string {
+  const prior = history
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .slice(-HISTORY_MAX_MESSAGES);
+  if (prior.length === 0) return currentPrompt;
+
+  const transcript = prior
+    .map((m) => {
+      const speaker = m.role === "assistant" ? "Assistant" : "User";
+      const text =
+        m.content.length > HISTORY_MAX_CHARS_PER_MESSAGE
+          ? m.content.slice(0, HISTORY_MAX_CHARS_PER_MESSAGE) + " […truncated]"
+          : m.content;
+      return `${speaker}: ${text}`;
+    })
+    .join("\n\n");
+
+  return (
+    `## Conversation so far\n` +
+    `This is the ongoing history of this project. Read it, then treat the new ` +
+    `request below as the next step — iterate on the existing files rather than ` +
+    `starting over.\n\n` +
+    `${transcript}\n\n` +
+    `## New request\n${currentPrompt}`
   );
 }
