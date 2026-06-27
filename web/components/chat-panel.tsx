@@ -119,11 +119,7 @@ export function ChatPanel({
       </div>
 
       <div
-        className={`border-t p-3 ${
-          dragOver
-            ? "border-neutral-900 bg-neutral-50 dark:border-white dark:bg-neutral-900"
-            : "border-neutral-200 dark:border-neutral-800"
-        }`}
+        className="border-t border-neutral-200 p-3 dark:border-neutral-800"
         onDragOver={(e) => {
           e.preventDefault();
           setDragOver(true);
@@ -166,27 +162,23 @@ export function ChatPanel({
             )}
           </div>
         )}
-        <div className="flex items-end gap-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            hidden
-            onChange={(e) => {
-              if (e.target.files?.length) uploadFiles(e.target.files);
-              e.target.value = "";
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading > 0}
-            title="Datei anhängen"
-            aria-label="Datei anhängen"
-            className="rounded-md border border-neutral-300 px-2.5 py-2 text-sm text-neutral-600 hover:border-neutral-900 hover:text-neutral-900 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:border-white dark:hover:text-white"
-          >
-            📎
-          </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          hidden
+          onChange={(e) => {
+            if (e.target.files?.length) uploadFiles(e.target.files);
+            e.target.value = "";
+          }}
+        />
+        <div
+          className={`rounded-xl border bg-white p-2 shadow-sm dark:bg-neutral-950 ${
+            dragOver
+              ? "border-neutral-900 dark:border-white"
+              : "border-neutral-300 focus-within:border-neutral-900 dark:border-neutral-700 dark:focus-within:border-white"
+          }`}
+        >
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -205,19 +197,31 @@ export function ChatPanel({
             }}
             rows={2}
             placeholder="Build a pomodoro timer…"
-            className="flex-1 resize-none rounded-md border border-neutral-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:focus:border-white"
+            className="w-full resize-none bg-transparent px-2 py-1.5 text-sm outline-none"
           />
-          <button
-            onClick={submit}
-            disabled={
-              streaming ||
-              uploading > 0 ||
-              (input.trim() === "" && pending.length === 0)
-            }
-            className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900"
-          >
-            {streaming ? "…" : "Send"}
-          </button>
+          <div className="flex items-center justify-between px-1 pt-1">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading > 0}
+              title="Datei anhängen"
+              aria-label="Datei anhängen"
+              className="rounded-md px-2 py-1 text-base text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 disabled:opacity-50 dark:hover:bg-neutral-800 dark:hover:text-white"
+            >
+              📎
+            </button>
+            <button
+              onClick={submit}
+              disabled={
+                streaming ||
+                uploading > 0 ||
+                (input.trim() === "" && pending.length === 0)
+              }
+              className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900"
+            >
+              {streaming ? "…" : "Send"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
