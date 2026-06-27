@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Check } from "lucide-react";
 
 export type Version = {
   id: string;
@@ -283,10 +284,16 @@ function PublishControls({
       </button>
       <button
         onClick={copy}
-        className="rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
+        className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
         title="Link kopieren"
       >
-        {copied ? "✓" : "Kopieren"}
+        {copied ? (
+          <>
+            <Check className="h-3.5 w-3.5" aria-hidden /> Kopiert
+          </>
+        ) : (
+          "Kopieren"
+        )}
       </button>
       {publishDirty ? (
         <button

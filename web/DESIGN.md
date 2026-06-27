@@ -156,6 +156,15 @@ restraint is the point.
 
 Copy these verbatim as the starting point for new instances.
 
+### Icons
+All icons come from **`lucide-react`** — one library, no emoji, no text glyphs
+(no `☾`, `▾`, `×`, `→`, `✓` as icons). Inline sizes are `h-4 w-4` (controls,
+buttons) or `h-3.5 w-3.5` (chips, tool-log rows); avatar/empty-state icons
+`h-5 w-5`+. Icons inherit `currentColor` — set colour on the parent. Square
+icon-only header buttons share `inline-flex h-8 w-8 items-center justify-center
+rounded-md border …` (theme toggle, account, sign-out). Reference map for the
+agent tool-log lives in `components/chat-panel.tsx` (`TOOL_ICON`).
+
 ### Primary button (black/neutral — the only primary)
 ```
 rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition

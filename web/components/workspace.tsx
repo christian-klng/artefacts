@@ -43,17 +43,6 @@ function genId() {
   return `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-const TOOL_ICONS: Record<string, string> = {
-  write_file: "✏️",
-  edit_file: "✏️",
-  read_file: "👀",
-  list_files: "📂",
-  delete_file: "🗑️",
-  list_attachments: "📎",
-  read_attachment: "📎",
-  embed_attachment: "🖼️",
-};
-
 type AgentEvent =
   | { type: "project"; id: string }
   | { type: "assistant_text"; text: string }
@@ -132,8 +121,12 @@ export function Workspace({
   const publishDirty = !!publishUrl && publishedSignature !== currentSignature;
 
   const appendMessage = useCallback(
-    (role: ChatMessage["role"], content: string) => {
-      setMessages((prev) => [...prev, { id: genId(), role, content }]);
+    (
+      role: ChatMessage["role"],
+      content: string,
+      extra?: Partial<ChatMessage>,
+    ) => {
+      setMessages((prev) => [...prev, { id: genId(), role, content, ...extra }]);
     },
     [],
   );
@@ -175,9 +168,8 @@ export function Workspace({
           });
           break;
         case "tool_use": {
-          const icon = TOOL_ICONS[event.tool] ?? "🔧";
-          const label = `${icon} ${event.tool}${event.path ? ` ${event.path}` : ""}`;
-          appendMessage("tool", label);
+          const label = `${event.tool}${event.path ? ` ${event.path}` : ""}`;
+          appendMessage("tool", label, { tool: event.tool });
           break;
         }
         case "file_changed":
@@ -212,7 +204,7 @@ export function Workspace({
           refreshAttachments();
           break;
         case "error":
-          appendMessage("assistant", `⚠️ ${event.message}`);
+          appendMessage("assistant", event.message, { kind: "error" });
           break;
       }
     },
@@ -265,7 +257,8 @@ export function Workspace({
       } catch (error) {
         appendMessage(
           "assistant",
-          `⚠️ ${error instanceof Error ? error.message : "Download failed"}`,
+          error instanceof Error ? error.message : "Download failed",
+          { kind: "error" },
         );
       }
     },
@@ -291,7 +284,8 @@ export function Workspace({
       } catch (error) {
         appendMessage(
           "assistant",
-          `⚠️ ${error instanceof Error ? error.message : "Restore failed"}`,
+          error instanceof Error ? error.message : "Restore failed",
+          { kind: "error" },
         );
       } finally {
         setRestoring(false);
@@ -305,14 +299,14 @@ export function Workspace({
     try {
       const result = await publishProjectAction(projectId);
       if ("error" in result) {
-        appendMessage("assistant", `⚠️ ${result.error}`);
+        appendMessage("assistant", result.error, { kind: "error" });
       } else {
         setPublishUrl(result.url);
         // Publish froze exactly the current files → now in sync.
         setPublishedSignature(currentSignature);
       }
     } catch {
-      appendMessage("assistant", "⚠️ Publish failed");
+      appendMessage("assistant", "Publish failed", { kind: "error" });
     } finally {
       setPublishing(false);
     }
@@ -324,7 +318,7 @@ export function Workspace({
       await unpublishProjectAction(projectId);
       setPublishUrl(undefined);
     } catch {
-      appendMessage("assistant", "⚠️ Unpublish failed");
+      appendMessage("assistant", "Unpublish failed", { kind: "error" });
     } finally {
       setPublishing(false);
     }

@@ -3,12 +3,41 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import {
+  Eye,
+  FileText,
+  FolderOpen,
+  Image as ImageIcon,
+  Paperclip,
+  Pencil,
+  TriangleAlert,
+  Trash2,
+  Wrench,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import type { AttachmentMeta } from "./attachments-view";
 
 export type ChatMessage = {
   id: string;
   role: "user" | "assistant" | "system" | "tool";
   content: string;
+  // For tool-log rows: the agent tool name, used to pick an icon.
+  tool?: string;
+  // Marks a client-side error/warning notice (rendered with a danger style).
+  kind?: "error";
+};
+
+// Agent tool → icon for the chat tool-log rows.
+const TOOL_ICON: Record<string, LucideIcon> = {
+  write_file: Pencil,
+  edit_file: Pencil,
+  read_file: Eye,
+  list_files: FolderOpen,
+  delete_file: Trash2,
+  list_attachments: Paperclip,
+  read_attachment: Paperclip,
+  embed_attachment: ImageIcon,
 };
 
 export function ChatPanel({
@@ -139,14 +168,18 @@ export function ChatPanel({
                 className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-xs dark:bg-neutral-800"
                 title={a.filename}
               >
-                <span>{a.kind === "image" ? "🖼️" : "📄"}</span>
+                {a.kind === "image" ? (
+                  <ImageIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                ) : (
+                  <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                )}
                 <span className="max-w-[140px] truncate">{a.filename}</span>
                 <button
                   onClick={() => removePending(a.id)}
                   className="text-neutral-400 hover:text-danger"
                   aria-label={`${a.filename} entfernen`}
                 >
-                  ×
+                  <X className="h-3.5 w-3.5" aria-hidden />
                 </button>
               </span>
             ))}
@@ -206,9 +239,9 @@ export function ChatPanel({
               disabled={uploading > 0}
               title="Datei anhängen"
               aria-label="Datei anhängen"
-              className="rounded-md px-2 py-1 text-base text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 disabled:opacity-50 dark:hover:bg-neutral-800 dark:hover:text-white"
+              className="inline-flex items-center justify-center rounded-md px-2 py-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 disabled:opacity-50 dark:hover:bg-neutral-800 dark:hover:text-white"
             >
-              📎
+              <Paperclip className="h-4 w-4" aria-hidden />
             </button>
             <button
               onClick={submit}
@@ -230,9 +263,23 @@ export function ChatPanel({
 
 function MessageRow({ message }: { message: ChatMessage }) {
   if (message.role === "tool") {
+    const Icon = (message.tool && TOOL_ICON[message.tool]) || Wrench;
     return (
-      <div className="pl-1 font-mono text-xs text-neutral-500">
-        {message.content}
+      <div className="flex items-center gap-1.5 pl-1 font-mono text-xs text-neutral-500">
+        <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        <span className="truncate">{message.content}</span>
+      </div>
+    );
+  }
+
+  // Client-side error/warning notice.
+  if (message.kind === "error") {
+    return (
+      <div className="text-left">
+        <div className="inline-flex max-w-[90%] items-start gap-1.5 rounded-2xl bg-danger/10 px-3 py-2 text-sm text-danger">
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          <span className="whitespace-pre-wrap">{message.content}</span>
+        </div>
       </div>
     );
   }

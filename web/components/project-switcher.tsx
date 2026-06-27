@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ChevronDown, Plus } from "lucide-react";
 import {
   createProjectAction,
   renameProjectAction,
@@ -33,7 +34,7 @@ export function ProjectSwitcher({ projects }: { projects: Project[] }) {
         <span className="max-w-[200px] truncate">
           {active?.name ?? "Projects"}
         </span>
-        <span className="text-neutral-400">▾</span>
+        <ChevronDown className="h-4 w-4 shrink-0 text-neutral-400" aria-hidden />
       </button>
 
       {open && (
@@ -66,9 +67,10 @@ export function ProjectSwitcher({ projects }: { projects: Project[] }) {
               <form action={createProjectAction}>
                 <button
                   type="submit"
-                  className="w-full rounded px-2 py-1.5 text-left text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                  className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800"
                 >
-                  + New project
+                  <Plus className="h-4 w-4 shrink-0" aria-hidden />
+                  New project
                 </button>
               </form>
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ArrowRight } from "lucide-react";
 
 // Where the prompt is handed off. Baked in at build time (it's public).
 const BUILDER_URL =
@@ -55,9 +56,10 @@ export function PromptBox() {
             type="button"
             onClick={submit}
             disabled={submitting}
-            className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+            className="inline-flex items-center gap-1.5 rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
           >
-            {submitting ? "Moment…" : "App bauen →"}
+            {submitting ? "Moment…" : "App bauen"}
+            {!submitting && <ArrowRight className="h-4 w-4" aria-hidden />}
           </button>
         </div>
       </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { FileText } from "lucide-react";
 
 export type AttachmentMeta = {
   id: string;
@@ -16,10 +17,6 @@ function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function fileIcon(kind: AttachmentMeta["kind"]): string {
-  return kind === "image" ? "🖼️" : "📄";
 }
 
 /**
@@ -76,7 +73,7 @@ export function AttachmentsView({
               key={a.id}
               className="flex gap-3 rounded-lg border border-neutral-200 p-3 dark:border-neutral-800"
             >
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded bg-neutral-100 text-xl dark:bg-neutral-800">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded bg-neutral-100 text-neutral-500 dark:bg-neutral-800">
                 {a.kind === "image" ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -85,7 +82,7 @@ export function AttachmentsView({
                     className="h-full w-full object-cover"
                   />
                 ) : (
-                  fileIcon(a.kind)
+                  <FileText className="h-6 w-6" aria-hidden />
                 )}
               </div>
               <div className="min-w-0 flex-1">

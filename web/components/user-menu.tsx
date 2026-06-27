@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Power, User, X } from "lucide-react";
 import { logout } from "@/app/actions/auth";
 
 // The right-hand header controls: a user-icon button that opens an account
@@ -10,42 +11,6 @@ import { logout } from "@/app/actions/auth";
 
 const iconButton =
   "inline-flex h-8 w-8 items-center justify-center rounded-md border border-neutral-300 text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-900 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900 dark:hover:text-white";
-
-function UserIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-4 w-4"
-      aria-hidden
-    >
-      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
-    </svg>
-  );
-}
-
-function PowerIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-4 w-4"
-      aria-hidden
-    >
-      <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
-      <line x1="12" y1="2" x2="12" y2="12" />
-    </svg>
-  );
-}
 
 function Modal({
   title,
@@ -86,7 +51,7 @@ function Modal({
             aria-label="Schließen"
             className="text-neutral-400 transition hover:text-neutral-900 dark:hover:text-white"
           >
-            ×
+            <X className="h-4 w-4" aria-hidden />
           </button>
         </div>
         {children}
@@ -114,7 +79,7 @@ export function UserMenu({
         title={email ?? "Konto"}
         className={iconButton}
       >
-        <UserIcon />
+        <User className="h-4 w-4" aria-hidden />
       </button>
 
       <button
@@ -124,14 +89,14 @@ export function UserMenu({
         title="Abmelden"
         className={iconButton}
       >
-        <PowerIcon />
+        <Power className="h-4 w-4" aria-hidden />
       </button>
 
       {details && (
         <Modal title="Konto" onClose={() => setDetails(false)}>
           <div className="flex items-center gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 dark:bg-neutral-800">
-              <UserIcon />
+              <User className="h-5 w-5" aria-hidden />
             </span>
             <div className="min-w-0">
               {name && (
