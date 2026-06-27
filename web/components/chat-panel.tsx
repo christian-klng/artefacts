@@ -147,7 +147,7 @@ export function ChatPanel({
                 <span className="max-w-[140px] truncate">{a.filename}</span>
                 <button
                   onClick={() => removePending(a.id)}
-                  className="text-neutral-400 hover:text-red-600"
+                  className="text-neutral-400 hover:text-danger"
                   aria-label={`${a.filename} entfernen`}
                 >
                   ×
@@ -160,7 +160,7 @@ export function ChatPanel({
               </span>
             )}
             {uploadError && (
-              <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs text-red-600 dark:bg-red-950">
+              <span className="inline-flex items-center rounded-full bg-danger/10 px-2 py-0.5 text-xs text-danger">
                 {uploadError}
               </span>
             )}

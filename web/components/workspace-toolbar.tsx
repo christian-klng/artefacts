@@ -133,7 +133,7 @@ function PublishControls({
       <button
         onClick={onPublish}
         disabled={!canPublish || publishing}
-        className="rounded-md border border-emerald-600 px-3 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-500 dark:text-emerald-400 dark:hover:bg-emerald-950"
+        className="rounded-md border border-success px-3 py-1 text-xs font-medium text-success hover:bg-success/10 disabled:opacity-50"
         title={canPublish ? "App öffentlich veröffentlichen" : "Noch keine /index.html"}
       >
         {publishing ? "Veröffentlichen…" : "Veröffentlichen"}
@@ -160,12 +160,12 @@ function PublishControls({
 
   return (
     <div className="flex items-center gap-1.5 rounded-md border border-neutral-300 px-2 py-1 dark:border-neutral-700">
-      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
+      <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden />
       <a
         href={publishUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="max-w-[180px] truncate text-xs text-emerald-700 hover:underline dark:text-emerald-400"
+        className="max-w-[180px] truncate text-xs text-success hover:underline"
         title={publishUrl}
       >
         {host}
@@ -188,7 +188,7 @@ function PublishControls({
         <button
           onClick={onPublish}
           disabled={publishing}
-          className="rounded px-1.5 py-0.5 text-xs font-medium text-emerald-700 hover:text-emerald-900 disabled:opacity-50 dark:text-emerald-400 dark:hover:text-emerald-300"
+          className="rounded px-1.5 py-0.5 text-xs font-medium text-success hover:opacity-80 disabled:opacity-50"
           title="Es gibt Änderungen seit der Veröffentlichung — neu veröffentlichen"
         >
           {publishing ? "…" : "Aktualisieren"}
@@ -204,7 +204,7 @@ function PublishControls({
       <button
         onClick={onUnpublish}
         disabled={publishing}
-        className="rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:text-red-600 disabled:opacity-50"
+        className="rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:text-danger disabled:opacity-50"
         title="Offline nehmen"
       >
         Offline
@@ -251,7 +251,7 @@ function SlugEditor({
         }}
         disabled={saving}
         spellCheck={false}
-        className="w-32 rounded border border-neutral-300 bg-transparent px-1.5 py-0.5 text-xs outline-none focus:border-emerald-500 disabled:opacity-50 dark:border-neutral-600"
+        className="w-32 rounded border border-neutral-300 bg-transparent px-1.5 py-0.5 text-xs outline-none focus:border-success disabled:opacity-50 dark:border-neutral-600"
         aria-label="Öffentliche Adresse"
       />
       <span className="text-xs text-neutral-400" title={domainSuffix}>
@@ -260,7 +260,7 @@ function SlugEditor({
       <button
         onClick={save}
         disabled={saving}
-        className="rounded bg-emerald-600 px-2 py-0.5 text-xs font-medium text-white disabled:opacity-50"
+        className="rounded bg-success px-2 py-0.5 text-xs font-medium text-info-deep disabled:opacity-50"
       >
         {saving ? "…" : "Speichern"}
       </button>
@@ -271,7 +271,7 @@ function SlugEditor({
       >
         Abbrechen
       </button>
-      {error && <span className="text-xs text-red-600">{error}</span>}
+      {error && <span className="text-xs text-danger">{error}</span>}
     </div>
   );
 }

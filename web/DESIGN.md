@@ -165,8 +165,10 @@ dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200
 
 ### Success accent button (sparingly — confirm/publish only)
 ```
-rounded bg-success px-2 py-0.5 text-xs font-medium text-white hover:opacity-90
+rounded bg-success px-2 py-0.5 text-xs font-medium text-info-deep hover:opacity-90
 ```
+Foreground is `text-info-deep` (dark teal), **not** white — white on `#06d6a0` only
+reaches ~1.9:1 contrast; `info-deep` reaches ~6.9:1 (AA).
 
 ### Input / field
 ```
@@ -206,16 +208,17 @@ border border-neutral-200 dark:border-neutral-800
 
 ## 8. Dark mode
 
-**Target strategy: class-based.** Toggle a `.dark` class on `<html>` (e.g.
-`<html class="dark">`) rather than relying on the OS. This enables a future in-app
-theme switch and makes dark mode testable without changing OS settings.
+**Class-based** (implemented). A `.dark` class on `<html>` drives all `dark:`
+utilities — not the OS media query. Mechanism:
 
-- Configure Tailwind v4 for class strategy and remove the `@media
-  (prefers-color-scheme: dark)` block in `globals.css` (move those values behind
-  the `.dark` selector).
+- `globals.css` declares `@custom-variant dark (&:where(.dark, .dark *))` so `dark:`
+  keys off the class, and the dark `--background`/`--foreground` live under `.dark`.
+- A pre-paint inline script in `app/layout.tsx` sets the class before first paint
+  (reads `localStorage.theme`, else the OS preference) — no flash. `<html>` carries
+  `suppressHydrationWarning` because the script mutates the class pre-hydration.
+- `components/theme-toggle.tsx` (in the header) flips the class and persists the
+  choice to `localStorage.theme`.
 - The same `.dark` signal selects the logo variant (§3).
-- Persist the user's choice (localStorage) and apply it before paint to avoid a
-  flash. Default to the OS preference on first visit.
 - Every new colour utility ships its `dark:` counterpart per §4. No exceptions.
 
 ---
@@ -255,19 +258,22 @@ Where current code diverges from this guide. Track and fix:
 **Done**
 - ~~Semantic colour tokens~~ — defined under `@theme` in `globals.css`
   (`--color-danger/warning/success/info/info-deep`).
-- ~~Logo assets~~ — `public/brand/logo-on-light.svg` + `logo-on-dark.svg` added.
+- ~~Logo assets~~ — `public/brand/logo-on-light.svg` + `logo-on-dark.svg`; the
+  on-light cube also serves as the favicon (`app/icon.svg`).
 - ~~`<body>` forced Arial~~ — `font-family` dropped; `<body>` now uses `font-sans` (Geist).
 - ~~Stale metadata~~ — `layout.tsx` now `title: "artefacts"`.
+- ~~Migrate components to tokens~~ — all `emerald-*` / `red-*` usages switched to
+  `success` / `danger` tokens. Filled success buttons use `text-info-deep` (not
+  white) for AA contrast on `#06d6a0`.
+- ~~Logo in header + favicon~~ — theme-matched variant in the app header
+  (`app/app/layout.tsx`) plus a `ThemeToggle`; favicon via `app/icon.svg`.
+- ~~Dark mode~~ — now **class-based** (§8): `@custom-variant dark` + a pre-paint
+  theme script in `app/layout.tsx`, with a header toggle.
 
 **Open**
-- **Migrate components to tokens.** Existing components still use raw Tailwind
-  `emerald-*` / `red-*`; switch them to `success` / `danger` (and add `warning` /
-  `info` where states are currently uncoloured).
-- **Place the logo in the header / favicon.** Assets exist but aren't wired into the
-  UI yet; add the mark to the header (theme-matched variant) and derive a favicon.
-- **Dark mode is OS-driven** (`@media prefers-color-scheme`) — migrate to the
-  class-based strategy in §8 (one `@custom-variant dark` line + a pre-paint theme
-  script; do it as a single change so OS-dark users don't regress).
+- **Apply `warning` / `info` where states are currently uncoloured** — the tokens
+  exist but few surfaces use them yet (e.g. non-blocking warnings, hints). Opt in
+  as those UI states appear; don't retrofit colour where neutral already reads fine.
 
 ---
 

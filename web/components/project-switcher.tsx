@@ -110,7 +110,7 @@ export function ProjectSwitcher({ projects }: { projects: Project[] }) {
                       <input type="hidden" name="projectId" value={active.id} />
                       <button
                         type="submit"
-                        className="rounded px-2 py-1.5 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                        className="rounded px-2 py-1.5 text-sm text-danger hover:bg-danger/10"
                       >
                         Delete
                       </button>

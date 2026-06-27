@@ -37,8 +37,11 @@ export function AttachmentsView({
   onDeleted: () => void;
 }) {
   const [deleting, setDeleting] = useState<string | null>(null);
+  // Which file is awaiting delete confirmation (inline, no native dialog).
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   const remove = async (id: string) => {
+    setConfirmingId(null);
     setDeleting(id);
     try {
       const res = await fetch(
@@ -110,13 +113,31 @@ export function AttachmentsView({
                   >
                     Download
                   </a>
-                  <button
-                    onClick={() => remove(a.id)}
-                    disabled={deleting === a.id}
-                    className="text-neutral-500 hover:text-red-600 disabled:opacity-50"
-                  >
-                    {deleting === a.id ? "Löschen…" : "Löschen"}
-                  </button>
+                  {confirmingId === a.id ? (
+                    <span className="flex items-center gap-2">
+                      <span className="text-neutral-500">Wirklich löschen?</span>
+                      <button
+                        onClick={() => remove(a.id)}
+                        className="font-medium text-danger hover:underline"
+                      >
+                        Ja
+                      </button>
+                      <button
+                        onClick={() => setConfirmingId(null)}
+                        className="text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
+                      >
+                        Abbrechen
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmingId(a.id)}
+                      disabled={deleting === a.id}
+                      className="text-neutral-500 hover:text-danger disabled:opacity-50"
+                    >
+                      {deleting === a.id ? "Löschen…" : "Löschen"}
+                    </button>
+                  )}
                 </div>
               </div>
             </li>
