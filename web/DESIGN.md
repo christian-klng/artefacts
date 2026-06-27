@@ -1,6 +1,6 @@
-# artefacts — Design Guide (Builder UI)
+# Kubikraum — Design Guide (Builder UI)
 
-The design system for the **builder app** (the artefacts UI itself), and for its
+The design system for the **builder app** (the Kubikraum UI itself), and for its
 future **landing page**. This is the **target state**: it codifies the conventions
 that already live, implicitly, across `web/components/` and makes them the rule.
 Where today's code diverges, see **§10 Known gaps / to-fix**.
@@ -261,7 +261,7 @@ Where current code diverges from this guide. Track and fix:
 - ~~Logo assets~~ — `public/brand/logo-on-light.svg` + `logo-on-dark.svg`; the
   on-light cube also serves as the favicon (`app/icon.svg`).
 - ~~`<body>` forced Arial~~ — `font-family` dropped; `<body>` now uses `font-sans` (Geist).
-- ~~Stale metadata~~ — `layout.tsx` now `title: "artefacts"`.
+- ~~Stale metadata~~ — `layout.tsx` now `title: "Kubikraum"`.
 - ~~Migrate components to tokens~~ — all `emerald-*` / `red-*` usages switched to
   `success` / `danger` tokens. Filled success buttons use `text-info-deep` (not
   white) for AA contrast on `#06d6a0`.

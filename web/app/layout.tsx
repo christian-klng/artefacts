@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "artefacts",
+  title: "Kubikraum",
   description: "Build web apps from a prompt.",
 };
 

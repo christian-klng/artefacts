@@ -37,7 +37,7 @@ export default async function AppLayout({
               height={24}
               className="hidden h-6 w-6 dark:block"
             />
-            artefacts
+            Kubikraum
           </span>
           <ProjectSwitcher
             projects={projects.map((p) => ({ id: p.id, name: p.name }))}

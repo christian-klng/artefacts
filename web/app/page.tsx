@@ -4,7 +4,7 @@ export default function Home() {
   return (
     <main className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center gap-6 px-4">
       <div className="space-y-3">
-        <h1 className="text-4xl font-semibold tracking-tight">artefacts</h1>
+        <h1 className="text-4xl font-semibold tracking-tight">Kubikraum</h1>
         <p className="text-lg text-neutral-500">
           Describe a web app, watch an agent build it across a real project, and
           preview it live in your browser — self-hosted.
