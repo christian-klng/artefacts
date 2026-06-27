@@ -95,5 +95,26 @@ services:
     ports:
       - "3001:3000"
 
+  # Read-only admin panel — a separate Next app that reads the builder's Postgres
+  # to list users + apps with their costs. In Coolify it's deployed as its own
+  # resource on its own domain (e.g. admin.kubikraum.digital); this block is
+  # mainly for local `docker compose up`. Login is ENV-based (ADMIN_USER /
+  # ADMIN_PASSWORD), the session cookie is HMAC-signed with ADMIN_SECRET.
+  admin:
+    build:
+      context: ./admin
+      target: runner
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-artefacts}:${POSTGRES_PASSWORD:-artefacts}@db:5432/${POSTGRES_DB:-artefacts}
+      ADMIN_USER: ${ADMIN_USER}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      ADMIN_SECRET: ${ADMIN_SECRET}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3002:3000"
+
 volumes:
   db-data:
