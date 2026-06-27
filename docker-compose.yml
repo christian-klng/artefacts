@@ -44,8 +44,21 @@ services:
       # the request host doesn't end with .<APPS_DOMAIN>. Explicitly wired here so
       # a Coolify env change can't silently fail to reach the container.
       AUTH_URL: ${AUTH_URL}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       APPS_DOMAIN: ${APPS_DOMAIN}
+      # cortecs.ai LLM router. Every var the container needs must be listed here
+      # or Coolify won't inject the UI value (see CLAUDE.md). The Anthropic
+      # BASE_URL/AUTH_TOKEN are NOT global — lib/agent/run.ts injects them per
+      # SDK call so they can't affect anything else.
+      CORTECS_API_KEY: ${CORTECS_API_KEY}
+      CORTECS_ANTHROPIC_BASE_URL: ${CORTECS_ANTHROPIC_BASE_URL}
+      CORTECS_OPENAI_BASE_URL: ${CORTECS_OPENAI_BASE_URL}
+      CORTECS_BUILD_MODEL: ${CORTECS_BUILD_MODEL}
+      CORTECS_CLEANUP_MODEL: ${CORTECS_CLEANUP_MODEL}
+      CORTECS_SOVEREIGN_BUILD_MODEL: ${CORTECS_SOVEREIGN_BUILD_MODEL}
+      BILLING_MARGIN: ${BILLING_MARGIN}
+      FREE_TIER_GRANT_EUR: ${FREE_TIER_GRANT_EUR}
+      CORTECS_PRICE_TTL_MS: ${CORTECS_PRICE_TTL_MS}
+      CORTECS_FEE_MULTIPLIER: ${CORTECS_FEE_MULTIPLIER}
       # Outgoing mail (welcome + password-reset). Referenced here so Coolify UI
       # values actually reach the container. Template overrides are optional —
       # when unset they fall back to the defaults in lib/mail-templates.ts.

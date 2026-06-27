@@ -46,12 +46,15 @@ export function ChatPanel({
   projectId,
   onSend,
   onAttachmentsChanged,
+  balanceEur,
 }: {
   messages: ChatMessage[];
   streaming: boolean;
   projectId: string;
   onSend: (text: string, attachmentIds: string[]) => void;
   onAttachmentsChanged: () => void;
+  /** Spendable EUR credit, shown above the composer; null while loading. */
+  balanceEur?: number | null;
 }) {
   const [input, setInput] = useState("");
   // Files attached to the current draft (already uploaded; shown as chips).
@@ -233,16 +236,26 @@ export function ChatPanel({
             className="w-full resize-none bg-transparent px-2 py-1.5 text-sm outline-none"
           />
           <div className="flex items-center justify-between px-1 pt-1">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading > 0}
-              title="Datei anhängen"
-              aria-label="Datei anhängen"
-              className="inline-flex items-center justify-center rounded-md px-2 py-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 disabled:opacity-50 dark:hover:bg-neutral-800 dark:hover:text-white"
-            >
-              <Paperclip className="h-4 w-4" aria-hidden />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading > 0}
+                title="Datei anhängen"
+                aria-label="Datei anhängen"
+                className="inline-flex items-center justify-center rounded-md px-2 py-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 disabled:opacity-50 dark:hover:bg-neutral-800 dark:hover:text-white"
+              >
+                <Paperclip className="h-4 w-4" aria-hidden />
+              </button>
+              {balanceEur != null && (
+                <span
+                  title="Verfügbares Guthaben"
+                  className="text-xs tabular-nums text-neutral-500 dark:text-neutral-400"
+                >
+                  Guthaben: €{balanceEur.toFixed(balanceEur < 0.01 ? 4 : 2)}
+                </span>
+              )}
+            </div>
             <button
               onClick={submit}
               disabled={

@@ -6,8 +6,11 @@ import {
   ATTACHMENT_TOOL_NAMES,
 } from "./attachment-tools";
 import { SYSTEM_PROMPT } from "./system-prompt";
-
-const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-opus-4-8";
+import {
+  cortecsAnthropicBaseUrl,
+  cortecsApiKey,
+  modelForTask,
+} from "@/lib/cortecs/config";
 
 /**
  * Runs one agent turn against a project's virtual filesystem and returns the
@@ -26,10 +29,12 @@ export function runAgent({
   const vfs = buildVfsServer(projectId, onFileEvent);
   const attachments = buildAttachmentsServer(projectId, onFileEvent);
 
+  const { model } = modelForTask("build");
+
   return query({
     prompt,
     options: {
-      model: MODEL,
+      model,
       systemPrompt: SYSTEM_PROMPT,
       mcpServers: { vfs, attachments },
       allowedTools: [...VFS_TOOL_NAMES, ...ATTACHMENT_TOOL_NAMES],
@@ -39,6 +44,16 @@ export function runAgent({
       // Hermetic: ignore any local CLAUDE.md / settings on the server host.
       settingSources: [],
       maxTurns: 50,
+      // Route the builder through cortecs.ai's Anthropic-compatible endpoint.
+      // The SDK spawns a subprocess and reads ANTHROPIC_BASE_URL/AUTH_TOKEN from
+      // its environment. NOTE: options.env REPLACES the subprocess environment
+      // (it does not merge) — spread process.env or the subprocess loses
+      // PATH/HOME and fails to spawn.
+      env: {
+        ...process.env,
+        ANTHROPIC_BASE_URL: cortecsAnthropicBaseUrl(),
+        ANTHROPIC_AUTH_TOKEN: cortecsApiKey(),
+      },
     },
   });
 }

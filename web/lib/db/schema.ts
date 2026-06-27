@@ -4,6 +4,7 @@ import {
   timestamp,
   uuid,
   integer,
+  numeric,
   boolean,
   primaryKey,
   index,
@@ -196,6 +197,82 @@ export const attachments = pgTable(
     createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
   },
   (a) => [index("attachment_project_idx").on(a.projectId)],
+);
+
+// ---------------------------------------------------------------------------
+// Billing (Cortecs migration): EUR credit balance + per-request usage ledger.
+// All LLM traffic routes through cortecs.ai, which bills in EUR. Cortecs returns
+// only token counts per request (no EUR), so we self-compute cost from the
+// /v1/models price catalog × tokens and apply our margin. See lib/cortecs/.
+// ---------------------------------------------------------------------------
+
+// One row per user holding their spendable EUR credit. The balance is kept as a
+// maintained column (not a SUM over the ledger) because the pre-flight budget
+// gate reads it on every agent turn — a single indexed row read beats summing a
+// growing ledger. recordUsageAndDeduct keeps column + ledger consistent in one
+// transaction; usageEvent remains the audit source of truth.
+//
+// Money is numeric(12,6): six decimals because a single request's billed cost is
+// often a fraction of a cent. Never float (rounding drift on money).
+export const userCredits = pgTable("user_credit", {
+  userId: uuid("userId")
+    .notNull()
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  // Spendable balance in EUR (what the user paid, 1:1). Each turn deducts the
+  // billed cost (Cortecs cost × margin). May go slightly negative on a final
+  // turn whose token use only became known after it ran — the next turn's gate
+  // then blocks until top-up.
+  balanceEur: numeric("balance_eur", { precision: 12, scale: 6 })
+    .notNull()
+    .default("0"),
+  // The one-time free grant given on first use (for "has the free tier already
+  // been granted?" idempotency and reporting). freeGrantedAt null => not granted.
+  freeGrantedEur: numeric("free_granted_eur", { precision: 12, scale: 6 })
+    .notNull()
+    .default("0"),
+  freeGrantedAt: timestamp("free_granted_at", { mode: "date" }),
+  createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
+});
+
+// Append-only ledger: one row per billed LLM request (agent turn or cleanup
+// task). The audit/reconciliation source of truth behind userCredits.balanceEur.
+export const usageEvents = pgTable(
+  "usage_event",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // Nullable + set null: keep the ledger for billing history even if the
+    // project is later deleted.
+    projectId: uuid("projectId").references(() => projects.id, {
+      onDelete: "set null",
+    }),
+    // "build" | "cleanup" | "sovereign_build" (lib/cortecs/config.ts TaskKind).
+    task: text("task").notNull(),
+    model: text("model").notNull(),
+    // Cortecs provider that served the request (providers[0] from /v1/models).
+    provider: text("provider"),
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    cacheReadTokens: integer("cache_read_tokens").notNull().default(0),
+    cacheCreationTokens: integer("cache_creation_tokens").notNull().default(0),
+    // Our computed Cortecs cost (incl. their fee), the billed amount (cost ×
+    // margin) deducted from the balance, and the margin we earned.
+    cortecsCostEur: numeric("cortecs_cost_eur", {
+      precision: 12,
+      scale: 6,
+    }).notNull(),
+    billedEur: numeric("billed_eur", { precision: 12, scale: 6 }).notNull(),
+    marginEur: numeric("margin_eur", { precision: 12, scale: 6 }).notNull(),
+    createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+  },
+  (e) => [
+    index("usage_event_user_idx").on(e.userId),
+    index("usage_event_project_idx").on(e.projectId),
+  ],
 );
 
 // A snapshot of the project at publish time, so versions can be restored — the

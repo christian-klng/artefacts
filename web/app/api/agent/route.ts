@@ -11,6 +11,13 @@ import {
 import { CONCEPT_PATH, isInternalVfsPath } from "@/lib/concept";
 import { listAttachments } from "@/lib/attachments";
 import { runAgent } from "@/lib/agent/run";
+import { modelForTask } from "@/lib/cortecs/config";
+import {
+  ensureCredit,
+  billModelUsage,
+  recordUsageAndDeduct,
+  type ModelTokens,
+} from "@/lib/cortecs/billing";
 
 // The Agent SDK needs Node APIs (and may spawn a subprocess) — never the edge
 // runtime. Allow long-running agent turns.
@@ -36,6 +43,20 @@ export async function POST(request: Request) {
   const project = body?.projectId
     ? await getOwnedProject(body.projectId, userId)
     : await ensureDefaultProject(userId);
+
+  // Pre-flight budget gate. Token usage is only known AFTER a turn (which can be
+  // up to 50 sub-turns), so we can't pre-charge — we gate on balance > 0, run,
+  // then deduct. A user near zero may overshoot slightly negative on their last
+  // turn; the next request's gate then blocks until they top up. Grants the free
+  // tier lazily on first use.
+  const balanceEur = await ensureCredit(userId);
+  if (balanceEur <= 0) {
+    return Response.json(
+      { error: "insufficient_credit", balanceEur },
+      { status: 402 },
+    );
+  }
+
   const history = await getMessages(project.id);
   // The agent's distilled design memory (durable decisions). Survives the
   // transcript window cap; always re-injected so it's considered every turn.
@@ -64,6 +85,10 @@ export async function POST(request: Request) {
 
       let assistantText = "";
       let filesChanged = false;
+      // The SDK's terminal `result` message carries per-model token usage — our
+      // billing source (we self-compute EUR cost; total_cost_usd is Anthropic-
+      // priced and meaningless under Cortecs).
+      let modelUsage: Record<string, ModelTokens> | null = null;
       try {
         const run = runAgent({
           projectId: project.id,
@@ -93,6 +118,8 @@ export async function POST(request: Request) {
                 send({ type: "tool_use", tool, path });
               }
             }
+          } else if (msg.type === "result") {
+            modelUsage = msg.modelUsage as Record<string, ModelTokens>;
           }
         }
 
@@ -111,6 +138,39 @@ export async function POST(request: Request) {
             createdAt: version.createdAt,
           });
         }
+
+        // Bill the turn and surface the cost. A billing failure must NEVER lose
+        // the user's work, so it's isolated — log and continue to `done`.
+        if (modelUsage) {
+          try {
+            const { model: buildModel } = modelForTask("build");
+            const billed = await billModelUsage(modelUsage, buildModel);
+            if (billed) {
+              const newBalanceEur = await recordUsageAndDeduct({
+                userId,
+                projectId: project.id,
+                task: "build",
+                model: billed.model,
+                provider: billed.provider,
+                usage: billed.usage,
+                cost: billed.cost,
+              });
+              send({
+                type: "usage",
+                model: billed.model,
+                inputTokens: billed.usage.inputTokens,
+                outputTokens: billed.usage.outputTokens,
+                cacheReadTokens: billed.usage.cacheReadTokens,
+                cacheCreationTokens: billed.usage.cacheCreationTokens,
+                billedEur: billed.cost.billedEur,
+                balanceEur: newBalanceEur,
+              });
+            }
+          } catch (billingError) {
+            console.error("[agent] billing failed", billingError);
+          }
+        }
+
         send({ type: "done" });
       } catch (error) {
         send({

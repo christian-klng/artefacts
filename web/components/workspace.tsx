@@ -57,8 +57,23 @@ type AgentEvent =
     }
   | { type: "version"; id: string; label: string | null; createdAt: string }
   | { type: "attachments_changed" }
+  | {
+      type: "usage";
+      model: string;
+      inputTokens: number;
+      outputTokens: number;
+      cacheReadTokens: number;
+      cacheCreationTokens: number;
+      billedEur: number;
+      balanceEur: number;
+    }
   | { type: "error"; message: string }
   | { type: "done" };
+
+/** Formats a EUR amount with enough precision for sub-cent per-turn costs. */
+function formatEur(n: number): string {
+  return `€${n.toFixed(n !== 0 && Math.abs(n) < 0.01 ? 4 : 2)}`;
+}
 
 export function Workspace({
   projectId,
@@ -100,6 +115,8 @@ export function Workspace({
     useState<AttachmentMeta[]>(initialAttachments);
   const [streaming, setStreaming] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  // Spendable EUR credit. Hydrated on mount and updated after every billed turn.
+  const [balanceEur, setBalanceEur] = useState<number | null>(null);
   const [view, setView] = useState<ViewMode>("preview");
   const [publishUrl, setPublishUrl] = useState<string | undefined>(
     initialPublishUrl,
@@ -203,6 +220,14 @@ export function Workspace({
         case "attachments_changed":
           refreshAttachments();
           break;
+        case "usage":
+          setBalanceEur(event.balanceEur);
+          appendMessage(
+            "tool",
+            `Kosten: ${formatEur(event.billedEur)} · Guthaben: ${formatEur(event.balanceEur)}`,
+            { tool: "usage" },
+          );
+          break;
         case "error":
           appendMessage("assistant", event.message, { kind: "error" });
           break;
@@ -210,6 +235,22 @@ export function Workspace({
     },
     [appendMessage, refreshAttachments],
   );
+
+  // Hydrate the credit balance on mount (also lazily grants the free tier).
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/credit")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { balanceEur?: number } | null) => {
+        if (!cancelled && data && typeof data.balanceEur === "number") {
+          setBalanceEur(data.balanceEur);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const saveBlob = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
@@ -346,6 +387,18 @@ export function Workspace({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ message: text, projectId, attachmentIds }),
         });
+        if (res.status === 402) {
+          const data = (await res.json().catch(() => null)) as {
+            balanceEur?: number;
+          } | null;
+          if (typeof data?.balanceEur === "number") setBalanceEur(data.balanceEur);
+          appendMessage(
+            "assistant",
+            "Dein Guthaben ist aufgebraucht. Bitte lade Credits auf, um fortzufahren.",
+            { kind: "error" },
+          );
+          return;
+        }
         if (!res.ok || !res.body) {
           throw new Error(`Request failed (${res.status})`);
         }
@@ -404,6 +457,7 @@ export function Workspace({
         projectId={projectId}
         onSend={onSend}
         onAttachmentsChanged={refreshAttachments}
+        balanceEur={balanceEur}
       />
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
         <WorkspaceToolbar
