@@ -81,7 +81,7 @@ export async function signup(
 
   // Fire-and-forget: a failed welcome mail must not block signup.
   try {
-    const { subject, html } = welcomeEmail({
+    const { subject, html } = await welcomeEmail({
       name: name || "an Bord",
       appUrl: `${appBaseUrl()}/app`,
     });
@@ -127,7 +127,7 @@ export async function requestPasswordReset(
 
     try {
       const resetUrl = `${appBaseUrl()}/reset-password?token=${token}`;
-      const { subject, html } = resetEmail({
+      const { subject, html } = await resetEmail({
         resetUrl,
         expiresHours: String(RESET_TTL_HOURS),
       });

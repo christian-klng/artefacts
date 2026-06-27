@@ -3,8 +3,10 @@
 A self-hosted, multi-tenant **"Claude Code in the browser"**: a chat-driven agent builds a web app across a persistent virtual filesystem, with a live in-browser preview. Deploys to **Coolify**.
 
 ## Layout
-- Root: `docker-compose.yml` (db + one-shot `migrate` + `web`), `.env.example`.
-- `web/`: the Next.js 16 app (App Router, TypeScript, Tailwind v4, Drizzle, Auth.js v5). All app work happens here.
+- Root: `docker-compose.yml` (db + one-shot `migrate` + `web` + `landing` + `admin`), `.env.example`.
+- `web/`: the Next.js 16 app (App Router, TypeScript, Tailwind v4, Drizzle, Auth.js v5). All builder work happens here.
+- `landing/`: separate, anonymous, stateless marketing page (own Dockerfile, own Coolify resource/domain).
+- `admin/`: separate **read-only** admin panel (own Dockerfile, own Coolify resource/domain) — see "Admin panel" below.
 
 ## Commands (run inside `web/`)
 - `npm run dev` — local dev. `npm run build` — production build (also typechecks). `npm run lint`.
@@ -46,6 +48,13 @@ Direction (decided): give generated apps a **real database + real end-user auth*
 Original phases all done: 0 (auth/DB/Docker), 1 (agent + SSE), 2 (workspace UI), 3 (download standalone HTML + version history), 4 (multiple projects per user). Versions auto-snapshot after each agent turn that changes files (`createVersion`); restore via `POST /api/projects/restore`. Projects: `/app` redirects to the latest project; `/app/[projectId]` is the workspace; `ProjectSwitcher` (header) + `app/actions/projects.ts` handle create/rename/delete.
 
 **Way 3** (real per-project backend): Phase 1 (subdomain serving) built + deployed; isolation core proven (`npm run spike`). Phases 2–4 (data API/SDK, end-user auth, publish) not yet built — see "Way 3" above.
+
+## Admin panel (`admin/`)
+A separate Next.js 16 app (own Dockerfile, deployed as its own Coolify resource on its own subdomain, e.g. `admin.kubikraum.digital` — **no** `basePath`). **Read-only** for now: lists users + apps with costs; editing user data is a later phase. Mirrors `landing/`'s build setup (`node:24-slim`, `output: 'standalone'`).
+- **Auth — ENV-based, no Auth.js.** Single login checked constant-time against `ADMIN_USER`/`ADMIN_PASSWORD`; session is an **HMAC-signed cookie** (`admin_session`) using `ADMIN_SECRET`. All crypto is **Web Crypto** in `admin/lib/auth.ts` so the same helpers run in both `admin/proxy.ts` (gates everything except `/login`) and the login/logout server actions. Cookie is `httpOnly` + `secure` in prod.
+- **Data — reads the builder's SAME Postgres** via `DATABASE_URL`. `admin/lib/schema.ts` is a **read-only subset** of `web/lib/db/schema.ts` (`user`, `project`, `user_credit`, `usage_event`) — its **column/table names must stay in sync** with the builder schema. Queries in `admin/lib/queries.ts`: per-user *consumed* = `SUM(usage_event.billed_eur)`, *available* = `user_credit.balance_eur`.
+- **Pages:** `/` overview totals, `/users` (app count + consumed + balance), `/apps` (project list + owner). Server components, `export const dynamic = 'force-dynamic'`.
+- **Deploy:** needs env `DATABASE_URL`, `ADMIN_USER`, `ADMIN_PASSWORD`, `ADMIN_SECRET` (all wired in the `admin` compose service + root `.env.example`). Like the builder, needs its own DNS + TLS (HTTP-01 works — it's not a wildcard). The Dockerfile builds with a placeholder `DATABASE_URL`/`ADMIN_SECRET` (the pg pool opens lazily on first query). Local: `docker compose up` exposes it on port 3002.
 
 ## Conventions
 - Match existing code style; keep multi-tenant scoping on every query. Commit/push only when the user asks.

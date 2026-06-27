@@ -7,6 +7,7 @@ const links = [
   { href: "/", label: "Übersicht" },
   { href: "/users", label: "Nutzer" },
   { href: "/apps", label: "Apps" },
+  { href: "/mail", label: "E-Mails" },
 ];
 
 export function Nav() {

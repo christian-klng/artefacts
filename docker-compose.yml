@@ -60,8 +60,9 @@ services:
       CORTECS_PRICE_TTL_MS: ${CORTECS_PRICE_TTL_MS}
       CORTECS_FEE_MULTIPLIER: ${CORTECS_FEE_MULTIPLIER}
       # Outgoing mail (welcome + password-reset). Referenced here so Coolify UI
-      # values actually reach the container. Template overrides are optional —
-      # when unset they fall back to the defaults in lib/mail-templates.ts.
+      # values actually reach the container. The email subject/HTML are NO LONGER
+      # env vars — they live in the `mail_template` DB table and are edited in the
+      # admin app (Coolify caps env values at 256 chars, too short for the HTML).
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT}
       SMTP_SECURE: ${SMTP_SECURE}
@@ -69,10 +70,6 @@ services:
       SMTP_PASS: ${SMTP_PASS}
       MAIL_FROM: ${MAIL_FROM}
       MAIL_RESET_TTL_HOURS: ${MAIL_RESET_TTL_HOURS}
-      MAIL_WELCOME_SUBJECT: ${MAIL_WELCOME_SUBJECT}
-      MAIL_WELCOME_HTML: ${MAIL_WELCOME_HTML}
-      MAIL_RESET_SUBJECT: ${MAIL_RESET_SUBJECT}
-      MAIL_RESET_HTML: ${MAIL_RESET_HTML}
     depends_on:
       db:
         condition: service_healthy

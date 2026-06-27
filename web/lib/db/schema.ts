@@ -275,6 +275,18 @@ export const usageEvents = pgTable(
   ],
 );
 
+// Editable transactional email templates (welcome, password reset). Moved out
+// of env vars because Coolify's environment_variables.value is varchar(256) and
+// the HTML bodies blow past it. Edited in the admin app; the builder reads them
+// here and falls back to the built-in defaults in lib/mail-templates.ts when a
+// row is missing or its body is blank. key = "welcome" | "reset".
+export const mailTemplates = pgTable("mail_template", {
+  key: text("key").primaryKey(),
+  subject: text("subject").notNull().default(""),
+  html: text("html").notNull().default(""),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
+});
+
 // A snapshot of the project at publish time, so versions can be restored — the
 // equivalent of Claude artifacts' version history.
 export const artifactVersions = pgTable(

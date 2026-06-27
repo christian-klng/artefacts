@@ -1,7 +1,11 @@
 import "server-only";
+import { eq } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { mailTemplates } from "@/lib/db/schema";
 
-// Email templates. Defaults live here; each can be overridden via an env var
-// (e.g. MAIL_WELCOME_HTML) so the deployer can change copy without a rebuild.
+// Email templates. Defaults live here; each can be overridden by a row in the
+// `mail_template` table, edited in the admin app (DB-backed instead of env vars,
+// because Coolify caps env values at 256 chars — the HTML bodies are far longer).
 // Templates use {{placeholder}} tokens, filled in by `render`.
 
 const WELCOME_SUBJECT_DEFAULT = "Willkommen bei Kubikraum 🎉";
@@ -52,16 +56,46 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-export function welcomeEmail(vars: { name: string; appUrl: string }) {
+/**
+ * Loads an override row for a template key. Returns null on any failure so mail
+ * always falls back to the built-in defaults rather than throwing (a missing
+ * template must never block signup / password reset).
+ */
+async function loadOverride(
+  key: "welcome" | "reset",
+): Promise<{ subject: string; html: string } | null> {
+  try {
+    const [row] = await db
+      .select({ subject: mailTemplates.subject, html: mailTemplates.html })
+      .from(mailTemplates)
+      .where(eq(mailTemplates.key, key));
+    return row ?? null;
+  } catch (error) {
+    console.error(`Failed to load mail template "${key}":`, error);
+    return null;
+  }
+}
+
+/** A field is overridden only if the stored value is non-blank. */
+function pick(override: string | undefined, fallback: string): string {
+  return override && override.trim() !== "" ? override : fallback;
+}
+
+export async function welcomeEmail(vars: { name: string; appUrl: string }) {
+  const override = await loadOverride("welcome");
   return {
-    subject: process.env.MAIL_WELCOME_SUBJECT || WELCOME_SUBJECT_DEFAULT,
-    html: render(process.env.MAIL_WELCOME_HTML || WELCOME_HTML_DEFAULT, vars),
+    subject: pick(override?.subject, WELCOME_SUBJECT_DEFAULT),
+    html: render(pick(override?.html, WELCOME_HTML_DEFAULT), vars),
   };
 }
 
-export function resetEmail(vars: { resetUrl: string; expiresHours: string }) {
+export async function resetEmail(vars: {
+  resetUrl: string;
+  expiresHours: string;
+}) {
+  const override = await loadOverride("reset");
   return {
-    subject: process.env.MAIL_RESET_SUBJECT || RESET_SUBJECT_DEFAULT,
-    html: render(process.env.MAIL_RESET_HTML || RESET_HTML_DEFAULT, vars),
+    subject: pick(override?.subject, RESET_SUBJECT_DEFAULT),
+    html: render(pick(override?.html, RESET_HTML_DEFAULT), vars),
   };
 }

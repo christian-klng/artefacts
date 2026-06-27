@@ -46,3 +46,14 @@ export const usageEvents = pgTable("usage_event", {
   inputTokens: integer("input_tokens").notNull(),
   outputTokens: integer("output_tokens").notNull(),
 });
+
+// Editable email templates (welcome, password reset). Unlike the other tables
+// here, the admin app WRITES this one. The builder reads it (web/lib/
+// mail-templates.ts) and falls back to its code defaults when a row is missing
+// or its body is blank. key = "welcome" | "reset".
+export const mailTemplates = pgTable("mail_template", {
+  key: text("key").primaryKey(),
+  subject: text("subject").notNull().default(""),
+  html: text("html").notNull().default(""),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
+});

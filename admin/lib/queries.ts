@@ -1,6 +1,12 @@
 import { desc, eq, sql } from "drizzle-orm";
 import { db } from "./db";
-import { projects, userCredits, usageEvents, users } from "./schema";
+import {
+  mailTemplates,
+  projects,
+  userCredits,
+  usageEvents,
+  users,
+} from "./schema";
 
 export type UserRow = {
   id: string;
@@ -109,6 +115,45 @@ export type Totals = {
   consumedEur: number;
   balanceEur: number;
 };
+
+export type MailTemplateKey = "welcome" | "reset";
+
+export type MailTemplate = {
+  key: MailTemplateKey;
+  subject: string;
+  html: string;
+  updatedAt: Date | null;
+};
+
+/**
+ * Reads the two editable mail templates, returning blank entries for keys that
+ * have no row yet. Blank = the builder uses its built-in default; the admin form
+ * surfaces that with a hint.
+ */
+export async function getMailTemplates(): Promise<
+  Record<MailTemplateKey, MailTemplate>
+> {
+  const rows = await db
+    .select({
+      key: mailTemplates.key,
+      subject: mailTemplates.subject,
+      html: mailTemplates.html,
+      updatedAt: mailTemplates.updatedAt,
+    })
+    .from(mailTemplates);
+
+  const byKey = new Map(rows.map((r) => [r.key, r]));
+  const make = (key: MailTemplateKey): MailTemplate => {
+    const row = byKey.get(key);
+    return {
+      key,
+      subject: row?.subject ?? "",
+      html: row?.html ?? "",
+      updatedAt: row?.updatedAt ?? null,
+    };
+  };
+  return { welcome: make("welcome"), reset: make("reset") };
+}
 
 /** Headline numbers for the overview page. */
 export async function getTotals(): Promise<Totals> {
