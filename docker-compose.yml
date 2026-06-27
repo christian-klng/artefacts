@@ -68,5 +68,19 @@ services:
     ports:
       - "3000:3000"
 
+  # Marketing landing page (kubikraum.digital) — a separate, anonymous, stateless
+  # Next app. In Coolify it's deployed as its own resource on its own domain; this
+  # service block is mainly for local `docker compose up`. NEXT_PUBLIC_BUILDER_URL
+  # is a BUILD-time value (baked into the client bundle), passed as a build arg.
+  landing:
+    build:
+      context: ./landing
+      target: runner
+      args:
+        NEXT_PUBLIC_BUILDER_URL: ${NEXT_PUBLIC_BUILDER_URL:-https://app.kubikraum.digital}
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+
 volumes:
   db-data:

@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
+import { clearPendingPrompt } from "@/app/actions/start";
 import { ChatPanel, type ChatMessage } from "./chat-panel";
 import { AttachmentsView, type AttachmentMeta } from "./attachments-view";
 import type { AssetMeta } from "./sandpack-workspace";
@@ -78,6 +80,7 @@ export function Workspace({
   publishEnabled = false,
   initialPublishUrl,
   initialPublishedSignature,
+  initialPrompt,
 }: {
   projectId: string;
   initialFiles: Record<string, string>;
@@ -89,7 +92,11 @@ export function Workspace({
   publishEnabled?: boolean;
   initialPublishUrl?: string;
   initialPublishedSignature?: string;
+  // Prompt carried over from the landing page (via /start). Fired once on mount
+  // as the first agent message, then cleared.
+  initialPrompt?: string;
 }) {
+  const router = useRouter();
   const [files, setFiles] = useState<Record<string, string>>(initialFiles);
   const [assets, setAssets] =
     useState<Record<string, AssetMeta>>(initialAssets);
@@ -353,6 +360,23 @@ export function Workspace({
     },
     [projectId, appendMessage, handleEvent],
   );
+
+  // Auto-run the landing-page prompt exactly once on first mount of a fresh
+  // project, then strip ?run=1 and clear the server cookie so a reload is inert.
+  const initialPromptFired = useRef(false);
+  useEffect(() => {
+    if (initialPromptFired.current) return;
+    if (!initialPrompt || messages.length > 0) return;
+    initialPromptFired.current = true;
+    // Defer past the commit so the send's state updates don't run synchronously
+    // inside the effect (and to let the workspace paint first).
+    const id = setTimeout(() => {
+      onSend(initialPrompt);
+      void clearPendingPrompt();
+      router.replace(`/app/${projectId}`);
+    }, 0);
+    return () => clearTimeout(id);
+  }, [initialPrompt, messages.length, onSend, projectId, router]);
 
   return (
     <div className="grid h-full grid-cols-[minmax(300px,380px)_1fr]">

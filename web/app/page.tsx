@@ -1,29 +1,10 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 
-export default function Home() {
-  return (
-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center gap-6 px-4">
-      <div className="space-y-3">
-        <h1 className="text-4xl font-semibold tracking-tight">Kubikraum</h1>
-        <p className="text-lg text-neutral-500">
-          Describe a web app, watch an agent build it across a real project, and
-          preview it live in your browser — self-hosted.
-        </p>
-      </div>
-      <div className="flex gap-3">
-        <Link
-          href="/signup"
-          className="rounded-md bg-neutral-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-        >
-          Get started
-        </Link>
-        <Link
-          href="/login"
-          className="rounded-md border border-neutral-300 px-5 py-2.5 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-        >
-          Sign in
-        </Link>
-      </div>
-    </main>
-  );
+// The builder's root is no longer a marketing splash — that lives on the
+// separate landing site (kubikraum.digital). Here we just send the visitor on:
+// logged in → their most recent app, otherwise → login.
+export default async function Home() {
+  const session = await auth();
+  redirect(session?.user ? "/app" : "/login");
 }

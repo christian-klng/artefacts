@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+/* Dark mode is class-based (mirrors the builder): `dark:` utilities key off a
+   `.dark` class on <html>, set pre-paint by the theme script in app/layout.tsx. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* Semantic palette — kept in sync with the builder's design system. */
+  --color-danger: #ef476f;
+  --color-warning: #ffd166;
+  --color-success: #06d6a0;
+  --color-info: #118ab2;
+  --color-info-deep: #073b4c;
+}
+
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}

@@ -1,6 +1,7 @@
 import { zipSync, strToU8 } from "fflate";
 import { auth } from "@/auth";
 import { getOwnedProject, listFiles } from "@/lib/projects";
+import { isInternalVfsPath } from "@/lib/concept";
 
 // Builds a ZIP of the project's whole virtual filesystem (text + binary assets)
 // so the user gets exactly the files in the Code tree to run/edit locally.
@@ -30,6 +31,8 @@ export async function GET(request: Request) {
   const all = await listFiles(projectId);
   const entries: Record<string, Uint8Array> = {};
   for (const f of all) {
+    // Internal agent files (CONCEPT.md) are memory, not part of the app.
+    if (isInternalVfsPath(f.path)) continue;
     // Strip the leading "/" so the zip has clean relative paths.
     const name = f.path.replace(/^\//, "");
     entries[name] =

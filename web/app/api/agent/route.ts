@@ -6,7 +6,9 @@ import {
   getMessages,
   getClientFiles,
   createVersion,
+  readFile,
 } from "@/lib/projects";
+import { CONCEPT_PATH, isInternalVfsPath } from "@/lib/concept";
 import { listAttachments } from "@/lib/attachments";
 import { runAgent } from "@/lib/agent/run";
 
@@ -35,6 +37,9 @@ export async function POST(request: Request) {
     ? await getOwnedProject(body.projectId, userId)
     : await ensureDefaultProject(userId);
   const history = await getMessages(project.id);
+  // The agent's distilled design memory (durable decisions). Survives the
+  // transcript window cap; always re-injected so it's considered every turn.
+  const concept = await readFile(project.id, CONCEPT_PATH);
   await addMessage(project.id, "user", message);
 
   // Make the agent aware of the project's uploaded reference files so it knows
@@ -43,9 +48,9 @@ export async function POST(request: Request) {
   // just attached this turn for extra emphasis.
   const withAttachments = await withAttachmentContext(project.id, message, body);
   // Each agent turn is a fresh SDK query() with no memory of prior turns, so we
-  // reconstruct the conversation from the persisted history and prepend it. This
-  // is what lets the agent iterate on the existing app instead of rebuilding it.
-  const prompt = withConversationContext(history, withAttachments);
+  // reconstruct context from the persisted concept + chat history and prepend it.
+  // This is what lets the agent iterate on the existing app instead of rebuilding.
+  const prompt = withProjectContext(concept, history, withAttachments);
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -65,6 +70,9 @@ export async function POST(request: Request) {
           prompt,
           onFileEvent: (event) => {
             filesChanged = true;
+            // Internal files (CONCEPT.md) are agent memory: snapshot them in a
+            // version, but never surface them in the client's file tree/preview.
+            if ("path" in event && isInternalVfsPath(event.path)) return;
             send(event);
           },
         });
@@ -162,38 +170,53 @@ const HISTORY_MAX_MESSAGES = 24;
 const HISTORY_MAX_CHARS_PER_MESSAGE = 4000;
 
 /**
- * Prepends the prior conversation so the agent treats this turn as a
- * continuation of one evolving project rather than a standalone request. Without
- * this, each SDK query() starts blind — the root cause of the agent rebuilding
- * from scratch and ignoring earlier instructions. Code isn't included here: the
- * agent reads the current files from the VFS itself.
+ * Prepends the project's durable concept and the prior conversation so the agent
+ * treats this turn as a continuation of one evolving project rather than a
+ * standalone request. Without this, each SDK query() starts blind — the root
+ * cause of the agent rebuilding from scratch and ignoring earlier instructions.
+ * Code isn't included here: the agent reads the current files from the VFS itself.
  */
-function withConversationContext(
+function withProjectContext(
+  concept: string | null,
   history: { role: string; content: string }[],
   currentPrompt: string,
 ): string {
   const prior = history
     .filter((m) => m.role === "user" || m.role === "assistant")
     .slice(-HISTORY_MAX_MESSAGES);
-  if (prior.length === 0) return currentPrompt;
+  if (prior.length === 0 && !concept?.trim()) return currentPrompt;
 
-  const transcript = prior
-    .map((m) => {
-      const speaker = m.role === "assistant" ? "Assistant" : "User";
-      const text =
-        m.content.length > HISTORY_MAX_CHARS_PER_MESSAGE
-          ? m.content.slice(0, HISTORY_MAX_CHARS_PER_MESSAGE) + " […truncated]"
-          : m.content;
-      return `${speaker}: ${text}`;
-    })
-    .join("\n\n");
+  const sections: string[] = [];
 
-  return (
-    `## Conversation so far\n` +
-    `This is the ongoing history of this project. Read it, then treat the new ` +
-    `request below as the next step — iterate on the existing files rather than ` +
-    `starting over.\n\n` +
-    `${transcript}\n\n` +
-    `## New request\n${currentPrompt}`
-  );
+  if (concept?.trim()) {
+    sections.push(
+      `## Project concept (your durable memory of this project)\n` +
+        `These are the established decisions for this project. Honor them, and ` +
+        `keep this file (${CONCEPT_PATH}) up to date as decisions evolve.\n\n` +
+        concept.trim(),
+    );
+  }
+
+  if (prior.length > 0) {
+    const transcript = prior
+      .map((m) => {
+        const speaker = m.role === "assistant" ? "Assistant" : "User";
+        const text =
+          m.content.length > HISTORY_MAX_CHARS_PER_MESSAGE
+            ? m.content.slice(0, HISTORY_MAX_CHARS_PER_MESSAGE) + " […truncated]"
+            : m.content;
+        return `${speaker}: ${text}`;
+      })
+      .join("\n\n");
+    sections.push(
+      `## Conversation so far\n` +
+        `This is the ongoing history of this project. Read it, then treat the new ` +
+        `request below as the next step — iterate on the existing files rather ` +
+        `than starting over.\n\n` +
+        transcript,
+    );
+  }
+
+  sections.push(`## New request\n${currentPrompt}`);
+  return sections.join("\n\n");
 }

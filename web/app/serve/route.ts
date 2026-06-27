@@ -1,4 +1,5 @@
 import { readFileRaw, readPublishedFile } from "@/lib/projects";
+import { isInternalVfsPath } from "@/lib/concept";
 import { contentTypeFor } from "@/lib/vfs";
 import { verifyPreviewToken } from "@/lib/preview-token";
 import {
@@ -61,6 +62,8 @@ export async function GET(request: Request) {
   const host = request.headers.get("x-app-host") || request.headers.get("host");
   const reqPath = request.headers.get("x-app-path") || "/";
   const path = reqPath === "/" ? "/index.html" : reqPath;
+  // Agent-internal files live in the VFS but are never part of the shipped app.
+  if (isInternalVfsPath(path)) return new Response("Not found", { status: 404 });
   const appsDomain = process.env.APPS_DOMAIN ?? "";
 
   const label = parseAppLabel(host, appsDomain);

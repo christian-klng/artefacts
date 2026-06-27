@@ -9,9 +9,14 @@ type Mode = "login" | "signup";
 export function AuthForm({
   mode,
   action,
+  next,
 }: {
   mode: Mode;
   action: (state: AuthState, formData: FormData) => Promise<AuthState>;
+  // Post-auth destination (e.g. "/start" when a prompt is waiting). Threaded
+  // through to the server action via a hidden field and preserved in the
+  // login↔signup cross-links so a landing-page prompt survives a form switch.
+  next?: string;
 }) {
   const [state, formAction, pending] = useActionState<AuthState, FormData>(
     action,
@@ -19,6 +24,7 @@ export function AuthForm({
   );
 
   const isSignup = mode === "signup";
+  const suffix = next ? `?next=${encodeURIComponent(next)}` : "";
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-sm flex-col justify-center gap-6 px-4">
@@ -34,6 +40,7 @@ export function AuthForm({
       </div>
 
       <form action={formAction} className="space-y-4">
+        {next && <input type="hidden" name="redirectTo" value={next} />}
         {isSignup && (
           <Field label="Name" name="name" type="text" autoComplete="name" />
         )}
@@ -87,14 +94,14 @@ export function AuthForm({
         {isSignup ? (
           <>
             Already have an account?{" "}
-            <Link href="/login" className="underline">
+            <Link href={`/login${suffix}`} className="underline">
               Sign in
             </Link>
           </>
         ) : (
           <>
             Need an account?{" "}
-            <Link href="/signup" className="underline">
+            <Link href={`/signup${suffix}`} className="underline">
               Sign up
             </Link>
           </>

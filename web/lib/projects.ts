@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { projects, files, messages, artifactVersions } from "@/lib/db/schema";
 import { publishSlugFromLabel } from "@/lib/app-host";
 import { canonicalSignatureMap, filesSignature } from "@/lib/files-signature";
+import { isInternalVfsPath } from "@/lib/concept";
 
 export type FileEncoding = "utf8" | "base64";
 
@@ -50,6 +51,7 @@ export async function listProjects(userId: string) {
 export async function ensureDefaultProject(userId: string) {
   const existing = await db.query.projects.findFirst({
     where: eq(projects.userId, userId),
+    orderBy: [desc(projects.updatedAt), desc(projects.createdAt)],
   });
   if (existing) return existing;
 
@@ -114,6 +116,9 @@ export async function getClientFiles(projectId: string): Promise<ClientFiles> {
   const all = await listFiles(projectId);
   const result: ClientFiles = { files: {}, assets: {} };
   for (const f of all) {
+    // Agent-internal files (e.g. CONCEPT.md) never reach the client: not in the
+    // file tree, the files snapshot, or the client-side publish-dirty signature.
+    if (isInternalVfsPath(f.path)) continue;
     if (f.encoding === "base64") {
       result.assets[f.path] = {
         mimeType: f.mimeType,
@@ -442,6 +447,9 @@ function snapshotSignature(snapshotJson: string): string {
   const textFiles: Record<string, string> = {};
   const assets: Record<string, { hash: string }> = {};
   for (const [path, v] of Object.entries(snapshot)) {
+    // Mirror getClientFiles: internal files are excluded so editing the concept
+    // never makes the project look publish-dirty.
+    if (isInternalVfsPath(path)) continue;
     if (typeof v === "string") textFiles[path] = v;
     else assets[path] = { hash: contentHash(v.content) };
   }

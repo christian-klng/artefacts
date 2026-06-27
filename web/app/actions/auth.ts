@@ -13,6 +13,15 @@ import { resetEmail, welcomeEmail } from "@/lib/mail-templates";
 
 export type AuthState = { error?: string; success?: boolean } | undefined;
 
+// Only allow same-origin relative paths as a post-auth destination, so a
+// crafted `redirectTo` form value can't turn into an open redirect. Defaults to
+// the workspace.
+function safeRedirect(value: FormDataEntryValue | null): string {
+  return typeof value === "string" && value.startsWith("/") && !value.startsWith("//")
+    ? value
+    : "/app";
+}
+
 const sha256 = (value: string) =>
   createHash("sha256").update(value).digest("hex");
 
@@ -34,7 +43,7 @@ export async function authenticate(
     await signIn("credentials", {
       email: formData.get("email"),
       password: formData.get("password"),
-      redirectTo: "/app",
+      redirectTo: safeRedirect(formData.get("redirectTo")),
     });
   } catch (error) {
     if (error instanceof AuthError) {
@@ -81,7 +90,11 @@ export async function signup(
     console.error("Failed to send welcome email:", error);
   }
 
-  await signIn("credentials", { email, password, redirectTo: "/app" });
+  await signIn("credentials", {
+    email,
+    password,
+    redirectTo: safeRedirect(formData.get("redirectTo")),
+  });
 }
 
 const forgotSchema = z.object({

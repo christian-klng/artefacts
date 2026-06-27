@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import {
@@ -15,13 +16,16 @@ import { buildAppOrigin } from "@/lib/app-host";
 
 export default async function ProjectPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ run?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
   const { projectId } = await params;
+  const { run } = await searchParams;
   const project = await getOwnedProject(projectId, session.user.id).catch(
     () => null,
   );
@@ -78,6 +82,14 @@ export default async function ProjectPage({
     ? ((await getPublishedSignature(project.id)) ?? undefined)
     : undefined;
 
+  // Arriving from the landing-page handoff (/start → ?run=1): the visitor's
+  // prompt is parked in an HttpOnly cookie. Hand it to the workspace as the
+  // initial message; the client fires it once and clears the cookie.
+  const initialPrompt =
+    run === "1"
+      ? (await cookies()).get("kk_pending_prompt")?.value
+      : undefined;
+
   return (
     <div className="h-full">
       {/* key remounts the workspace cleanly when switching projects */}
@@ -93,6 +105,7 @@ export default async function ProjectPage({
         publishEnabled={!!appsDomain}
         initialPublishUrl={publishUrl}
         initialPublishedSignature={publishedSignature}
+        initialPrompt={initialPrompt}
       />
     </div>
   );
