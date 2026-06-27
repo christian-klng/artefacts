@@ -20,7 +20,7 @@ export function ThemeToggle() {
       onClick={toggle}
       aria-label="Theme wechseln"
       title="Theme wechseln"
-      className="rounded text-neutral-500 transition hover:text-neutral-900 dark:hover:text-white"
+      className="inline-flex items-center justify-center rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-900 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900 dark:hover:text-white"
     >
       <span className="inline dark:hidden" aria-hidden>
         ☾

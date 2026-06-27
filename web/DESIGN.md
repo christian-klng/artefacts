@@ -147,7 +147,8 @@ restraint is the point.
 - **Borders:** 1px, neutral (see §4). Focus/hover promotes the border to the
   strong neutral, not a coloured ring.
 - **Elevation:** flat by default. `shadow-lg` **only** for floating overlays
-  (dropdowns, modals). No shadows on inline content.
+  (dropdowns, modals). No shadows on inline content — the one exception is the
+  prompt composer's `shadow-sm` (see §7), which marks it as an interactive surface.
 
 ---
 
@@ -177,6 +178,26 @@ outline-none focus:border-neutral-900
 dark:border-neutral-700 dark:focus:border-white
 ```
 Pair with a `<label>` whose text is `text-sm font-medium`. *(`auth-form.tsx`)*
+
+### Prompt composer (textarea + actions in one field)
+The chat/prompt input where the send button sits **inside** the field border (not
+as a separate control beside it). One rounded container holds a borderless
+textarea on top and a row of actions below — an icon button (e.g. attach) on the
+left, the §7 primary button on the right.
+```
+Container:  rounded-xl border bg-white p-2 shadow-sm dark:bg-neutral-950
+            border-neutral-300 focus-within:border-neutral-900
+            dark:border-neutral-700 dark:focus-within:border-white
+Textarea:   w-full resize-none bg-transparent px-2 py-1.5 text-sm outline-none
+Action row: flex items-center justify-between px-1 pt-1
+Icon btn:   rounded-md px-2 py-1 text-base text-neutral-500
+            hover:bg-neutral-100 hover:text-neutral-900 disabled:opacity-50
+            dark:hover:bg-neutral-800 dark:hover:text-white
+```
+The container promotes its border on `focus-within` (the §6 border rule, applied
+to the field as a whole). `shadow-sm` is the one allowed inline shadow — it reads
+the composer as an interactive surface. *(`components/prompt-box.tsx` on the
+landing page, `components/chat-panel.tsx` in the builder.)*
 
 ### Chat bubbles
 - **User** (right, inverted): `rounded-2xl bg-neutral-900 px-3 py-2 text-sm text-white dark:bg-white dark:text-neutral-900`

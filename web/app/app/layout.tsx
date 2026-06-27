@@ -1,10 +1,10 @@
 import Image from "next/image";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { logout } from "@/app/actions/auth";
 import { listProjects } from "@/lib/projects";
 import { ProjectSwitcher } from "@/components/project-switcher";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { UserMenu } from "@/components/user-menu";
 
 export default async function AppLayout({
   children,
@@ -43,14 +43,9 @@ export default async function AppLayout({
             projects={projects.map((p) => ({ id: p.id, name: p.name }))}
           />
         </div>
-        <div className="flex items-center gap-4 text-sm">
+        <div className="flex items-center gap-2">
           <ThemeToggle />
-          <span className="text-neutral-500">{session.user.email}</span>
-          <form action={logout}>
-            <button type="submit" className="underline">
-              Sign out
-            </button>
-          </form>
+          <UserMenu name={session.user.name} email={session.user.email} />
         </div>
       </header>
       <main className="min-h-0 flex-1">{children}</main>
