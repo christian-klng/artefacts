@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export type Version = {
   id: string;
@@ -110,6 +110,16 @@ function ExportControls({
   const [value, setValue] = useState(siteUrl ?? "");
   const [busy, setBusy] = useState(false);
 
+  // Close on Escape while the popover is open.
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
   const run = async () => {
     setBusy(true);
     try {
@@ -120,58 +130,73 @@ function ExportControls({
     }
   };
 
-  if (!open) {
-    return (
+  // The button stays the only thing in the toolbar row; the panel is absolutely
+  // positioned beneath it (out of flow) so the row never changes height.
+  return (
+    <div className="relative">
       <button
         onClick={() => {
           setValue(siteUrl ?? "");
-          setOpen(true);
+          setOpen((o) => !o);
         }}
         disabled={!canDownload}
+        aria-expanded={open}
+        aria-haspopup="dialog"
         className="rounded-md bg-neutral-900 px-3 py-1 text-xs font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900"
       >
         Download
       </button>
-    );
-  }
 
-  return (
-    <div className="flex max-w-md flex-col gap-1.5 rounded-md border border-neutral-300 px-2.5 py-2 dark:border-neutral-700">
-      <label className="text-xs text-neutral-500 dark:text-neutral-400">
-        Unter welcher URL veröffentlichst du die Seite? Wird für SEO-Angaben
-        (Canonical, Open Graph, Sitemap) eingesetzt — leer lassen für relative
-        Pfade.
-      </label>
-      <div className="flex items-center gap-1.5">
-        <input
-          autoFocus
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") run();
-            if (e.key === "Escape") setOpen(false);
-          }}
-          disabled={busy}
-          spellCheck={false}
-          placeholder="https://meine-domain.de"
-          className="w-56 rounded border border-neutral-300 bg-transparent px-1.5 py-0.5 text-xs outline-none focus:border-neutral-900 disabled:opacity-50 dark:border-neutral-600 dark:focus:border-white"
-          aria-label="Veröffentlichungs-URL"
-        />
-        <button
-          onClick={run}
-          disabled={busy}
-          className="rounded bg-neutral-900 px-2.5 py-0.5 text-xs font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900"
-        >
-          {busy ? "…" : "Herunterladen"}
-        </button>
-        <button
-          onClick={() => setOpen(false)}
-          disabled={busy}
-          className="rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:text-neutral-900 disabled:opacity-50 dark:hover:text-white"
-        >
-          Abbrechen
-        </button>
-      </div>
+      {open && (
+        <>
+          {/* click-away catcher */}
+          <button
+            aria-label="Schließen"
+            tabIndex={-1}
+            onClick={() => setOpen(false)}
+            className="fixed inset-0 z-40 cursor-default"
+          />
+          <div
+            role="dialog"
+            aria-label="Export"
+            className="absolute right-0 top-full z-50 mt-1.5 w-72 rounded-lg border border-neutral-200 bg-white p-3 text-left shadow-lg dark:border-neutral-800 dark:bg-neutral-950"
+          >
+            <p className="mb-2 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">
+              Ziel-URL der Veröffentlichung — wird in SEO-Angaben (Canonical,
+              Open Graph, Sitemap) eingesetzt. Leer lassen für relative Pfade.
+            </p>
+            <input
+              autoFocus
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") run();
+              }}
+              disabled={busy}
+              spellCheck={false}
+              placeholder="https://meine-domain.de"
+              className="w-full rounded border border-neutral-300 bg-transparent px-2 py-1 text-xs outline-none focus:border-neutral-900 disabled:opacity-50 dark:border-neutral-600 dark:focus:border-white"
+              aria-label="Veröffentlichungs-URL"
+            />
+            <div className="mt-2.5 flex justify-end gap-2">
+              <button
+                onClick={() => setOpen(false)}
+                disabled={busy}
+                className="rounded px-2 py-1 text-xs text-neutral-500 hover:text-neutral-900 disabled:opacity-50 dark:hover:text-white"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={run}
+                disabled={busy}
+                className="rounded bg-neutral-900 px-3 py-1 text-xs font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900"
+              >
+                {busy ? "…" : "Herunterladen"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
