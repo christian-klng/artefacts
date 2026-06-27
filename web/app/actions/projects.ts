@@ -10,8 +10,10 @@ import {
   publishProject,
   unpublishProject,
   setPublishSlug,
+  setSiteUrl,
 } from "@/lib/projects";
 import { buildAppOrigin } from "@/lib/app-host";
+import { normalizeSiteOrigin } from "@/lib/site-url";
 
 async function requireUserId() {
   const session = await auth();
@@ -76,6 +78,27 @@ export async function setPublishSlugAction(
     // Unique-constraint race: the slug was taken between check and write.
     return { error: "Diese Adresse ist bereits vergeben." };
   }
+}
+
+/**
+ * Remembers the public URL the user plans to deploy an export under (used to
+ * fill the __SITE_URL__ placeholder in exported SEO files). Returns the
+ * normalized origin, or an error if the input can't be parsed. Empty clears it.
+ */
+export async function setSiteUrlAction(
+  projectId: string,
+  rawUrl: string,
+): Promise<{ origin: string | null } | { error: string }> {
+  const userId = await requireUserId();
+  const trimmed = rawUrl.trim();
+  if (trimmed === "") {
+    await setSiteUrl(projectId, userId, null);
+    return { origin: null };
+  }
+  const origin = normalizeSiteOrigin(trimmed);
+  if (!origin) return { error: "Bitte eine gültige URL eingeben." };
+  await setSiteUrl(projectId, userId, origin);
+  return { origin };
 }
 
 export async function deleteProjectAction(formData: FormData) {

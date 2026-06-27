@@ -15,6 +15,7 @@ export function WorkspaceToolbar({
   onViewChange,
   canDownload,
   onDownload,
+  siteUrl,
   versions,
   onRestore,
   busy,
@@ -30,7 +31,8 @@ export function WorkspaceToolbar({
   view: ViewMode;
   onViewChange: (view: ViewMode) => void;
   canDownload: boolean;
-  onDownload: () => void;
+  onDownload: (rawSiteUrl: string) => void | Promise<void>;
+  siteUrl?: string;
   versions: Version[];
   onRestore: (versionId: string) => void;
   busy: boolean;
@@ -83,15 +85,92 @@ export function WorkspaceToolbar({
                 ))}
               </select>
             )}
-            <button
-              onClick={onDownload}
-              disabled={!canDownload}
-              className="rounded-md bg-neutral-900 px-3 py-1 text-xs font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900"
-            >
-              Download
-            </button>
+            <ExportControls
+              canDownload={canDownload}
+              siteUrl={siteUrl}
+              onDownload={onDownload}
+            />
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+function ExportControls({
+  canDownload,
+  siteUrl,
+  onDownload,
+}: {
+  canDownload: boolean;
+  siteUrl?: string;
+  onDownload: (rawSiteUrl: string) => void | Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState(siteUrl ?? "");
+  const [busy, setBusy] = useState(false);
+
+  const run = async () => {
+    setBusy(true);
+    try {
+      await onDownload(value);
+      setOpen(false);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => {
+          setValue(siteUrl ?? "");
+          setOpen(true);
+        }}
+        disabled={!canDownload}
+        className="rounded-md bg-neutral-900 px-3 py-1 text-xs font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900"
+      >
+        Download
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex max-w-md flex-col gap-1.5 rounded-md border border-neutral-300 px-2.5 py-2 dark:border-neutral-700">
+      <label className="text-xs text-neutral-500 dark:text-neutral-400">
+        Unter welcher URL veröffentlichst du die Seite? Wird für SEO-Angaben
+        (Canonical, Open Graph, Sitemap) eingesetzt — leer lassen für relative
+        Pfade.
+      </label>
+      <div className="flex items-center gap-1.5">
+        <input
+          autoFocus
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") run();
+            if (e.key === "Escape") setOpen(false);
+          }}
+          disabled={busy}
+          spellCheck={false}
+          placeholder="https://meine-domain.de"
+          className="w-56 rounded border border-neutral-300 bg-transparent px-1.5 py-0.5 text-xs outline-none focus:border-neutral-900 disabled:opacity-50 dark:border-neutral-600 dark:focus:border-white"
+          aria-label="Veröffentlichungs-URL"
+        />
+        <button
+          onClick={run}
+          disabled={busy}
+          className="rounded bg-neutral-900 px-2.5 py-0.5 text-xs font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900"
+        >
+          {busy ? "…" : "Herunterladen"}
+        </button>
+        <button
+          onClick={() => setOpen(false)}
+          disabled={busy}
+          className="rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:text-neutral-900 disabled:opacity-50 dark:hover:text-white"
+        >
+          Abbrechen
+        </button>
       </div>
     </div>
   );

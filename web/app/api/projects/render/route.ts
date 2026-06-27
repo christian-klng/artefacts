@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { getOwnedProject, readFile } from "@/lib/projects";
 import { inlineVfsAssets } from "@/lib/vfs";
+import { substituteSiteUrl } from "@/lib/site-url";
 
 // Returns the project's /index.html with references to other VFS files inlined
 // as data URIs — a single self-contained document for the srcDoc preview fallback
@@ -24,7 +25,9 @@ export async function GET(request: Request) {
   const html = await readFile(projectId, "/index.html");
   if (html == null) return new Response("Not found", { status: 404 });
 
-  const inlined = await inlineVfsAssets(projectId, html);
+  // This inline preview has no real public origin; drop the __SITE_URL__
+  // placeholder to a relative path so it never shows up raw in the document.
+  const inlined = await inlineVfsAssets(projectId, substituteSiteUrl(html, ""));
   return new Response(inlined, {
     headers: {
       "content-type": "text/html; charset=utf-8",

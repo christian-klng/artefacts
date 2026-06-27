@@ -116,6 +116,11 @@ export const projects = pgTable(
     // circular projects<->artifact_version constraint; versions are only ever
     // removed by project cascade, so it can't dangle in practice.
     publishedVersionId: uuid("published_version_id"),
+    // The public URL the user intends to deploy the EXPORT under. Used only to
+    // substitute the __SITE_URL__ placeholder in exported SEO files (canonical/
+    // og/sitemap). Publishing doesn't need it — the serve route knows its own
+    // host. Nullable; pre-fills the export modal once set.
+    siteUrl: text("site_url"),
     createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
   },

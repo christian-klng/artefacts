@@ -105,6 +105,7 @@ export default async function ProjectPage({
         publishEnabled={!!appsDomain}
         initialPublishUrl={publishUrl}
         initialPublishedSignature={publishedSignature}
+        initialSiteUrl={project.siteUrl ?? undefined}
         initialPrompt={initialPrompt}
       />
     </div>

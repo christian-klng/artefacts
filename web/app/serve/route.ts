@@ -1,5 +1,6 @@
 import { readFileRaw, readPublishedFile } from "@/lib/projects";
 import { isInternalVfsPath } from "@/lib/concept";
+import { substituteSiteUrl, originFromHost } from "@/lib/site-url";
 import { contentTypeFor } from "@/lib/vfs";
 import { verifyPreviewToken } from "@/lib/preview-token";
 import {
@@ -31,6 +32,7 @@ function fileResponse(
   file: { content: string; encoding: string; mimeType: string | null },
   path: string,
   projectId: string,
+  origin: string,
 ): Response {
   const contentType = contentTypeFor(path, file.mimeType);
   const isHtml = contentType.startsWith("text/html");
@@ -41,8 +43,10 @@ function fileResponse(
       headers: { "content-type": contentType, "cache-control": "no-store" },
     });
   }
-  // Text: inject the bootstrap only into the HTML entry document.
-  const body = isHtml ? injectBootstrap(file.content, projectId) : file.content;
+  // Text: resolve the __SITE_URL__ placeholder to this real origin (so SEO files
+  // ship absolute URLs), then inject the bootstrap into the HTML entry document.
+  let body = substituteSiteUrl(file.content, origin);
+  if (isHtml) body = injectBootstrap(body, projectId);
   return new Response(body, {
     headers: { "content-type": contentType, "cache-control": "no-store" },
   });
@@ -82,7 +86,10 @@ export async function GET(request: Request) {
     }
     const file = await readFileRaw(projectId, path);
     if (!file) return new Response("Not found", { status: 404 });
-    const res = fileResponse(file, path, projectId);
+    const res = fileResponse(file, path, projectId, originFromHost(host ?? ""));
+    // The preview origin is an ephemeral, gated view of the live VFS — never the
+    // canonical address — so keep it out of search/answer-engine indexes.
+    res.headers.set("X-Robots-Tag", "noindex");
     if (queryToken) {
       const secure = host?.split(":")[0].endsWith("localhost") ? "" : " Secure;";
       res.headers.set(
@@ -97,7 +104,8 @@ export async function GET(request: Request) {
   const slug = publishSlugFromLabel(label);
   if (slug) {
     const file = await readPublishedFile(slug, path);
-    if (file) return fileResponse(file, path, file.projectId);
+    if (file)
+      return fileResponse(file, path, file.projectId, originFromHost(host ?? ""));
   }
 
   return new Response("Not found", { status: 404 });

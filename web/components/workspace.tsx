@@ -17,7 +17,9 @@ import {
   publishProjectAction,
   unpublishProjectAction,
   setPublishSlugAction,
+  setSiteUrlAction,
 } from "@/app/actions/projects";
+import { substituteSiteUrl, normalizeSiteOrigin } from "@/lib/site-url";
 
 // Sandpack is heavy and browser-only — load it client-side only.
 const SandpackWorkspace = dynamic(
@@ -80,6 +82,7 @@ export function Workspace({
   publishEnabled = false,
   initialPublishUrl,
   initialPublishedSignature,
+  initialSiteUrl,
   initialPrompt,
 }: {
   projectId: string;
@@ -92,6 +95,8 @@ export function Workspace({
   publishEnabled?: boolean;
   initialPublishUrl?: string;
   initialPublishedSignature?: string;
+  // The public URL the user last set for exports (pre-fills the export dialog).
+  initialSiteUrl?: string;
   // Prompt carried over from the landing page (via /start). Fired once on mount
   // as the first agent message, then cleared.
   initialPrompt?: string;
@@ -116,6 +121,10 @@ export function Workspace({
   const [publishedSignature, setPublishedSignature] = useState<
     string | undefined
   >(initialPublishedSignature);
+  // Remembered export target URL; pre-fills the export dialog next time.
+  const [siteUrl, setSiteUrlState] = useState<string | undefined>(
+    initialSiteUrl,
+  );
   const currentSignature = useMemo(
     () => filesSignature(canonicalSignatureMap(files, assets)),
     [files, assets],
@@ -222,31 +231,46 @@ export function Workspace({
     URL.revokeObjectURL(url);
   };
 
-  const onDownload = useCallback(async () => {
-    const html = files["/index.html"];
-    if (!html) return;
-    // A single self-contained /index.html → download it directly (offline).
-    // Anything more (extra files or binary assets) → ZIP with exactly those files.
-    const isSingleFile =
-      Object.keys(files).length === 1 && Object.keys(assets).length === 0;
-    if (isSingleFile) {
-      saveBlob(new Blob([html], { type: "text/html" }), "index.html");
-      return;
-    }
-    try {
-      const res = await fetch(
-        `/api/projects/export?projectId=${encodeURIComponent(projectId)}`,
-      );
-      if (!res.ok) throw new Error(`Export failed (${res.status})`);
-      const blob = await res.blob();
-      saveBlob(blob, "app.zip");
-    } catch (error) {
-      appendMessage(
-        "assistant",
-        `⚠️ ${error instanceof Error ? error.message : "Download failed"}`,
-      );
-    }
-  }, [files, assets, projectId, appendMessage]);
+  // rawSiteUrl is the URL the user typed in the export dialog (the box is the
+  // source of truth; empty → relative URLs). We remember it and bake it into the
+  // exported SEO files in place of the __SITE_URL__ placeholder.
+  const onDownload = useCallback(
+    async (rawSiteUrl: string) => {
+      const html = files["/index.html"];
+      if (!html) return;
+      const trimmed = rawSiteUrl.trim();
+      // Remember the choice (also clears it server-side when emptied).
+      void setSiteUrlAction(projectId, trimmed).then((r) => {
+        if ("origin" in r) setSiteUrlState(r.origin ?? undefined);
+      });
+
+      // A single self-contained /index.html → download it directly (offline).
+      // Anything more (extra files or binary assets) → ZIP with exactly those.
+      const isSingleFile =
+        Object.keys(files).length === 1 && Object.keys(assets).length === 0;
+      if (isSingleFile) {
+        const origin = normalizeSiteOrigin(trimmed) ?? "";
+        saveBlob(
+          new Blob([substituteSiteUrl(html, origin)], { type: "text/html" }),
+          "index.html",
+        );
+        return;
+      }
+      try {
+        const qs = new URLSearchParams({ projectId, siteUrl: trimmed });
+        const res = await fetch(`/api/projects/export?${qs.toString()}`);
+        if (!res.ok) throw new Error(`Export failed (${res.status})`);
+        const blob = await res.blob();
+        saveBlob(blob, "app.zip");
+      } catch (error) {
+        appendMessage(
+          "assistant",
+          `⚠️ ${error instanceof Error ? error.message : "Download failed"}`,
+        );
+      }
+    },
+    [files, assets, projectId, appendMessage],
+  );
 
   const onRestore = useCallback(
     async (versionId: string) => {
@@ -393,6 +417,7 @@ export function Workspace({
           onViewChange={setView}
           canDownload={!!files["/index.html"]}
           onDownload={onDownload}
+          siteUrl={siteUrl}
           versions={versions}
           onRestore={onRestore}
           busy={restoring || streaming}

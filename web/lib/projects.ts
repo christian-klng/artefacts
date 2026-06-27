@@ -81,6 +81,21 @@ export async function renameProject(
     .where(and(eq(projects.id, projectId), eq(projects.userId, userId)));
 }
 
+/**
+ * Stores the public URL the user plans to deploy an export under, so exported
+ * SEO files get real absolute URLs. Pass null to clear. Scoped to the owner.
+ */
+export async function setSiteUrl(
+  projectId: string,
+  userId: string,
+  siteUrl: string | null,
+) {
+  await db
+    .update(projects)
+    .set({ siteUrl, updatedAt: new Date() })
+    .where(and(eq(projects.id, projectId), eq(projects.userId, userId)));
+}
+
 /** Deletes a project; files/messages/versions cascade via FK. */
 export async function deleteProject(projectId: string, userId: string) {
   await db

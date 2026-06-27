@@ -2,6 +2,7 @@ import { zipSync, strToU8 } from "fflate";
 import { auth } from "@/auth";
 import { getOwnedProject, listFiles } from "@/lib/projects";
 import { isInternalVfsPath } from "@/lib/concept";
+import { substituteSiteUrl, normalizeSiteOrigin } from "@/lib/site-url";
 
 // Builds a ZIP of the project's whole virtual filesystem (text + binary assets)
 // so the user gets exactly the files in the Code tree to run/edit locally.
@@ -18,7 +19,8 @@ export async function GET(request: Request) {
   if (!session?.user) return new Response("Unauthorized", { status: 401 });
   const userId = session.user.id;
 
-  const projectId = new URL(request.url).searchParams.get("projectId");
+  const url = new URL(request.url);
+  const projectId = url.searchParams.get("projectId");
   if (!projectId) return new Response("projectId is required", { status: 400 });
 
   let project;
@@ -27,6 +29,13 @@ export async function GET(request: Request) {
   } catch {
     return new Response("Not found", { status: 404 });
   }
+
+  // Origin for SEO placeholders: the URL the user typed in the export modal wins,
+  // else the project's stored siteUrl, else empty (absolute URLs degrade to
+  // relative — never a leaked __SITE_URL__ token).
+  const param = url.searchParams.get("siteUrl");
+  const origin =
+    (param != null ? normalizeSiteOrigin(param) : null) ?? project.siteUrl ?? "";
 
   const all = await listFiles(projectId);
   const entries: Record<string, Uint8Array> = {};
@@ -38,7 +47,7 @@ export async function GET(request: Request) {
     entries[name] =
       f.encoding === "base64"
         ? new Uint8Array(Buffer.from(f.content, "base64"))
-        : strToU8(f.content);
+        : strToU8(substituteSiteUrl(f.content, origin));
   }
 
   const zipped = zipSync(entries, { level: 6 });

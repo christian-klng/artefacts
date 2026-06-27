@@ -9,7 +9,7 @@ import { logout } from "@/app/actions/auth";
 // theme toggle so the header reads as one row of consistent controls.
 
 const iconButton =
-  "inline-flex items-center justify-center rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-900 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900 dark:hover:text-white";
+  "inline-flex h-8 w-8 items-center justify-center rounded-md border border-neutral-300 text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-900 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900 dark:hover:text-white";
 
 function UserIcon() {
   return (
