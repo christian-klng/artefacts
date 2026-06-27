@@ -1,0 +1,18 @@
+# Kubikraum
+
+> Kubikraum ist ein self-hosted KI-App-Builder: Du beschreibst eine Web-App in
+> einem Satz, und ein KI-Agent baut sie live im Browser — Datei für Datei — mit
+> Live-Vorschau und Veröffentlichung per Klick.
+
+## Was es ist
+- Ein Chat-gesteuerter Builder: Prompt rein, fertige Web-App raus.
+- Live-Vorschau im Browser, Versionsverlauf, Export und Veröffentlichung.
+- Self-hosted und auf europäischer Infrastruktur betrieben.
+
+## Für wen
+- Gründer, Freelancer und Teams, die schnell eine Landingpage, ein Tool oder
+  einen Prototyp brauchen, ohne selbst zu programmieren.
+
+## Links
+- Builder / App starten: https://app.kubikraum.digital
+- Startseite: https://kubikraum.digital

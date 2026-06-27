@@ -25,7 +25,6 @@ export default async function AppleIcon() {
           background: "#ffffff",
         }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={logoSrc} width={148} height={148} alt="" />
       </div>
     ),

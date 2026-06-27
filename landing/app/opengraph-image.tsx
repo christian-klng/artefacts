@@ -29,7 +29,6 @@ export default async function OpengraphImage() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={logoSrc} width={72} height={72} alt="" />
           <div style={{ fontSize: 38, fontWeight: 600, color: "#171717" }}>
             Kubikraum
