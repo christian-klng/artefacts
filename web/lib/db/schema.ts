@@ -137,7 +137,12 @@ export const files = pgTable(
       .references(() => projects.id, { onDelete: "cascade" }),
     // Absolute virtual path, e.g. "/src/App.tsx".
     path: text("path").notNull(),
+    // For text files (encoding "utf8") this is the raw text; for binary files
+    // (encoding "base64", e.g. an embedded image/PDF) this is the base64 payload.
     content: text("content").notNull().default(""),
+    // "utf8" | "base64". Binary assets carry their original mimeType.
+    encoding: text("encoding").notNull().default("utf8"),
+    mimeType: text("mimeType"),
     updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
   },
   (file) => [uniqueIndex("file_project_path_idx").on(file.projectId, file.path)],

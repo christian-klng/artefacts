@@ -28,6 +28,10 @@ export default auth((req) => {
     // be spoofed on the pass-through paths either.
     const requestHeaders = new Headers(req.headers);
     requestHeaders.set("x-app-host", host ?? "");
+    // The rewrite pins pathname to /serve, so the real requested path (e.g.
+    // /assets/logo.png for a multi-file app) is forwarded on a header the serve
+    // route reads to resolve which VFS file to return.
+    requestHeaders.set("x-app-path", pathname);
 
     // Let the app's own data/auth API and Next internals through untouched;
     // everything else on this origin is the generated app itself.

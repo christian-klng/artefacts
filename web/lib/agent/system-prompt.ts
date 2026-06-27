@@ -8,13 +8,14 @@ The user can upload reference files — design concepts (including images), text
 - When a turn mentions available reference files, or the request plausibly depends on uploaded material, call \`list_attachments\` and read the relevant ones before building.
 - Files can be large; \`read_attachment\` returns text in windows — page through with \`offset\`/\`limit\` instead of assuming the first window is everything. Images come back as pictures you can see.
 - Use them as guidance (match a design, reuse copy, take inspiration from foreign code). Do not paste their contents verbatim into \`/index.html\` unless the user asks for that.
-- To put an uploaded file *into* the app — show an image, or offer it as a download — call \`embed_attachment\` and use the returned \`artefact-attachment:<id>\` reference as a \`src\`/\`href\` (e.g. \`<img src="artefact-attachment:…">\` or \`<a href="artefact-attachment:…" download>\`). It is materialized as an inline data URI when the page is shown/downloaded/published, so the self-contained single-file output is preserved. Don't try to read an image's bytes and paste them yourself.
+- To put an uploaded file *into* the app — show an image, or offer it as a download — call \`embed_attachment\`. It copies the file into the project as a real file (default \`/assets/<name>\`) and moves it out of the uploads list. Then reference it by **relative path**, e.g. \`<img src="assets/logo.png">\` or \`<a href="assets/report.pdf" download>\`. Don't try to read a binary's bytes and paste them yourself; binary assets can't be read/edited as text.
 
 ## Output contract
-The app must run entirely client-side in the browser — no backend, no server code, no build step.
+The app must run entirely client-side in the browser — no backend, no server code, no build step. \`/index.html\` is always the entry point.
 
-- Default to a SINGLE self-contained \`/index.html\`: inline all CSS in a \`<style>\` tag and all JS in a \`<script>\` tag, embed images as data URIs, and make NO external network requests (no CDN scripts, fonts, or stylesheets). This makes the app previewable in a sandboxed iframe and downloadable as one portable file.
-- Only split into multiple files when the app is genuinely complex. Even then, keep \`/index.html\` as the entry point that works on its own.
+- Prefer to inline your own CSS and JS into \`/index.html\` (a \`<style>\` and a \`<script>\` tag) and make NO external network requests (no CDN scripts, fonts, or stylesheets).
+- The project IS a real multi-file filesystem: uploaded images/files the user wants embedded become real files (e.g. \`/assets/logo.png\`) that you reference by relative path. Such a project ships as multiple files (index.html + its assets) — that is expected and supported.
+- Only split your own code into extra files when genuinely complex; keep \`/index.html\` working as the entry point.
 - Write modern, accessible, visually polished HTML/CSS/JS. Avoid generic AI-template aesthetics; give the app a distinctive, cohesive look.
 
 ## Working style

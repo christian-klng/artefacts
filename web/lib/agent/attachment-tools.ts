@@ -1,11 +1,15 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import {
   listAttachments,
   getAttachmentText,
   getAttachmentData,
+  deleteAttachment,
 } from "@/lib/attachments";
+import { readFileRaw, writeBinaryFile } from "@/lib/projects";
+import type { VfsEvent } from "./tools";
 
 function ok(text: string) {
   return { content: [{ type: "text" as const, text }] };
@@ -13,6 +17,24 @@ function ok(text: string) {
 
 function err(text: string) {
   return { content: [{ type: "text" as const, text }], isError: true };
+}
+
+// Turns a filename into a safe VFS path under /assets, avoiding collisions.
+async function assetPath(
+  projectId: string,
+  filename: string,
+  desired?: string,
+): Promise<string> {
+  if (desired) return desired.startsWith("/") ? desired : `/${desired}`;
+  const clean = filename.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+/, "");
+  const dot = clean.lastIndexOf(".");
+  const base = dot === -1 ? clean : clean.slice(0, dot);
+  const ext = dot === -1 ? "" : clean.slice(dot);
+  for (let i = 0; i < 100; i += 1) {
+    const candidate = `/assets/${base}${i === 0 ? "" : `-${i}`}${ext}`;
+    if ((await readFileRaw(projectId, candidate)) === null) return candidate;
+  }
+  return `/assets/${base}-${Date.now()}${ext}`;
 }
 
 // Default text window per read, so a huge reference file (e.g. a whole foreign
@@ -29,7 +51,10 @@ const DEFAULT_LIMIT = 20_000;
  * read_attachment returns extracted text for text files, or an image content
  * block for images so the model can actually *see* design concepts (vision).
  */
-export function buildAttachmentsServer(projectId: string) {
+export function buildAttachmentsServer(
+  projectId: string,
+  onEvent: (event: VfsEvent) => void,
+) {
   return createSdkMcpServer({
     name: "attachments",
     version: "1.0.0",
@@ -115,21 +140,39 @@ export function buildAttachmentsServer(projectId: string) {
 
       tool(
         "embed_attachment",
-        "Embed an uploaded file INTO the app you are building — to display an image or offer a download. Returns a reference string to use as a src/href; it is materialized as an inline data URI when the page is shown, downloaded, or published, so the single self-contained /index.html stays intact.",
+        "Embed an uploaded file INTO the app — to display an image or offer a download. Copies it into the project as a real file (default /assets/<name>) and removes it from the uploads list. Reference it by RELATIVE path afterwards (e.g. <img src=\"assets/logo.png\"> or <a href=\"assets/report.pdf\" download>).",
         {
           id: z.string().describe("The attachment id from list_attachments"),
+          path: z
+            .string()
+            .optional()
+            .describe("Optional target VFS path; defaults to /assets/<filename>"),
         },
-        async ({ id }) => {
+        async ({ id, path }) => {
           const data = await getAttachmentData(projectId, id);
           if (!data) return err(`Attachment not found: ${id}`);
-          const ref = `artefact-attachment:${id}`;
+
+          const target = await assetPath(projectId, data.filename, path);
+          await writeBinaryFile(projectId, target, data.dataBase64, data.mimeType);
+          await deleteAttachment(projectId, id); // move: out of "Dateien"
+
+          const bytes = Buffer.from(data.dataBase64, "base64");
+          onEvent({
+            type: "asset_changed",
+            path: target,
+            asset: {
+              mimeType: data.mimeType,
+              size: bytes.length,
+              hash: createHash("sha256").update(data.dataBase64).digest("hex"),
+            },
+          });
+          onEvent({ type: "attachments_changed" });
+
+          const rel = target.replace(/^\//, "");
           return ok(
-            `Reference for "${data.filename}" (${data.mimeType}, ${data.kind}). ` +
-              `Put it in a src/href — it becomes the embedded file:\n` +
-              `  ${ref}\n` +
-              `Image:    <img src="${ref}" alt="…">\n` +
-              `Download: <a href="${ref}" download="${data.filename}">…</a>\n` +
-              `Large files enlarge the page accordingly.`,
+            `Embedded "${data.filename}" as ${target}. Reference it by relative path:\n` +
+              `Image:    <img src="${rel}" alt="…">\n` +
+              `Download: <a href="${rel}" download="${data.filename}">…</a>`,
           );
         },
       ),

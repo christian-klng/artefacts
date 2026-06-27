@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import {
   getOwnedProject,
-  listFiles,
+  getClientFiles,
   getMessages,
   listVersions,
   getPublishedSignature,
@@ -27,15 +27,15 @@ export default async function ProjectPage({
   );
   if (!project) redirect("/app");
 
-  const [fileRows, messageRows, versionRows, attachmentRows] =
+  const [clientFiles, messageRows, versionRows, attachmentRows] =
     await Promise.all([
-      listFiles(project.id),
+      getClientFiles(project.id),
       getMessages(project.id),
       listVersions(project.id),
       listAttachments(project.id),
     ]);
 
-  const files = Object.fromEntries(fileRows.map((f) => [f.path, f.content]));
+  const { files, assets } = clientFiles;
   const messages: ChatMessage[] = messageRows.map((m) => ({
     id: m.id,
     role: m.role as ChatMessage["role"],
@@ -85,6 +85,7 @@ export default async function ProjectPage({
         key={project.id}
         projectId={project.id}
         initialFiles={files}
+        initialAssets={assets}
         initialMessages={messages}
         initialVersions={versions}
         initialAttachments={attachments}

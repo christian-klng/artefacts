@@ -1,11 +1,11 @@
 import { auth } from "@/auth";
 import { getOwnedProject, readFile } from "@/lib/projects";
-import { expandAttachmentRefs } from "@/lib/attachments/embed";
+import { inlineVfsAssets } from "@/lib/vfs";
 
-// Returns the project's /index.html with attachment references expanded into
-// inline data URIs — the self-contained page. The builder client uses this for
-// the srcDoc preview fallback (no APPS_DOMAIN) and for download, since it can't
-// reach the DB to expand tokens itself. Ownership-gated.
+// Returns the project's /index.html with references to other VFS files inlined
+// as data URIs — a single self-contained document for the srcDoc preview fallback
+// (no APPS_DOMAIN). With APPS_DOMAIN set, the preview uses the multi-file serve
+// route instead and never hits this. Ownership-gated.
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
@@ -24,8 +24,8 @@ export async function GET(request: Request) {
   const html = await readFile(projectId, "/index.html");
   if (html == null) return new Response("Not found", { status: 404 });
 
-  const expanded = await expandAttachmentRefs(projectId, html);
-  return new Response(expanded, {
+  const inlined = await inlineVfsAssets(projectId, html);
+  return new Response(inlined, {
     headers: {
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store",

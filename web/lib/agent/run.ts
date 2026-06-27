@@ -24,7 +24,7 @@ export function runAgent({
   onFileEvent: (event: VfsEvent) => void;
 }) {
   const vfs = buildVfsServer(projectId, onFileEvent);
-  const attachments = buildAttachmentsServer(projectId);
+  const attachments = buildAttachmentsServer(projectId, onFileEvent);
 
   return query({
     prompt,

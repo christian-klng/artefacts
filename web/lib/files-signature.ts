@@ -8,6 +8,22 @@
 // plain `Record<path, content>`, so identical content yields an identical
 // signature on both sides (cyrb53-style, V8/JS-deterministic).
 
+// Builds the map that feeds filesSignature for a project that may contain binary
+// assets. Text files contribute their content; binary files contribute a stable
+// `binary:<hash>` marker (the server provides the hash, so the client never needs
+// the bytes). Both sides build the SAME map → identical signature → correct
+// publish-dirty detection even with embedded images.
+export function canonicalSignatureMap(
+  textFiles: Record<string, string>,
+  assets: Record<string, { hash: string }>,
+): Record<string, string> {
+  const map: Record<string, string> = { ...textFiles };
+  for (const [path, meta] of Object.entries(assets)) {
+    map[path] = `binary:${meta.hash}`;
+  }
+  return map;
+}
+
 export function filesSignature(files: Record<string, string>): string {
   const keys = Object.keys(files).sort();
   let h1 = 0xdeadbeef ^ keys.length;

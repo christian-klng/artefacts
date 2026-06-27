@@ -4,15 +4,20 @@ import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import {
   listFiles,
   readFile,
+  readFileRaw,
   writeFile,
   editFile,
   deleteFile,
 } from "@/lib/projects";
 
+export type VfsAssetMeta = { mimeType: string | null; size: number; hash: string };
+
 // Event emitted to the route so it can push live file updates over SSE.
 export type VfsEvent =
-  | { type: "file_changed"; path: string; content: string }
-  | { type: "file_deleted"; path: string };
+  | { type: "file_changed"; path: string; content: string } // text file
+  | { type: "asset_changed"; path: string; asset: VfsAssetMeta } // binary asset
+  | { type: "file_deleted"; path: string }
+  | { type: "attachments_changed" }; // the "Dateien" list changed (e.g. embed)
 
 function ok(text: string) {
   return { content: [{ type: "text" as const, text }] };
@@ -52,12 +57,17 @@ export function buildVfsServer(
 
       tool(
         "read_file",
-        "Read the full contents of a file by its absolute path (e.g. /index.html).",
+        "Read the full contents of a text file by its absolute path (e.g. /index.html).",
         { path: z.string() },
         async ({ path }) => {
-          const content = await readFile(projectId, path);
-          if (content === null) return err(`File not found: ${path}`);
-          return ok(content);
+          const raw = await readFileRaw(projectId, path);
+          if (raw === null) return err(`File not found: ${path}`);
+          if (raw.encoding === "base64") {
+            return err(
+              `${path} is a binary asset (${raw.mimeType ?? "unknown type"}) — it can't be read as text. Reference it by path instead.`,
+            );
+          }
+          return ok(raw.content);
         },
       ),
 
@@ -81,6 +91,10 @@ export function buildVfsServer(
           new_string: z.string(),
         },
         async ({ path, old_string, new_string }) => {
+          const raw = await readFileRaw(projectId, path);
+          if (raw?.encoding === "base64") {
+            return err(`${path} is a binary asset and can't be edited as text.`);
+          }
           const result = await editFile(projectId, path, old_string, new_string);
           if (!result.ok) return err(result.error);
           onEvent({

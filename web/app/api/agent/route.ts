@@ -3,7 +3,7 @@ import {
   ensureDefaultProject,
   getOwnedProject,
   addMessage,
-  listFiles,
+  getClientFiles,
   createVersion,
 } from "@/lib/projects";
 import { listAttachments } from "@/lib/attachments";
@@ -83,7 +83,8 @@ export async function POST(request: Request) {
         if (assistantText.trim() !== "") {
           await addMessage(project.id, "assistant", assistantText);
         }
-        send({ type: "files", files: await listFiles(project.id) });
+        const client = await getClientFiles(project.id);
+        send({ type: "files", files: client.files, assets: client.assets });
         // Snapshot the result so the user can restore it later.
         if (filesChanged) {
           const version = await createVersion(project.id);

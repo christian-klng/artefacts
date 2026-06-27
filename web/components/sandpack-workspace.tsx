@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   SandpackProvider,
   SandpackLayout,
@@ -8,12 +8,12 @@ import {
   SandpackCodeEditor,
 } from "@codesandbox/sandpack-react";
 import type { ViewMode } from "./workspace-toolbar";
-import { hasAttachmentRefs } from "@/lib/attachments/ref";
+
+export type AssetMeta = { mimeType: string | null; size: number; hash: string };
 
 // Renders the project's virtual filesystem either as a live preview (sandboxed
-// iframe of the self-contained /index.html) or as a code view (Sandpack file
-// tree + read-only editor — both fully offline). We never use SandpackPreview:
-// its runtime is CodeSandbox-hosted and fails on a self-hosted deployment.
+// iframe) or as a code view (Sandpack file tree + read-only editor). We never use
+// SandpackPreview: its runtime is CodeSandbox-hosted and fails self-hosted.
 // Cheap, stable content hash (djb2) so the preview iframe reloads exactly when
 // /index.html changes — no effect/state needed.
 function hashContent(s: string): number {
@@ -22,13 +22,21 @@ function hashContent(s: string): number {
   return h >>> 0;
 }
 
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
 export function SandpackWorkspace({
   files,
+  assets,
   view,
   projectId,
   previewUrl,
 }: {
   files: Record<string, string>;
+  assets: Record<string, AssetMeta>;
   view: ViewMode;
   projectId: string;
   // When set, the preview is served from the project's own origin instead of
@@ -36,7 +44,24 @@ export function SandpackWorkspace({
   previewUrl?: string;
 }) {
   const indexHtml = files["/index.html"];
-  const hasFiles = Object.keys(files).length > 0;
+  // The project is multi-file when it has more than just /index.html or any
+  // binary asset — then the srcDoc fallback must inline assets server-side.
+  const multiFile =
+    Object.keys(files).length > 1 || Object.keys(assets).length > 0;
+
+  // Binary assets shown as placeholder entries so they appear in the file tree
+  // (the editor is read-only and can't render images); real bytes ship via the
+  // serve/export routes, never to the client.
+  const sandpackFiles = useMemo(() => {
+    const map: Record<string, string> = { ...files };
+    for (const [path, meta] of Object.entries(assets)) {
+      map[path] =
+        `Binäre Datei: ${path.split("/").pop()} ` +
+        `(${meta.mimeType ?? "unbekannt"}, ${formatSize(meta.size)}).\n` +
+        `Im Download/ZIP und auf der veröffentlichten Seite enthalten.`;
+    }
+    return map;
+  }, [files, assets]);
 
   if (view === "preview") {
     if (!indexHtml) {
@@ -73,6 +98,7 @@ export function SandpackWorkspace({
     return (
       <SrcDocPreview
         indexHtml={indexHtml}
+        multiFile={multiFile}
         projectId={projectId}
         style={iframeStyle}
       />
@@ -80,7 +106,7 @@ export function SandpackWorkspace({
   }
 
   // Code view
-  if (!hasFiles) {
+  if (Object.keys(sandpackFiles).length === 0) {
     return (
       <EmptyState>
         No files yet — describe an app in the chat to get started.
@@ -90,7 +116,7 @@ export function SandpackWorkspace({
   return (
     <SandpackProvider
       template="static"
-      files={files}
+      files={sandpackFiles}
       theme="auto"
       options={indexHtml ? { activeFile: "/index.html" } : undefined}
       style={{ height: "100%" }}
@@ -110,20 +136,21 @@ export function SandpackWorkspace({
   );
 }
 
-// Inline srcDoc preview (no APPS_DOMAIN). When the HTML embeds uploaded files
-// (artefact-attachment:<id> refs), we can't expand them client-side — the bytes
-// live in the DB — so we fetch the server-rendered, expanded HTML. Without refs
-// we use the client's HTML directly (offline, no roundtrip).
+// Inline srcDoc preview (no APPS_DOMAIN). A multi-file app references other VFS
+// files by relative path, which don't resolve in a srcDoc iframe — so we fetch
+// the server-rendered HTML with those assets inlined as data URIs. A single
+// self-contained /index.html is shown directly (offline, no roundtrip).
 function SrcDocPreview({
   indexHtml,
+  multiFile,
   projectId,
   style,
 }: {
   indexHtml: string;
+  multiFile: boolean;
   projectId: string;
   style: React.CSSProperties;
 }) {
-  const needsExpand = hasAttachmentRefs(indexHtml);
   // Keyed by content hash so a stale render from older HTML is ignored.
   const [rendered, setRendered] = useState<{ key: number; html: string } | null>(
     null,
@@ -131,7 +158,7 @@ function SrcDocPreview({
   const key = hashContent(indexHtml);
 
   useEffect(() => {
-    if (!needsExpand) return;
+    if (!multiFile) return;
     let cancelled = false;
     fetch(`/api/projects/render?projectId=${encodeURIComponent(projectId)}`)
       .then((res) => (res.ok ? res.text() : Promise.reject(res.status)))
@@ -139,7 +166,7 @@ function SrcDocPreview({
         if (!cancelled) setRendered({ key, html });
       })
       .catch(() => {
-        // Fall back to the raw HTML (embedded assets show as broken links).
+        // Fall back to the raw HTML (relative assets show as broken links).
         if (!cancelled) setRendered({ key, html: indexHtml });
       });
     return () => {
@@ -147,12 +174,11 @@ function SrcDocPreview({
     };
     // Re-fetch whenever the HTML content changes (keyed by its hash).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, needsExpand, projectId]);
+  }, [key, multiFile, projectId]);
 
-  // Only use the rendered HTML if it matches the current content.
   const renderedHtml = rendered?.key === key ? rendered.html : null;
 
-  if (needsExpand && renderedHtml === null) {
+  if (multiFile && renderedHtml === null) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-neutral-500">
         Vorschau wird vorbereitet…
@@ -163,7 +189,7 @@ function SrcDocPreview({
   return (
     <iframe
       title="App preview"
-      srcDoc={needsExpand ? (renderedHtml ?? indexHtml) : indexHtml}
+      srcDoc={multiFile ? (renderedHtml ?? indexHtml) : indexHtml}
       // No allow-same-origin: the preview cannot reach our app's origin,
       // cookies, or storage. Scripts/forms run for the demo app.
       sandbox="allow-scripts allow-forms allow-modals allow-popups allow-pointer-lock"

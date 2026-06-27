@@ -4,8 +4,8 @@ import { useCallback, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { ChatPanel, type ChatMessage } from "./chat-panel";
 import { AttachmentsView, type AttachmentMeta } from "./attachments-view";
-import { filesSignature } from "@/lib/files-signature";
-import { hasAttachmentRefs } from "@/lib/attachments/ref";
+import type { AssetMeta } from "./sandpack-workspace";
+import { canonicalSignatureMap, filesSignature } from "@/lib/files-signature";
 import {
   WorkspaceToolbar,
   type Version,
@@ -55,9 +55,15 @@ type AgentEvent =
   | { type: "assistant_text"; text: string }
   | { type: "tool_use"; tool: string; path?: string }
   | { type: "file_changed"; path: string; content: string }
+  | { type: "asset_changed"; path: string; asset: AssetMeta }
   | { type: "file_deleted"; path: string }
-  | { type: "files"; files: { path: string; content: string }[] }
+  | {
+      type: "files";
+      files: Record<string, string>;
+      assets: Record<string, AssetMeta>;
+    }
   | { type: "version"; id: string; label: string | null; createdAt: string }
+  | { type: "attachments_changed" }
   | { type: "error"; message: string }
   | { type: "done" };
 
@@ -67,6 +73,7 @@ export function Workspace({
   initialMessages,
   initialVersions,
   initialAttachments = [],
+  initialAssets = {},
   previewUrl,
   publishEnabled = false,
   initialPublishUrl,
@@ -77,12 +84,15 @@ export function Workspace({
   initialMessages: ChatMessage[];
   initialVersions: Version[];
   initialAttachments?: AttachmentMeta[];
+  initialAssets?: Record<string, AssetMeta>;
   previewUrl?: string;
   publishEnabled?: boolean;
   initialPublishUrl?: string;
   initialPublishedSignature?: string;
 }) {
   const [files, setFiles] = useState<Record<string, string>>(initialFiles);
+  const [assets, setAssets] =
+    useState<Record<string, AssetMeta>>(initialAssets);
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [versions, setVersions] = useState<Version[]>(initialVersions);
   const [attachments, setAttachments] =
@@ -99,7 +109,10 @@ export function Workspace({
   const [publishedSignature, setPublishedSignature] = useState<
     string | undefined
   >(initialPublishedSignature);
-  const currentSignature = useMemo(() => filesSignature(files), [files]);
+  const currentSignature = useMemo(
+    () => filesSignature(canonicalSignatureMap(files, assets)),
+    [files, assets],
+  );
   const publishDirty = !!publishUrl && publishedSignature !== currentSignature;
 
   const appendMessage = useCallback(
@@ -154,17 +167,24 @@ export function Workspace({
         case "file_changed":
           setFiles((prev) => ({ ...prev, [event.path]: event.content }));
           break;
+        case "asset_changed":
+          setAssets((prev) => ({ ...prev, [event.path]: event.asset }));
+          break;
         case "file_deleted":
           setFiles((prev) => {
             const next = { ...prev };
             delete next[event.path];
             return next;
           });
+          setAssets((prev) => {
+            const next = { ...prev };
+            delete next[event.path];
+            return next;
+          });
           break;
         case "files":
-          setFiles(
-            Object.fromEntries(event.files.map((f) => [f.path, f.content])),
-          );
+          setFiles(event.files);
+          setAssets(event.assets);
           break;
         case "version":
           setVersions((prev) => [
@@ -172,40 +192,54 @@ export function Workspace({
             ...prev,
           ]);
           break;
+        case "attachments_changed":
+          refreshAttachments();
+          break;
         case "error":
           appendMessage("assistant", `⚠️ ${event.message}`);
           break;
       }
     },
-    [appendMessage],
+    [appendMessage, refreshAttachments],
   );
 
-  const onDownload = useCallback(async () => {
-    const html = files["/index.html"];
-    if (!html) return;
-    // If the page embeds uploaded files, fetch the server-rendered HTML so the
-    // download is self-contained (data URIs), not raw artefact-attachment refs.
-    let out = html;
-    if (hasAttachmentRefs(html)) {
-      try {
-        const res = await fetch(
-          `/api/projects/render?projectId=${encodeURIComponent(projectId)}`,
-        );
-        if (res.ok) out = await res.text();
-      } catch {
-        // Fall back to the raw HTML (embedded assets would be broken).
-      }
-    }
-    const url = URL.createObjectURL(new Blob([out], { type: "text/html" }));
+  const saveBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
     const a = Object.assign(document.createElement("a"), {
       href: url,
-      download: "index.html",
+      download: filename,
     });
     document.body.appendChild(a);
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-  }, [files, projectId]);
+  };
+
+  const onDownload = useCallback(async () => {
+    const html = files["/index.html"];
+    if (!html) return;
+    // A single self-contained /index.html → download it directly (offline).
+    // Anything more (extra files or binary assets) → ZIP with exactly those files.
+    const isSingleFile =
+      Object.keys(files).length === 1 && Object.keys(assets).length === 0;
+    if (isSingleFile) {
+      saveBlob(new Blob([html], { type: "text/html" }), "index.html");
+      return;
+    }
+    try {
+      const res = await fetch(
+        `/api/projects/export?projectId=${encodeURIComponent(projectId)}`,
+      );
+      if (!res.ok) throw new Error(`Export failed (${res.status})`);
+      const blob = await res.blob();
+      saveBlob(blob, "app.zip");
+    } catch (error) {
+      appendMessage(
+        "assistant",
+        `⚠️ ${error instanceof Error ? error.message : "Download failed"}`,
+      );
+    }
+  }, [files, assets, projectId, appendMessage]);
 
   const onRestore = useCallback(
     async (versionId: string) => {
@@ -217,8 +251,12 @@ export function Workspace({
           body: JSON.stringify({ projectId, versionId }),
         });
         if (!res.ok) throw new Error(`Restore failed (${res.status})`);
-        const data = (await res.json()) as { files: Record<string, string> };
+        const data = (await res.json()) as {
+          files: Record<string, string>;
+          assets: Record<string, AssetMeta>;
+        };
         setFiles(data.files);
+        setAssets(data.assets);
       } catch (error) {
         appendMessage(
           "assistant",
@@ -353,6 +391,7 @@ export function Workspace({
           ) : (
             <SandpackWorkspace
               files={files}
+              assets={assets}
               view={view}
               projectId={projectId}
               previewUrl={previewUrl}

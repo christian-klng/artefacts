@@ -21,6 +21,7 @@ export async function POST(request: Request) {
 
   // Ownership check before touching anything.
   await getOwnedProject(projectId, session.user.id);
-  const files = await restoreVersion(projectId, versionId);
-  return Response.json({ files });
+  // Returns { files, assets } — text files in full, binary assets as metadata.
+  const result = await restoreVersion(projectId, versionId);
+  return Response.json(result);
 }
