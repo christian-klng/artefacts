@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { ChatPanel, type ChatMessage } from "./chat-panel";
 import { AttachmentsView, type AttachmentMeta } from "./attachments-view";
 import { filesSignature } from "@/lib/files-signature";
+import { hasAttachmentRefs } from "@/lib/attachments/ref";
 import {
   WorkspaceToolbar,
   type Version,
@@ -46,6 +47,7 @@ const TOOL_ICONS: Record<string, string> = {
   delete_file: "🗑️",
   list_attachments: "📎",
   read_attachment: "📎",
+  embed_attachment: "🖼️",
 };
 
 type AgentEvent =
@@ -178,10 +180,23 @@ export function Workspace({
     [appendMessage],
   );
 
-  const onDownload = useCallback(() => {
+  const onDownload = useCallback(async () => {
     const html = files["/index.html"];
     if (!html) return;
-    const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    // If the page embeds uploaded files, fetch the server-rendered HTML so the
+    // download is self-contained (data URIs), not raw artefact-attachment refs.
+    let out = html;
+    if (hasAttachmentRefs(html)) {
+      try {
+        const res = await fetch(
+          `/api/projects/render?projectId=${encodeURIComponent(projectId)}`,
+        );
+        if (res.ok) out = await res.text();
+      } catch {
+        // Fall back to the raw HTML (embedded assets would be broken).
+      }
+    }
+    const url = URL.createObjectURL(new Blob([out], { type: "text/html" }));
     const a = Object.assign(document.createElement("a"), {
       href: url,
       download: "index.html",
@@ -190,7 +205,7 @@ export function Workspace({
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-  }, [files]);
+  }, [files, projectId]);
 
   const onRestore = useCallback(
     async (versionId: string) => {
@@ -339,6 +354,7 @@ export function Workspace({
             <SandpackWorkspace
               files={files}
               view={view}
+              projectId={projectId}
               previewUrl={previewUrl}
             />
           )}

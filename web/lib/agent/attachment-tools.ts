@@ -112,6 +112,27 @@ export function buildAttachmentsServer(projectId: string) {
           return ok(header + slice + more);
         },
       ),
+
+      tool(
+        "embed_attachment",
+        "Embed an uploaded file INTO the app you are building — to display an image or offer a download. Returns a reference string to use as a src/href; it is materialized as an inline data URI when the page is shown, downloaded, or published, so the single self-contained /index.html stays intact.",
+        {
+          id: z.string().describe("The attachment id from list_attachments"),
+        },
+        async ({ id }) => {
+          const data = await getAttachmentData(projectId, id);
+          if (!data) return err(`Attachment not found: ${id}`);
+          const ref = `artefact-attachment:${id}`;
+          return ok(
+            `Reference for "${data.filename}" (${data.mimeType}, ${data.kind}). ` +
+              `Put it in a src/href — it becomes the embedded file:\n` +
+              `  ${ref}\n` +
+              `Image:    <img src="${ref}" alt="…">\n` +
+              `Download: <a href="${ref}" download="${data.filename}">…</a>\n` +
+              `Large files enlarge the page accordingly.`,
+          );
+        },
+      ),
     ],
   });
 }
@@ -120,4 +141,5 @@ export function buildAttachmentsServer(projectId: string) {
 export const ATTACHMENT_TOOL_NAMES = [
   "mcp__attachments__list_attachments",
   "mcp__attachments__read_attachment",
+  "mcp__attachments__embed_attachment",
 ];

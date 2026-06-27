@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { attachments } from "@/lib/db/schema";
 
@@ -109,6 +109,31 @@ export async function getAttachmentData(
   });
   if (!row) return null;
   return { ...row, kind: row.kind as AttachmentKind };
+}
+
+/**
+ * Bulk payload fetch for embedding: original bytes (base64) + mime for the given
+ * attachment ids, scoped to the project. Used to expand `artefact-attachment:<id>`
+ * references into inline data URIs. Only loads the ids actually referenced.
+ */
+export async function getAttachmentsData(
+  projectId: string,
+  ids: string[],
+): Promise<Map<string, { mimeType: string; dataBase64: string }>> {
+  if (ids.length === 0) return new Map();
+  const rows = await db
+    .select({
+      id: attachments.id,
+      mimeType: attachments.mimeType,
+      dataBase64: attachments.dataBase64,
+    })
+    .from(attachments)
+    .where(
+      and(eq(attachments.projectId, projectId), inArray(attachments.id, ids)),
+    );
+  return new Map(
+    rows.map((r) => [r.id, { mimeType: r.mimeType, dataBase64: r.dataBase64 }]),
+  );
 }
 
 export async function deleteAttachment(

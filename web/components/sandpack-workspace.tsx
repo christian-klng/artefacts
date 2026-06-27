@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   SandpackProvider,
   SandpackLayout,
@@ -7,6 +8,7 @@ import {
   SandpackCodeEditor,
 } from "@codesandbox/sandpack-react";
 import type { ViewMode } from "./workspace-toolbar";
+import { hasAttachmentRefs } from "@/lib/attachments/ref";
 
 // Renders the project's virtual filesystem either as a live preview (sandboxed
 // iframe of the self-contained /index.html) or as a code view (Sandpack file
@@ -23,10 +25,12 @@ function hashContent(s: string): number {
 export function SandpackWorkspace({
   files,
   view,
+  projectId,
   previewUrl,
 }: {
   files: Record<string, string>;
   view: ViewMode;
+  projectId: string;
   // When set, the preview is served from the project's own origin instead of
   // an inline srcDoc (enables real DB/auth). Undefined → srcDoc fallback.
   previewUrl?: string;
@@ -67,12 +71,9 @@ export function SandpackWorkspace({
       );
     }
     return (
-      <iframe
-        title="App preview"
-        srcDoc={indexHtml}
-        // No allow-same-origin: the preview cannot reach our app's origin,
-        // cookies, or storage. Scripts/forms run for the demo app.
-        sandbox="allow-scripts allow-forms allow-modals allow-popups allow-pointer-lock"
+      <SrcDocPreview
+        indexHtml={indexHtml}
+        projectId={projectId}
         style={iframeStyle}
       />
     );
@@ -106,6 +107,68 @@ export function SandpackWorkspace({
         />
       </SandpackLayout>
     </SandpackProvider>
+  );
+}
+
+// Inline srcDoc preview (no APPS_DOMAIN). When the HTML embeds uploaded files
+// (artefact-attachment:<id> refs), we can't expand them client-side — the bytes
+// live in the DB — so we fetch the server-rendered, expanded HTML. Without refs
+// we use the client's HTML directly (offline, no roundtrip).
+function SrcDocPreview({
+  indexHtml,
+  projectId,
+  style,
+}: {
+  indexHtml: string;
+  projectId: string;
+  style: React.CSSProperties;
+}) {
+  const needsExpand = hasAttachmentRefs(indexHtml);
+  // Keyed by content hash so a stale render from older HTML is ignored.
+  const [rendered, setRendered] = useState<{ key: number; html: string } | null>(
+    null,
+  );
+  const key = hashContent(indexHtml);
+
+  useEffect(() => {
+    if (!needsExpand) return;
+    let cancelled = false;
+    fetch(`/api/projects/render?projectId=${encodeURIComponent(projectId)}`)
+      .then((res) => (res.ok ? res.text() : Promise.reject(res.status)))
+      .then((html) => {
+        if (!cancelled) setRendered({ key, html });
+      })
+      .catch(() => {
+        // Fall back to the raw HTML (embedded assets show as broken links).
+        if (!cancelled) setRendered({ key, html: indexHtml });
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Re-fetch whenever the HTML content changes (keyed by its hash).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, needsExpand, projectId]);
+
+  // Only use the rendered HTML if it matches the current content.
+  const renderedHtml = rendered?.key === key ? rendered.html : null;
+
+  if (needsExpand && renderedHtml === null) {
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-neutral-500">
+        Vorschau wird vorbereitet…
+      </div>
+    );
+  }
+
+  return (
+    <iframe
+      title="App preview"
+      srcDoc={needsExpand ? (renderedHtml ?? indexHtml) : indexHtml}
+      // No allow-same-origin: the preview cannot reach our app's origin,
+      // cookies, or storage. Scripts/forms run for the demo app.
+      sandbox="allow-scripts allow-forms allow-modals allow-popups allow-pointer-lock"
+      style={style}
+    />
   );
 }
 

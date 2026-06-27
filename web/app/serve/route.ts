@@ -1,4 +1,5 @@
 import { readFile, readPublishedIndexHtml } from "@/lib/projects";
+import { expandAttachmentRefs } from "@/lib/attachments/embed";
 import { verifyPreviewToken } from "@/lib/preview-token";
 import {
   parseAppLabel,
@@ -51,7 +52,8 @@ export async function GET(request: Request) {
       });
     }
 
-    return htmlResponse(injectBootstrap(html, projectId));
+    const expanded = await expandAttachmentRefs(projectId, html);
+    return htmlResponse(injectBootstrap(expanded, projectId));
   }
 
   // Published host (<slug>): the public, un-gated app, served from the FROZEN
@@ -60,7 +62,12 @@ export async function GET(request: Request) {
   if (slug) {
     const published = await readPublishedIndexHtml(slug);
     if (published) {
-      return htmlResponse(injectBootstrap(published.html, published.projectId));
+      // The snapshot stores tokens (small); expand to inline assets at serve time.
+      const expanded = await expandAttachmentRefs(
+        published.projectId,
+        published.html,
+      );
+      return htmlResponse(injectBootstrap(expanded, published.projectId));
     }
   }
 
