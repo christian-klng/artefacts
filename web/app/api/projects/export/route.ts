@@ -3,11 +3,36 @@ import { auth } from "@/auth";
 import { getOwnedProject, listFiles } from "@/lib/projects";
 import { isInternalVfsPath } from "@/lib/concept";
 import { substituteSiteUrl, normalizeSiteOrigin } from "@/lib/site-url";
+import { dumpTenantData } from "@/lib/appdb/provision";
+import { serializeTenantDump } from "@/lib/appdb/dump";
 
 // Builds a ZIP of the project's whole virtual filesystem (text + binary assets)
 // so the user gets exactly the files in the Code tree to run/edit locally.
 // Ownership-gated.
 export const runtime = "nodejs";
+
+const DB_README = `# Datenbank
+
+Diese App nutzt eine Datenbank. Zwei Dateien gehören dazu:
+
+- \`database.sql\` — das Schema (CREATE TABLE …).
+- \`database-data.sql\` — die aktuellen Daten (INSERT …).
+
+## Lokal einrichten (Postgres)
+
+\`\`\`bash
+createdb meine_app
+psql meine_app -f database.sql
+psql meine_app -f database-data.sql
+\`\`\`
+
+Die App spricht im Hosting-Betrieb über \`window.artefacts.db\` / \`window.artefacts.auth\`
+mit der Datenbank. Diese Schnittstelle stellt die Artefacts-Plattform bereit; beim
+Selbst-Hosting must du sie durch einen eigenen kleinen Daten-/Auth-Endpunkt ersetzen
+(oder die App auf der Plattform veröffentlicht lassen, wo sie automatisch vorhanden ist).
+
+Hinweis: \`owner_id\`-Spalten markieren pro-Nutzer-private Tabellen (Row-Level-Security).
+`;
 
 function zipName(name: string): string {
   const clean = name.trim().replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
@@ -48,6 +73,21 @@ export async function GET(request: Request) {
       f.encoding === "base64"
         ? new Uint8Array(Buffer.from(f.content, "base64"))
         : strToU8(substituteSiteUrl(f.content, origin));
+  }
+
+  // When the app has a managed database, ship its current data alongside the
+  // schema (database.sql is already a VFS file, so it's in `entries`). The user
+  // can recreate the whole DB on a plain Postgres: run database.sql, then
+  // database-data.sql.
+  if (project.databaseEnabled) {
+    try {
+      const dump = await dumpTenantData(projectId);
+      entries["database-data.sql"] = strToU8(serializeTenantDump(dump));
+      entries["DATABASE.md"] = strToU8(DB_README);
+    } catch (e) {
+      // A dump failure must never block the code export.
+      console.error("[export] DB dump failed", e);
+    }
   }
 
   const zipped = zipSync(entries, { level: 6 });

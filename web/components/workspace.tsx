@@ -57,6 +57,7 @@ type AgentEvent =
     }
   | { type: "version"; id: string; label: string | null; createdAt: string }
   | { type: "attachments_changed" }
+  | { type: "database_changed"; tables: string[] }
   | {
       type: "usage";
       model: string;
@@ -219,6 +220,15 @@ export function Workspace({
           break;
         case "attachments_changed":
           refreshAttachments();
+          break;
+        case "database_changed":
+          appendMessage(
+            "tool",
+            event.tables.length > 0
+              ? `Datenbank aktualisiert: ${event.tables.join(", ")}`
+              : "Datenbank eingerichtet",
+            { tool: "database" },
+          );
           break;
         case "usage":
           setBalanceEur(event.balanceEur);

@@ -16,4 +16,6 @@ const pool = globalForDb.pool ?? new Pool({ connectionString });
 if (process.env.NODE_ENV !== "production") globalForDb.pool = pool;
 
 export const db = drizzle(pool, { schema });
-export { schema };
+// The raw pool is needed by the per-project data plane (lib/appdb/*), which runs
+// hand-built parameterized SQL under SET LOCAL ROLE rather than through Drizzle.
+export { schema, pool };

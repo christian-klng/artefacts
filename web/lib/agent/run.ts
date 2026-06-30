@@ -5,6 +5,7 @@ import {
   buildAttachmentsServer,
   ATTACHMENT_TOOL_NAMES,
 } from "./attachment-tools";
+import { buildDatabaseServer, DATABASE_TOOL_NAMES } from "./tools-db";
 import { SYSTEM_PROMPT } from "./system-prompt";
 import {
   cortecsAnthropicBaseUrl,
@@ -28,6 +29,7 @@ export function runAgent({
 }) {
   const vfs = buildVfsServer(projectId, onFileEvent);
   const attachments = buildAttachmentsServer(projectId, onFileEvent);
+  const appdb = buildDatabaseServer(projectId, onFileEvent);
 
   const { model } = modelForTask("build");
 
@@ -36,8 +38,12 @@ export function runAgent({
     options: {
       model,
       systemPrompt: SYSTEM_PROMPT,
-      mcpServers: { vfs, attachments },
-      allowedTools: [...VFS_TOOL_NAMES, ...ATTACHMENT_TOOL_NAMES],
+      mcpServers: { vfs, attachments, appdb },
+      allowedTools: [
+        ...VFS_TOOL_NAMES,
+        ...ATTACHMENT_TOOL_NAMES,
+        ...DATABASE_TOOL_NAMES,
+      ],
       // Only the sandboxed VFS tools are available, so auto-approving them is
       // safe and avoids interactive permission prompts on the server.
       permissionMode: "bypassPermissions",

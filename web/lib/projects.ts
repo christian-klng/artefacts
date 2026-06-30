@@ -112,6 +112,15 @@ export async function getOwnedProject(projectId: string, userId: string) {
   return project;
 }
 
+/** Whether the project has an isolated database provisioned (drives SDK injection). */
+export async function getProjectDbEnabled(projectId: string): Promise<boolean> {
+  const row = await db.query.projects.findFirst({
+    where: eq(projects.id, projectId),
+    columns: { databaseEnabled: true },
+  });
+  return row?.databaseEnabled ?? false;
+}
+
 export async function listFiles(projectId: string): Promise<ProjectFile[]> {
   const rows = await db
     .select({

@@ -1,0 +1,173 @@
+import "server-only";
+import { eq } from "drizzle-orm";
+import { db, pool } from "@/lib/db";
+import { projects } from "@/lib/db/schema";
+import {
+  provisionStatements,
+  ownerColumnDefaultStatement,
+  ownerRlsStatements,
+  schemaForProject,
+  roleForProject,
+  ident,
+} from "./sql";
+import { applyTenantDdl } from "./exec";
+import type { TableDump } from "./dump";
+
+// Control-plane operations for the per-project data plane: creating a project's
+// isolated schema + role, applying its agent-authored DDL, and reading its data
+// back for export. The runtime query path (serving end-user requests) lives in
+// exec.ts; this module is the privileged side that only the builder ever runs.
+//
+// Trust split:
+//   - provisioning DDL (CREATE SCHEMA/ROLE/GRANT) runs as the connecting admin
+//     user — the tenant role has no privilege to create roles or other schemas;
+//   - agent DDL and owner-column hardening run UNDER the tenant role, so even
+//     hostile DDL is confined to the project schema (see exec.ts).
+
+export type TenantNames = { schema: string; role: string };
+
+export function tenantNames(projectId: string): TenantNames {
+  return {
+    schema: schemaForProject(projectId),
+    role: roleForProject(projectId),
+  };
+}
+
+/**
+ * Idempotently creates the project's isolated schema + low-privilege role and
+ * flips `databaseEnabled`. Runs as the connecting (admin) user because creating
+ * a schema/role needs privileges the tenant role intentionally lacks. Safe to
+ * call on every apply_schema.
+ */
+export async function ensureProvisioned(projectId: string): Promise<TenantNames> {
+  const names = tenantNames(projectId);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    for (const stmt of provisionStatements(names.schema, names.role)) {
+      await client.query(stmt);
+    }
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+  await db
+    .update(projects)
+    .set({
+      databaseEnabled: true,
+      dbProvisionedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(projects.id, projectId));
+  return names;
+}
+
+/** Base-table names in a project's schema (introspection runs as admin). */
+export async function listTenantTables(projectId: string): Promise<string[]> {
+  const { schema } = tenantNames(projectId);
+  const res = await pool.query(
+    `SELECT table_name FROM information_schema.tables
+       WHERE table_schema = $1 AND table_type = 'BASE TABLE'
+       ORDER BY table_name`,
+    [schema],
+  );
+  return res.rows.map((r: { table_name: string }) => r.table_name);
+}
+
+/** Tables in the schema that carry an `owner_id` column (→ per-user RLS). */
+async function ownerTables(schema: string): Promise<string[]> {
+  const res = await pool.query(
+    `SELECT table_name FROM information_schema.columns
+       WHERE table_schema = $1 AND column_name = 'owner_id'
+       ORDER BY table_name`,
+    [schema],
+  );
+  return res.rows.map((r: { table_name: string }) => r.table_name);
+}
+
+/**
+ * The single convention that drives end-user privacy: every table with an
+ * `owner_id uuid` column gets (a) that column auto-stamped from the end-user
+ * GUC on insert and (b) per-owner RLS. Tables without `owner_id` stay shared
+ * app data. Idempotent — re-running just re-asserts the default + policy. Runs
+ * under the project role (the table owner) in one transaction.
+ */
+export async function applyOwnerSecurity(projectId: string): Promise<string[]> {
+  const { schema, role } = tenantNames(projectId);
+  const tables = await ownerTables(schema);
+  if (tables.length === 0) return [];
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`SET LOCAL ROLE ${ident(role)}`);
+    await client.query(`SET LOCAL search_path TO ${ident(schema)}`);
+    for (const table of tables) {
+      await client.query(ownerColumnDefaultStatement(schema, table));
+      for (const stmt of ownerRlsStatements(schema, table)) {
+        await client.query(stmt);
+      }
+    }
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+  return tables;
+}
+
+/**
+ * Provisions if needed, applies the project's `/database.sql` under its role,
+ * then hardens any owner_id tables. Returns the resulting table inventory for
+ * the agent's confirmation message.
+ */
+export async function applyProjectSchema(
+  projectId: string,
+  ddl: string,
+): Promise<{ tables: string[]; ownerTables: string[] }> {
+  const names = await ensureProvisioned(projectId);
+  await applyTenantDdl(pool, names, ddl);
+  const secured = await applyOwnerSecurity(projectId);
+  const tables = await listTenantTables(projectId);
+  return { tables, ownerTables: secured };
+}
+
+/**
+ * Reads every row of every tenant table for export. Runs as the admin
+ * connection with row_security OFF so the dump includes ALL end-users' rows
+ * (RLS would otherwise scope it to one owner). The provisioning user can bypass
+ * RLS (superuser, as in our deploys); if it ever can't, the dump simply returns
+ * the rows visible to it.
+ */
+export async function dumpTenantData(projectId: string): Promise<TableDump[]> {
+  const { schema } = tenantNames(projectId);
+  const tables = await listTenantTables(projectId);
+  if (tables.length === 0) return [];
+  const out: TableDump[] = [];
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SET LOCAL row_security = off");
+    for (const table of tables) {
+      const res = await client.query(
+        `SELECT * FROM ${ident(schema)}.${ident(table)}`,
+      );
+      out.push({
+        table,
+        columns: res.fields.map((f: { name: string }) => f.name),
+        rows: res.rows as Record<string, unknown>[],
+      });
+    }
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+  return out;
+}

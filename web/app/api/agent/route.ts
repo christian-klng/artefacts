@@ -110,7 +110,7 @@ export async function POST(request: Request) {
                 send({ type: "assistant_text", text: block.text });
               } else if (block.type === "tool_use") {
                 const tool = block.name.replace(
-                  /^mcp__(?:vfs|attachments)__/,
+                  /^mcp__(?:vfs|attachments|appdb)__/,
                   "",
                 );
                 const path = (block.input as { path?: string } | undefined)

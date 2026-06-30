@@ -80,6 +80,21 @@ export function provisionStatements(schema: string, role: string): string[] {
 }
 
 /**
+ * Makes a table's owner column auto-stamp the current end-user on INSERT, so the
+ * generated client never sends (or can forge) an owner_id — it is filled from
+ * the `app.end_user_id` GUC the request sets. Combined with the RLS WITH CHECK
+ * below, a row can only ever be created owned by the caller. NULL when anonymous.
+ */
+export function ownerColumnDefaultStatement(
+  schema: string,
+  table: string,
+  ownerColumn = "owner_id",
+): string {
+  const t = `${ident(schema)}.${ident(table)}`;
+  return `ALTER TABLE ${t} ALTER COLUMN ${ident(ownerColumn)} SET DEFAULT nullif(current_setting('app.end_user_id', true), '')::uuid`;
+}
+
+/**
  * Statements that turn a table into a per-end-user private table: only rows the
  * current end-user owns are visible/writable. FORCE is required because the
  * table is owned by the project role itself, and owners bypass RLS otherwise.

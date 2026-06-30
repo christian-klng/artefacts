@@ -17,7 +17,8 @@ export type VfsEvent =
   | { type: "file_changed"; path: string; content: string } // text file
   | { type: "asset_changed"; path: string; asset: VfsAssetMeta } // binary asset
   | { type: "file_deleted"; path: string }
-  | { type: "attachments_changed" }; // the "Dateien" list changed (e.g. embed)
+  | { type: "attachments_changed" } // the "Dateien" list changed (e.g. embed)
+  | { type: "database_changed"; tables: string[] }; // schema provisioned/applied
 
 function ok(text: string) {
   return { content: [{ type: "text" as const, text }] };

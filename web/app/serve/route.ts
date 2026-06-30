@@ -1,4 +1,8 @@
-import { readFileRaw, readPublishedFile } from "@/lib/projects";
+import {
+  readFileRaw,
+  readPublishedFile,
+  getProjectDbEnabled,
+} from "@/lib/projects";
 import { isInternalVfsPath } from "@/lib/concept";
 import { substituteSiteUrl, originFromHost } from "@/lib/site-url";
 import { contentTypeFor } from "@/lib/vfs";
@@ -20,9 +24,54 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function injectBootstrap(html: string, projectId: string): string {
-  // Minimal config for the future client SDK (db/auth land in Phase 2/3).
-  const tag = `<script>window.__ARTEFACTS__=${JSON.stringify({ projectId })};</script>`;
+// Client SDK injected into served HTML when the app has a database. Talks to the
+// same-origin /api/appdb + /api/appauth routes; exposes a small chainable query
+// builder + auth helpers as window.artefacts. No raw SQL ever crosses to here.
+const ARTEFACTS_SDK = `(function(){
+  function call(path, body){
+    return fetch(path, {method:'POST', headers:{'content-type':'application/json'}, credentials:'same-origin', body:JSON.stringify(body)})
+      .then(function(r){ return r.json().then(function(j){ return {status:r.status, body:j}; }); });
+  }
+  function from(table){
+    var q = {table: table, op:'select', where: []};
+    function run(){
+      return call('/api/appdb', q).then(function(res){
+        if(res.status>=400){ throw new Error(res.body && res.body.error || 'Datenbankfehler'); }
+        return res.body.rows;
+      });
+    }
+    var api = {
+      select:function(cols){ if(cols) q.columns=cols; return api; },
+      where:function(c,op,v){ q.where.push({column:c,op:op,value:v}); return api; },
+      order:function(c,dir){ q.orderBy={column:c,dir:dir||'asc'}; return api; },
+      limit:function(n){ q.limit=n; return api; },
+      offset:function(n){ q.offset=n; return api; },
+      list:function(){ q.op='select'; return run(); },
+      insert:function(values){ q.op='insert'; q.values=values; return run(); },
+      update:function(values){ q.op='update'; q.values=values; return run(); },
+      delete:function(){ q.op='delete'; return run(); }
+    };
+    return api;
+  }
+  var auth = {
+    signup:function(c){ return call('/api/appauth',{action:'signup',email:c.email,password:c.password,name:c.name}).then(function(r){return r.body;}); },
+    login:function(c){ return call('/api/appauth',{action:'login',email:c.email,password:c.password}).then(function(r){return r.body;}); },
+    logout:function(){ return call('/api/appauth',{action:'logout'}).then(function(){return true;}); },
+    user:function(){ return fetch('/api/appauth',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(j){return j.user;}); }
+  };
+  var cfg = window.__ARTEFACTS__ || {};
+  window.artefacts = {projectId: cfg.projectId, db:{from: from}, auth: auth};
+})();`;
+
+function injectBootstrap(
+  html: string,
+  projectId: string,
+  dbEnabled: boolean,
+): string {
+  let tag = `<script>window.__ARTEFACTS__=${JSON.stringify({ projectId })};</script>`;
+  // The data/auth SDK only exists when the app actually has a database, so
+  // feature-detecting window.artefacts reflects reality.
+  if (dbEnabled) tag += `<script>${ARTEFACTS_SDK}</script>`;
   return html.includes("</head>")
     ? html.replace("</head>", `${tag}</head>`)
     : `${tag}${html}`;
@@ -33,6 +82,7 @@ function fileResponse(
   path: string,
   projectId: string,
   origin: string,
+  dbEnabled: boolean,
 ): Response {
   const contentType = contentTypeFor(path, file.mimeType);
   const isHtml = contentType.startsWith("text/html");
@@ -46,7 +96,7 @@ function fileResponse(
   // Text: resolve the __SITE_URL__ placeholder to this real origin (so SEO files
   // ship absolute URLs), then inject the bootstrap into the HTML entry document.
   let body = substituteSiteUrl(file.content, origin);
-  if (isHtml) body = injectBootstrap(body, projectId);
+  if (isHtml) body = injectBootstrap(body, projectId, dbEnabled);
   return new Response(body, {
     headers: { "content-type": contentType, "cache-control": "no-store" },
   });
@@ -86,7 +136,14 @@ export async function GET(request: Request) {
     }
     const file = await readFileRaw(projectId, path);
     if (!file) return new Response("Not found", { status: 404 });
-    const res = fileResponse(file, path, projectId, originFromHost(host ?? ""));
+    const dbEnabled = await getProjectDbEnabled(projectId);
+    const res = fileResponse(
+      file,
+      path,
+      projectId,
+      originFromHost(host ?? ""),
+      dbEnabled,
+    );
     // The preview origin is an ephemeral, gated view of the live VFS — never the
     // canonical address — so keep it out of search/answer-engine indexes.
     res.headers.set("X-Robots-Tag", "noindex");
@@ -104,8 +161,16 @@ export async function GET(request: Request) {
   const slug = publishSlugFromLabel(label);
   if (slug) {
     const file = await readPublishedFile(slug, path);
-    if (file)
-      return fileResponse(file, path, file.projectId, originFromHost(host ?? ""));
+    if (file) {
+      const dbEnabled = await getProjectDbEnabled(file.projectId);
+      return fileResponse(
+        file,
+        path,
+        file.projectId,
+        originFromHost(host ?? ""),
+        dbEnabled,
+      );
+    }
   }
 
   return new Response("Not found", { status: 404 });

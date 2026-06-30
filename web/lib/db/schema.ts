@@ -122,6 +122,14 @@ export const projects = pgTable(
     // og/sitemap). Publishing doesn't need it — the serve route knows its own
     // host. Nullable; pre-fills the export modal once set.
     siteUrl: text("site_url"),
+    // --- Per-project database (Way 3 Phase 2/3) ---
+    // Whether this app has an isolated Postgres schema + role provisioned. The
+    // agent flips it on the first apply_schema once the user opts in. Drives the
+    // workspace "Datenbank" badge and gates the data/auth API + export dump.
+    databaseEnabled: boolean("database_enabled").notNull().default(false),
+    // When the schema/role were actually created (null = never). Provisioning is
+    // idempotent; this is just an audit timestamp.
+    dbProvisionedAt: timestamp("db_provisioned_at", { mode: "date" }),
     createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
   },
@@ -302,4 +310,33 @@ export const artifactVersions = pgTable(
     createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
   },
   (version) => [index("artifact_version_project_idx").on(version.projectId)],
+);
+
+// ---------------------------------------------------------------------------
+// End-user accounts for GENERATED apps (Way 3 Phase 3). These are NOT builder
+// users — they are the people who sign up inside a published/preview app (the
+// "login" the agent wires up). Credentials live here in the builder DB, never
+// in the tenant schema, so the low-privilege project role can't read password
+// hashes. `appUser.id` is the value pushed into the `app.end_user_id` GUC, so
+// it is the `owner_id` that per-user RLS isolates rows by. Scoped by projectId;
+// an email is unique only WITHIN a project (the same person can hold an account
+// in two different generated apps).
+// ---------------------------------------------------------------------------
+export const appUsers = pgTable(
+  "app_user",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("projectId")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    // bcrypt hash — same hashing the builder uses for its own users.
+    passwordHash: text("passwordHash").notNull(),
+    // Optional display name the app may collect at signup.
+    name: text("name"),
+    createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+  },
+  // uniqueIndex (NOT .unique()) so drizzle-kit push never hits the populated-
+  // table truncate prompt that hangs the non-TTY migrate container.
+  (u) => [uniqueIndex("app_user_project_email_idx").on(u.projectId, u.email)],
 );

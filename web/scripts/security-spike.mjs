@@ -18,6 +18,7 @@ import { Pool } from "pg";
 import {
   provisionStatements,
   ownerRlsStatements,
+  ownerColumnDefaultStatement,
   schemaForProject,
   roleForProject,
   buildSelect,
@@ -140,6 +141,8 @@ async function main() {
       `CREATE TABLE todos (id uuid primary key default gen_random_uuid(),` +
       ` owner_id uuid, title text)`;
     await asTenant(app, { schema, role }, ddl);
+    // Mirror applyOwnerSecurity(): auto-stamp owner_id from the GUC + RLS.
+    await asTenant(app, { schema, role }, ownerColumnDefaultStatement(schema, "todos"));
     for (const stmt of ownerRlsStatements(schema, "todos")) {
       await asTenant(app, { schema, role }, stmt);
     }
@@ -183,6 +186,21 @@ async function main() {
   const u2After = await asTenant(app, { schema: SCHEMA_A, role: ROLE_A, endUserId: U2 }, sel.text, sel.values);
   ok("U2's row is unchanged after U1's attack", u2After.length === 1 && u2After[0].title === "u2 private");
 
+  console.log("\n# owner_id auto-stamp (insert WITHOUT owner_id takes the GUC)");
+  // The client never sends owner_id; the column default fills it from the GUC.
+  const insAuto = buildInsert({ table: "todos", values: { title: "auto-owned" } });
+  await asTenant(app, { schema: SCHEMA_A, role: ROLE_A, endUserId: U1 }, insAuto.text, insAuto.values);
+  const u1Rows = await asTenant(app, { schema: SCHEMA_A, role: ROLE_A, endUserId: U1 }, sel.text, sel.values);
+  const u2Rows = await asTenant(app, { schema: SCHEMA_A, role: ROLE_A, endUserId: U2 }, sel.text, sel.values);
+  const autoRow = u1Rows.find((r) => r.title === "auto-owned");
+  ok("auto-stamped row is owned by the inserting user (U1)", !!autoRow && autoRow.owner_id === U1);
+  ok("U1 now sees its 2 rows", u1Rows.length === 2);
+  ok("U2 still sees only its own row (auto-stamped row hidden)", u2Rows.length === 1);
+  // Anonymous insert: GUC empty -> owner_id NULL -> RLS WITH CHECK rejects it.
+  await denied("anonymous insert into an owner table is blocked by RLS", () =>
+    asTenant(app, { schema: SCHEMA_A, role: ROLE_A, endUserId: null }, insAuto.text, insAuto.values),
+  );
+
   console.log("\n# Query-builder attack surface (real sql.ts)");
   await (async () => {
     try { ident("todos; DROP TABLE todos"); ok("ident() rejects statement injection", false); }
@@ -203,7 +221,7 @@ async function main() {
     // And it actually runs harmlessly against the DB.
     await asTenant(app, { schema: SCHEMA_A, role: ROLE_A, endUserId: U1 }, malicious.text, malicious.values);
     const stillThere = await asTenant(app, { schema: SCHEMA_A, role: ROLE_A, endUserId: U1 }, sel.text, sel.values);
-    ok("todos table still exists after injection attempt", stillThere.length === 1);
+    ok("todos table still exists after injection attempt", stillThere.length >= 1);
   }
 
   console.log("\n# Cleanup");
