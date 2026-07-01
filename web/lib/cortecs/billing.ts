@@ -3,9 +3,9 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { userCredits, usageEvents } from "@/lib/db/schema";
 import {
-  BILLING_MARGIN,
-  CORTECS_FEE_MULTIPLIER,
-  FREE_TIER_GRANT_EUR,
+  billingMargin,
+  cortecsFeeMultiplier,
+  freeTierGrantEur,
   type TaskKind,
 } from "./config";
 import { getModelPrice } from "./prices";
@@ -54,8 +54,8 @@ export async function computeBilledEur(
       usage.outputTokens * price.outputPerMillion) /
     1_000_000;
 
-  const cortecsCostEur = round6(rawCost * CORTECS_FEE_MULTIPLIER);
-  const billedEur = round6(cortecsCostEur * BILLING_MARGIN);
+  const cortecsCostEur = round6(rawCost * (await cortecsFeeMultiplier()));
+  const billedEur = round6(cortecsCostEur * (await billingMargin()));
   const marginEur = round6(billedEur - cortecsCostEur);
 
   return {
@@ -154,6 +154,9 @@ export async function billModelUsage(
  * lock). Returns the current balance in EUR.
  */
 export async function ensureCredit(userId: string): Promise<number> {
+  // Resolve the grant amount before opening the transaction so the settings
+  // read doesn't run on the transaction's pinned connection.
+  const grant = await freeTierGrantEur();
   return db.transaction(async (tx) => {
     await tx
       .insert(userCredits)
@@ -166,8 +169,8 @@ export async function ensureCredit(userId: string): Promise<number> {
       .where(eq(userCredits.userId, userId))
       .for("update");
 
-    if (row && row.freeGrantedAt == null && FREE_TIER_GRANT_EUR > 0) {
-      const granted = round6(FREE_TIER_GRANT_EUR);
+    if (row && row.freeGrantedAt == null && grant > 0) {
+      const granted = round6(grant);
       const [updated] = await tx
         .update(userCredits)
         .set({

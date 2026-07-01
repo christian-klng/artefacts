@@ -90,7 +90,7 @@ export async function POST(request: Request) {
       // priced and meaningless under Cortecs).
       let modelUsage: Record<string, ModelTokens> | null = null;
       try {
-        const run = runAgent({
+        const run = await runAgent({
           projectId: project.id,
           prompt,
           onFileEvent: (event) => {
@@ -143,7 +143,7 @@ export async function POST(request: Request) {
         // the user's work, so it's isolated — log and continue to `done`.
         if (modelUsage) {
           try {
-            const { model: buildModel } = modelForTask("build");
+            const { model: buildModel } = await modelForTask("build");
             const billed = await billModelUsage(modelUsage, buildModel);
             if (billed) {
               const newBalanceEur = await recordUsageAndDeduct({

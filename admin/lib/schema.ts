@@ -57,3 +57,13 @@ export const mailTemplates = pgTable("mail_template", {
   html: text("html").notNull().default(""),
   updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
 });
+
+// Editable operational settings (Cortecs router, billing constants, SMTP mail
+// config). Like mail_template, the admin app WRITES this one and the builder
+// reads it (web/lib/settings.ts) with precedence DB > env > default. `key`
+// mirrors the matching env var name. Only NON-secret values live here.
+export const appSettings = pgTable("app_setting", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull().default(""),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
+});

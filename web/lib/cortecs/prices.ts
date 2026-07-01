@@ -36,11 +36,11 @@ const globalForPrices = globalThis as unknown as { cortecsPriceCache?: Cache };
 
 async function loadCatalog(): Promise<Cache> {
   const cached = globalForPrices.cortecsPriceCache;
-  if (cached && Date.now() - cached.fetchedAt < cortecsPriceTtlMs()) {
+  if (cached && Date.now() - cached.fetchedAt < (await cortecsPriceTtlMs())) {
     return cached;
   }
 
-  const url = `${cortecsOpenAiBaseUrl()}/models?currency=EUR`;
+  const url = `${await cortecsOpenAiBaseUrl()}/models?currency=EUR`;
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${cortecsApiKey()}` },
     // Always hit the live catalog; we do our own in-process TTL caching.

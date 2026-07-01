@@ -295,6 +295,18 @@ export const mailTemplates = pgTable("mail_template", {
   updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
 });
 
+// Editable operational settings — the Cortecs LLM router (models, base URLs),
+// the billing constants, and the SMTP mail config. Surfaced in the admin app so
+// e.g. the build model or margin can change WITHOUT a redeploy. `key` mirrors the
+// matching env var name; the builder reads via lib/settings.ts with precedence
+// DB value > process.env[key] > code default (lib/settings.ts). Only NON-secret
+// values live here — CORTECS_API_KEY / SMTP_PASS stay in env only.
+export const appSettings = pgTable("app_setting", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull().default(""),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
+});
+
 // A snapshot of the project at publish time, so versions can be restored — the
 // equivalent of Claude artifacts' version history.
 export const artifactVersions = pgTable(

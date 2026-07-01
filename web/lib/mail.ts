@@ -1,19 +1,22 @@
 import "server-only";
 import nodemailer, { type Transporter } from "nodemailer";
+import { settingNumber, settingString } from "@/lib/settings";
 
-// SMTP mailer (e.g. IONOS). Configured entirely via env so credentials and the
-// sender address never live in code. The transporter is reused across hot
-// reloads, mirroring the DB pool in lib/db.
+// SMTP mailer (e.g. IONOS). The non-secret config (host, port, user, secure
+// flag, sender) is DB-backed via lib/settings.ts so it can be changed in the
+// admin app without a redeploy; the password stays an env-only secret
+// (SMTP_PASS). The transporter is built per send (config can change under us and
+// sends are rare), so there is no stale cached connection.
 
-function buildTransport(): Transporter {
-  const host = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT || 587);
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+async function buildTransport(): Promise<Transporter> {
+  const host = await settingString("SMTP_HOST", "");
+  const port = await settingNumber("SMTP_PORT", 587);
+  const user = await settingString("SMTP_USER", "");
+  const pass = process.env.SMTP_PASS ?? "";
 
   if (!host || !user || !pass) {
     throw new Error(
-      "SMTP is not configured (set SMTP_HOST, SMTP_USER, SMTP_PASS).",
+      "SMTP is not configured (set SMTP_HOST + SMTP_USER in the admin panel and SMTP_PASS in the environment).",
     );
   }
 
@@ -21,19 +24,9 @@ function buildTransport(): Transporter {
     host,
     port,
     // true for port 465 (implicit TLS), false for 587 (STARTTLS).
-    secure: process.env.SMTP_SECURE === "true",
+    secure: (await settingString("SMTP_SECURE", "")) === "true",
     auth: { user, pass },
   });
-}
-
-const globalForMail = globalThis as unknown as { transporter?: Transporter };
-
-// Built lazily on first send so importing this module never throws when SMTP
-// is unconfigured (e.g. local dev) — only actually sending a mail requires it.
-function getTransport(): Transporter {
-  const transporter = globalForMail.transporter ?? buildTransport();
-  globalForMail.transporter = transporter;
-  return transporter;
 }
 
 export async function sendMail(opts: {
@@ -41,13 +34,13 @@ export async function sendMail(opts: {
   subject: string;
   html: string;
 }): Promise<void> {
-  const from = process.env.MAIL_FROM || process.env.SMTP_USER;
-  await getTransport().sendMail({ from, ...opts });
+  const from =
+    (await settingString("MAIL_FROM", "")) ||
+    (await settingString("SMTP_USER", ""));
+  await (await buildTransport()).sendMail({ from, ...opts });
 }
 
 /** Public base URL of the builder, used to build links in emails. */
 export function appBaseUrl(): string {
-  return (
-    process.env.AUTH_URL?.replace(/\/$/, "") || "http://localhost:3000"
-  );
+  return process.env.AUTH_URL?.replace(/\/$/, "") || "http://localhost:3000";
 }

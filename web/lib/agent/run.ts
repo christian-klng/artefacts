@@ -18,7 +18,7 @@ import {
  * async iterable of SDK messages. The agent is restricted to the VFS tools and
  * runs hermetically (no host settings, no real filesystem access).
  */
-export function runAgent({
+export async function runAgent({
   projectId,
   prompt,
   onFileEvent,
@@ -31,7 +31,8 @@ export function runAgent({
   const attachments = buildAttachmentsServer(projectId, onFileEvent);
   const appdb = buildDatabaseServer(projectId, onFileEvent);
 
-  const { model } = modelForTask("build");
+  const { model } = await modelForTask("build");
+  const anthropicBaseUrl = await cortecsAnthropicBaseUrl();
 
   return query({
     prompt,
@@ -57,7 +58,7 @@ export function runAgent({
       // PATH/HOME and fails to spawn.
       env: {
         ...process.env,
-        ANTHROPIC_BASE_URL: cortecsAnthropicBaseUrl(),
+        ANTHROPIC_BASE_URL: anthropicBaseUrl,
         ANTHROPIC_AUTH_TOKEN: cortecsApiKey(),
       },
     },

@@ -1,6 +1,7 @@
 import { desc, eq, sql } from "drizzle-orm";
 import { db } from "./db";
 import {
+  appSettings,
   mailTemplates,
   projects,
   userCredits,
@@ -153,6 +154,20 @@ export async function getMailTemplates(): Promise<
     };
   };
   return { welcome: make("welcome"), reset: make("reset") };
+}
+
+/**
+ * Reads all stored operational settings as a { key: value } map. Keys with no
+ * row are simply absent — the settings form falls back to its placeholder hint,
+ * and the builder falls back to env/default (web/lib/settings.ts).
+ */
+export async function getAppSettings(): Promise<Record<string, string>> {
+  const rows = await db
+    .select({ key: appSettings.key, value: appSettings.value })
+    .from(appSettings);
+  const map: Record<string, string> = {};
+  for (const row of rows) map[row.key] = row.value;
+  return map;
 }
 
 /** Headline numbers for the overview page. */

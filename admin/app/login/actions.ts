@@ -37,16 +37,6 @@ export async function login(
   const username = readField(formData, "username");
   const password = readField(formData, "password");
 
-  // TEMP DEBUG — remove once the login is confirmed working.
-  console.log(
-    "[LOGIN-DEBUG] keys=%j user=%j passLen=%d envUser=%j envPassLen=%d",
-    [...formData.keys()],
-    username,
-    password.length,
-    process.env.ADMIN_USER,
-    (process.env.ADMIN_PASSWORD ?? "").length,
-  );
-
   if (!checkCredentials(username, password)) {
     return { error: "Falscher Benutzername oder falsches Passwort." };
   }

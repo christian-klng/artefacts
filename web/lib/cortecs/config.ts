@@ -1,7 +1,13 @@
 import "server-only";
+import { settingNumber, settingString } from "@/lib/settings";
 
 // Central config for the cortecs.ai LLM router. Single source of truth for
 // base URLs, the API key, per-task model selection, and the billing constants.
+//
+// Non-secret values (models, base URLs, TTL, billing constants) are DB-backed
+// via lib/settings.ts so they can be changed in the admin app WITHOUT a redeploy
+// (precedence: DB > env > default). This makes the accessors async. The API key
+// stays a synchronous env-only read — it is a secret and never leaves the env.
 //
 // Two transport paths exist (see lib/cortecs/):
 //   - "anthropic": Cortecs' Anthropic-compatible /v1/messages endpoint, driven
@@ -30,20 +36,26 @@ export type ModelChoice = {
 
 /**
  * Customer-facing markup on the raw Cortecs cost. The user's billed price is
- * `cortecsCost × BILLING_MARGIN`; the difference is our margin. Overridable via
- * env so it can be tuned without a deploy of new code. Default 1.20 (+20%).
+ * `cortecsCost × margin`; the difference is our margin. DB/env-overridable so it
+ * can be tuned in the admin app without a deploy. Default 1.20 (+20%).
  */
-export const BILLING_MARGIN = numberEnv("BILLING_MARGIN", 1.2);
+export function billingMargin(): Promise<number> {
+  return settingNumber("BILLING_MARGIN", 1.2);
+}
 
 /** One-time EUR credit granted to a user on first use (the free tier). */
-export const FREE_TIER_GRANT_EUR = numberEnv("FREE_TIER_GRANT_EUR", 2.0);
+export function freeTierGrantEur(): Promise<number> {
+  return settingNumber("FREE_TIER_GRANT_EUR", 2.0);
+}
 
 /**
  * Safety multiplier in case the /v1/models prices do NOT already include
  * Cortecs' flat 5% fee. Reconcile against GET /manage/usage; if the catalog is
- * net-of-fee, set this to 1.05 (one place). Assumed 1.0 (fee already included).
+ * net-of-fee, set this to 1.05 (in the admin app). Assumed 1.0 (fee included).
  */
-export const CORTECS_FEE_MULTIPLIER = numberEnv("CORTECS_FEE_MULTIPLIER", 1.0);
+export function cortecsFeeMultiplier(): Promise<number> {
+  return settingNumber("CORTECS_FEE_MULTIPLIER", 1.0);
+}
 
 // --- Base URLs / auth ------------------------------------------------------
 
@@ -58,22 +70,22 @@ export function cortecsApiKey(): string {
 }
 
 /** Base for the Anthropic-compatible endpoint (used as ANTHROPIC_BASE_URL). */
-export function cortecsAnthropicBaseUrl(): string {
+export async function cortecsAnthropicBaseUrl(): Promise<string> {
   return stripTrailingSlash(
-    process.env.CORTECS_ANTHROPIC_BASE_URL ?? "https://api.cortecs.ai",
+    await settingString("CORTECS_ANTHROPIC_BASE_URL", "https://api.cortecs.ai"),
   );
 }
 
 /** Base for the OpenAI-compatible endpoint (chat completions, models). */
-export function cortecsOpenAiBaseUrl(): string {
+export async function cortecsOpenAiBaseUrl(): Promise<string> {
   return stripTrailingSlash(
-    process.env.CORTECS_OPENAI_BASE_URL ?? "https://api.cortecs.ai/v1",
+    await settingString("CORTECS_OPENAI_BASE_URL", "https://api.cortecs.ai/v1"),
   );
 }
 
 /** How long the /v1/models price catalog is memoized, in ms (default 1h). */
-export function cortecsPriceTtlMs(): number {
-  return numberEnv("CORTECS_PRICE_TTL_MS", 60 * 60 * 1000);
+export function cortecsPriceTtlMs(): Promise<number> {
+  return settingNumber("CORTECS_PRICE_TTL_MS", 60 * 60 * 1000);
 }
 
 // --- Model selection per task ----------------------------------------------
@@ -86,44 +98,41 @@ export function cortecsPriceTtlMs(): number {
  * `opts` lets a future GDPR-vs-Sovereign UI toggle pass routing flags without
  * touching call sites.
  */
-export function modelForTask(
+export async function modelForTask(
   kind: TaskKind,
   opts?: { euNative?: boolean; preference?: Preference },
-): ModelChoice {
+): Promise<ModelChoice> {
   switch (kind) {
     case "build":
       return {
-        model: process.env.CORTECS_BUILD_MODEL ?? "claude-opus-4-8",
+        model: await settingString("CORTECS_BUILD_MODEL", "claude-opus-4-8"),
         path: "anthropic",
       };
     case "cleanup":
       return {
-        model: process.env.CORTECS_CLEANUP_MODEL ?? "claude-haiku-4-5",
+        model: await settingString("CORTECS_CLEANUP_MODEL", "claude-haiku-4-5"),
         path: "openai",
         preference: opts?.preference ?? "cost",
         euNative: opts?.euNative,
       };
-    case "sovereign_build":
+    case "sovereign_build": {
+      // Sovereign falls back to the regular build model when its own override
+      // is unset (either source), then to the built-in default.
+      const buildModel = await settingString(
+        "CORTECS_BUILD_MODEL",
+        "claude-opus-4-8",
+      );
       return {
-        model:
-          process.env.CORTECS_SOVEREIGN_BUILD_MODEL ??
-          process.env.CORTECS_BUILD_MODEL ??
-          "claude-opus-4-8",
+        model: await settingString("CORTECS_SOVEREIGN_BUILD_MODEL", buildModel),
         path: "openai",
         euNative: opts?.euNative ?? true,
         preference: opts?.preference,
       };
+    }
   }
 }
 
 // --- helpers ---------------------------------------------------------------
-
-function numberEnv(name: string, fallback: number): number {
-  const raw = process.env[name];
-  if (raw == null || raw.trim() === "") return fallback;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : fallback;
-}
 
 function stripTrailingSlash(url: string): string {
   return url.replace(/\/+$/, "");

@@ -37,7 +37,7 @@ export async function cortecsChat(args: {
   maxTokens?: number;
   signal?: AbortSignal;
 }): Promise<ChatResult> {
-  const choice = modelForTask(args.task, {
+  const choice = await modelForTask(args.task, {
     euNative: args.euNative,
     preference: args.preference,
   });
@@ -51,7 +51,7 @@ export async function cortecsChat(args: {
   if (args.temperature != null) body.temperature = args.temperature;
   if (args.maxTokens != null) body.max_tokens = args.maxTokens;
 
-  const res = await fetch(`${cortecsOpenAiBaseUrl()}/chat/completions`, {
+  const res = await fetch(`${await cortecsOpenAiBaseUrl()}/chat/completions`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${cortecsApiKey()}`,
