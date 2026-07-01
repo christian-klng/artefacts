@@ -78,6 +78,15 @@ export async function runAgent({
         ANTHROPIC_DEFAULT_OPUS_MODEL: tiers.opus,
         ANTHROPIC_DEFAULT_SONNET_MODEL: tiers.sonnet,
         ANTHROPIC_DEFAULT_HAIKU_MODEL: tiers.haiku,
+        // cortecs' Anthropic beta proxies to Bedrock/Vertex and MANGLES the
+        // extended-thinking signature — it returns thinking blocks with an empty
+        // `signature`, and echoing one back on the next turn is rejected upstream
+        // with an intermittent "API Error: 400 An unexpected error occurred.".
+        // Disabling adaptive thinking stops Opus 4.8 from emitting thinking
+        // blocks, which removes the failure. (Verified by bisecting configs in
+        // the container: this is the reliable fix; CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS
+        // did NOT help and appeared to trigger the empty-signature block.)
+        CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING: "1",
       },
     },
   });
