@@ -11,12 +11,41 @@ import {
 
 export type LoginState = { error?: string };
 
+// Read a submitted form field. Next/React normally hand the action a decoded
+// FormData with the original input names ("username"). Be defensive: if the
+// useActionState wire prefix ("_1_username") ever survives into the action's
+// FormData, fall back to the prefixed key so the login still works.
+function readField(formData: FormData, name: string): string {
+  const direct = formData.get(name);
+  if (typeof direct === "string") return direct;
+  for (const [key, value] of formData.entries()) {
+    if (
+      typeof value === "string" &&
+      /^_\d+_/.test(key) &&
+      key.endsWith(`_${name}`)
+    ) {
+      return value;
+    }
+  }
+  return "";
+}
+
 export async function login(
   _prev: LoginState,
   formData: FormData,
 ): Promise<LoginState> {
-  const username = String(formData.get("username") ?? "");
-  const password = String(formData.get("password") ?? "");
+  const username = readField(formData, "username");
+  const password = readField(formData, "password");
+
+  // TEMP DEBUG — remove once the login is confirmed working.
+  console.log(
+    "[LOGIN-DEBUG] keys=%j user=%j passLen=%d envUser=%j envPassLen=%d",
+    [...formData.keys()],
+    username,
+    password.length,
+    process.env.ADMIN_USER,
+    (process.env.ADMIN_PASSWORD ?? "").length,
+  );
 
   if (!checkCredentials(username, password)) {
     return { error: "Falscher Benutzername oder falsches Passwort." };
