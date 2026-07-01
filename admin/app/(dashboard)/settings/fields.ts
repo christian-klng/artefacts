@@ -23,12 +23,12 @@ export const SETTING_GROUPS: SettingGroup[] = [
   {
     title: "Cortecs (LLM-Router)",
     description:
-      "Modelle & Endpunkte. Model-IDs z. B. claude-opus-4-8, claude-sonnet-5, claude-haiku-4-5.",
+      "Modelle & Endpunkte. WICHTIG: cortecs.ai nutzt eigene Katalog-IDs, die von Anthropics Schreibweise abweichen — Opus 4.8 heißt hier claude-opus4-8 (ohne Bindestrich nach dem Wort opus), NICHT claude-opus-4-8. Verfügbare IDs: https://api.cortecs.ai/v1/models.",
     fields: [
       {
         key: "CORTECS_BUILD_MODEL",
         label: "Builder-Modell",
-        placeholder: "claude-opus-4-8",
+        placeholder: "claude-opus4-8",
       },
       {
         key: "CORTECS_CLEANUP_MODEL",
@@ -38,7 +38,7 @@ export const SETTING_GROUPS: SettingGroup[] = [
       {
         key: "CORTECS_SOVEREIGN_BUILD_MODEL",
         label: "Sovereign-Builder-Modell",
-        placeholder: "claude-opus-4-8",
+        placeholder: "claude-opus4-8",
       },
       {
         key: "CORTECS_ANTHROPIC_BASE_URL",

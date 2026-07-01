@@ -105,7 +105,7 @@ export async function modelForTask(
   switch (kind) {
     case "build":
       return {
-        model: await settingString("CORTECS_BUILD_MODEL", "claude-opus-4-8"),
+        model: await settingString("CORTECS_BUILD_MODEL", "claude-opus4-8"),
         path: "anthropic",
       };
     case "cleanup":
@@ -120,7 +120,7 @@ export async function modelForTask(
       // is unset (either source), then to the built-in default.
       const buildModel = await settingString(
         "CORTECS_BUILD_MODEL",
-        "claude-opus-4-8",
+        "claude-opus4-8",
       );
       return {
         model: await settingString("CORTECS_SOVEREIGN_BUILD_MODEL", buildModel),
