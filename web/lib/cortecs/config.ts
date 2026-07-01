@@ -69,11 +69,21 @@ export function cortecsApiKey(): string {
   return key;
 }
 
-/** Base for the Anthropic-compatible endpoint (used as ANTHROPIC_BASE_URL). */
+/**
+ * Base for the Anthropic-compatible endpoint (used as ANTHROPIC_BASE_URL).
+ *
+ * Claude Code appends `/v1/messages` to this base itself, so the value must NOT
+ * already end in `/v1` — otherwise requests hit `.../v1/v1/messages` (404) and
+ * Claude Code surfaces it as "the selected model may not exist / no access".
+ * We defensively strip a trailing `/v1`, a common mix-up with the OpenAI base
+ * (which DOES need `/v1`). cortecs is the only router, so this is always right.
+ */
 export async function cortecsAnthropicBaseUrl(): Promise<string> {
-  return stripTrailingSlash(
-    await settingString("CORTECS_ANTHROPIC_BASE_URL", "https://api.cortecs.ai"),
+  const raw = await settingString(
+    "CORTECS_ANTHROPIC_BASE_URL",
+    "https://api.cortecs.ai",
   );
+  return stripTrailingSlash(raw).replace(/\/v1$/i, "");
 }
 
 /** Base for the OpenAI-compatible endpoint (chat completions, models). */

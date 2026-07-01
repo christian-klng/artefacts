@@ -42,13 +42,15 @@ export const SETTING_GROUPS: SettingGroup[] = [
       },
       {
         key: "CORTECS_ANTHROPIC_BASE_URL",
-        label: "Anthropic Base-URL",
+        label: "Anthropic Base-URL (Builder)",
         placeholder: "https://api.cortecs.ai",
+        help: "OHNE /v1 — Claude Code hängt /v1/messages selbst an. Mit /v1 entsteht .../v1/v1/messages (404), und der Builder meldet fälschlich „Modell existiert nicht / kein Zugriff\".",
       },
       {
         key: "CORTECS_OPENAI_BASE_URL",
-        label: "OpenAI Base-URL",
+        label: "OpenAI Base-URL (Cleanup/Preise)",
         placeholder: "https://api.cortecs.ai/v1",
+        help: "MIT /v1 (im Gegensatz zur Anthropic-URL oben).",
       },
       {
         key: "CORTECS_PRICE_TTL_MS",
