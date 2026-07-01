@@ -77,6 +77,75 @@ export async function listTenantTables(projectId: string): Promise<string[]> {
   return res.rows.map((r: { table_name: string }) => r.table_name);
 }
 
+export type TableMeta = { name: string; ownerScoped: boolean };
+
+/** Tables + whether each is per-end-user private (has an owner_id column). */
+export async function listTenantTableMeta(
+  projectId: string,
+): Promise<TableMeta[]> {
+  const { schema } = tenantNames(projectId);
+  const res = await pool.query(
+    `SELECT t.table_name,
+            EXISTS (
+              SELECT 1 FROM information_schema.columns c
+                WHERE c.table_schema = t.table_schema
+                  AND c.table_name = t.table_name
+                  AND c.column_name = 'owner_id'
+            ) AS owner_scoped
+       FROM information_schema.tables t
+      WHERE t.table_schema = $1 AND t.table_type = 'BASE TABLE'
+      ORDER BY t.table_name`,
+    [schema],
+  );
+  return res.rows.map((r: { table_name: string; owner_scoped: boolean }) => ({
+    name: r.table_name,
+    ownerScoped: r.owner_scoped,
+  }));
+}
+
+/**
+ * A page of rows from one tenant table for the owner's read-only data viewer.
+ * Runs as admin with row_security OFF so the app owner sees ALL rows across
+ * end-users (this is the builder inspecting their own app's data, not an
+ * end-user request). The table name is checked against the real inventory
+ * before use, on top of ident() validation.
+ */
+export async function readTablePage(
+  projectId: string,
+  table: string,
+  limit = 50,
+  offset = 0,
+): Promise<{ columns: string[]; rows: Record<string, unknown>[]; total: number }> {
+  const { schema } = tenantNames(projectId);
+  const tables = await listTenantTables(projectId);
+  if (!tables.includes(table)) throw new Error(`Unknown table: ${table}`);
+  const t = `${ident(schema)}.${ident(table)}`;
+  const lim = Math.max(1, Math.min(200, Math.floor(limit)));
+  const off = Math.max(0, Math.floor(offset));
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SET LOCAL row_security = off");
+    const countRes = await client.query(`SELECT count(*)::int AS n FROM ${t}`);
+    const total = (countRes.rows[0] as { n: number }).n;
+    // ORDER BY 1 (first column, usually the id) keeps pages stable.
+    const res = await client.query(
+      `SELECT * FROM ${t} ORDER BY 1 LIMIT ${lim} OFFSET ${off}`,
+    );
+    await client.query("COMMIT");
+    return {
+      columns: res.fields.map((f: { name: string }) => f.name),
+      rows: res.rows as Record<string, unknown>[],
+      total,
+    };
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 /** Tables in the schema that carry an `owner_id` column (→ per-user RLS). */
 async function ownerTables(schema: string): Promise<string[]> {
   const res = await pool.query(

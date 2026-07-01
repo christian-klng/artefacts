@@ -9,11 +9,12 @@ export type Version = {
   label: string | null;
 };
 
-export type ViewMode = "preview" | "code" | "files";
+export type ViewMode = "preview" | "code" | "files" | "data";
 
 export function WorkspaceToolbar({
   view,
   onViewChange,
+  hasDatabase,
   canDownload,
   onDownload,
   siteUrl,
@@ -31,6 +32,7 @@ export function WorkspaceToolbar({
 }: {
   view: ViewMode;
   onViewChange: (view: ViewMode) => void;
+  hasDatabase: boolean;
   canDownload: boolean;
   onDownload: (rawSiteUrl: string) => void | Promise<void>;
   siteUrl?: string;
@@ -51,7 +53,11 @@ export function WorkspaceToolbar({
 
   return (
     <div className="flex items-center justify-between gap-2 border-b border-neutral-200 px-3 py-2 dark:border-neutral-800">
-      <ViewSwitch view={view} onViewChange={onViewChange} />
+      <ViewSwitch
+        view={view}
+        onViewChange={onViewChange}
+        hasDatabase={hasDatabase}
+      />
 
       <div className="flex items-center gap-2">
         {/* Preview tab: publishing. Code tab: version history + download. */}
@@ -390,9 +396,11 @@ function SlugEditor({
 function ViewSwitch({
   view,
   onViewChange,
+  hasDatabase,
 }: {
   view: ViewMode;
   onViewChange: (view: ViewMode) => void;
+  hasDatabase: boolean;
 }) {
   const base = "rounded px-2.5 py-1 text-xs font-medium transition";
   const activeCls = "bg-white text-neutral-900 shadow-sm dark:bg-neutral-700 dark:text-white";
@@ -424,6 +432,16 @@ function ViewSwitch({
       >
         Dateien
       </button>
+      {hasDatabase && (
+        <button
+          type="button"
+          onClick={() => onViewChange("data")}
+          className={`${base} ${view === "data" ? activeCls : inactiveCls}`}
+          aria-pressed={view === "data"}
+        >
+          Daten
+        </button>
+      )}
     </div>
   );
 }

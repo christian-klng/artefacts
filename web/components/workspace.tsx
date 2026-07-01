@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { clearPendingPrompt } from "@/app/actions/start";
 import { ChatPanel, type ChatMessage } from "./chat-panel";
 import { AttachmentsView, type AttachmentMeta } from "./attachments-view";
+import { DataView } from "./data-view";
 import type { AssetMeta } from "./sandpack-workspace";
 import { canonicalSignatureMap, filesSignature } from "@/lib/files-signature";
 import {
@@ -88,6 +89,7 @@ export function Workspace({
   initialPublishUrl,
   initialPublishedSignature,
   initialSiteUrl,
+  initialDatabaseEnabled = false,
   initialPrompt,
 }: {
   projectId: string;
@@ -102,6 +104,8 @@ export function Workspace({
   initialPublishedSignature?: string;
   // The public URL the user last set for exports (pre-fills the export dialog).
   initialSiteUrl?: string;
+  // Whether the project already has a provisioned database (shows the Daten tab).
+  initialDatabaseEnabled?: boolean;
   // Prompt carried over from the landing page (via /start). Fired once on mount
   // as the first agent message, then cleared.
   initialPrompt?: string;
@@ -119,6 +123,10 @@ export function Workspace({
   // Spendable EUR credit. Hydrated on mount and updated after every billed turn.
   const [balanceEur, setBalanceEur] = useState<number | null>(null);
   const [view, setView] = useState<ViewMode>("preview");
+  // Whether the Daten tab is shown; flips true when the agent provisions a DB.
+  const [hasDatabase, setHasDatabase] = useState(initialDatabaseEnabled);
+  // Bumped on each schema change so an open data viewer refetches.
+  const [dbRefreshKey, setDbRefreshKey] = useState(0);
   const [publishUrl, setPublishUrl] = useState<string | undefined>(
     initialPublishUrl,
   );
@@ -222,6 +230,8 @@ export function Workspace({
           refreshAttachments();
           break;
         case "database_changed":
+          setHasDatabase(true);
+          setDbRefreshKey((k) => k + 1);
           appendMessage(
             "tool",
             event.tables.length > 0
@@ -473,6 +483,7 @@ export function Workspace({
         <WorkspaceToolbar
           view={view}
           onViewChange={setView}
+          hasDatabase={hasDatabase}
           canDownload={!!files["/index.html"]}
           onDownload={onDownload}
           siteUrl={siteUrl}
@@ -495,6 +506,8 @@ export function Workspace({
               projectId={projectId}
               onDeleted={refreshAttachments}
             />
+          ) : view === "data" ? (
+            <DataView projectId={projectId} refreshKey={dbRefreshKey} />
           ) : (
             <SandpackWorkspace
               files={files}

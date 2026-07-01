@@ -106,6 +106,7 @@ export default async function ProjectPage({
         initialPublishUrl={publishUrl}
         initialPublishedSignature={publishedSignature}
         initialSiteUrl={project.siteUrl ?? undefined}
+        initialDatabaseEnabled={project.databaseEnabled}
         initialPrompt={initialPrompt}
       />
     </div>
