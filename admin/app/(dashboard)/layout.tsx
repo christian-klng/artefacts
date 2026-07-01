@@ -1,3 +1,4 @@
+import { Logo } from "@/app/logo";
 import { logout } from "./actions";
 import { Nav } from "./nav";
 
@@ -9,8 +10,9 @@ export default function DashboardLayout({
       <header className="sticky top-0 z-10 border-b border-black/10 bg-background/80 backdrop-blur dark:border-white/10">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3">
           <div className="flex items-center gap-6">
-            <span className="text-sm font-semibold tracking-tight">
-              artefacts <span className="text-foreground/40">Admin</span>
+            <span className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+              <Logo className="h-6 w-6" />
+              Kubikraum <span className="text-foreground/40">Admin</span>
             </span>
             <Nav />
           </div>

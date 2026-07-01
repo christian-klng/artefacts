@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { COOKIE_NAME, verifySession } from "@/lib/auth";
+import { Logo } from "@/app/logo";
 import { LoginForm } from "./login-form";
 
 export const dynamic = "force-dynamic";
@@ -16,8 +17,9 @@ export default async function LoginPage() {
     <main className="flex min-h-screen items-center justify-center p-6">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
+          <Logo className="mx-auto mb-3 h-12 w-12" />
           <h1 className="text-2xl font-semibold tracking-tight">
-            artefacts <span className="text-foreground/40">Admin</span>
+            Kubikraum <span className="text-foreground/40">Admin</span>
           </h1>
           <p className="mt-1 text-sm text-foreground/60">
             Bitte anmelden, um fortzufahren.

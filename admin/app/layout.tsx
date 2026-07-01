@@ -13,8 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "artefacts · Admin",
+  title: "Kubikraum · Admin",
   description: "Verwaltung von Nutzern und Apps",
+  icons: { icon: "/icon.svg" },
   robots: { index: false, follow: false },
 };
 
