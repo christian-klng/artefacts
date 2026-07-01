@@ -52,6 +52,7 @@ await window.artefacts.auth.logout();
 \`\`\`
    - **Feature-detect** \`window.artefacts\` and degrade gracefully when absent (\`if (!window.artefacts?.db) { /* show a friendly notice */ }\`) — it exists in the live preview and the published app, but not in a bare static export.
    - For a **login** flow: build signup/login forms calling \`auth.signup\`/\`auth.login\`, gate the app's UI on \`auth.user()\`, and back the user's private data with \`owner_id\` tables. Don't store passwords yourself; the managed auth handles hashing and sessions.
+   - **Never handle a password in the chat.** Passwords are typed ONLY into the app's own signup/login form, which hashes them. Do NOT ask the user for a password in the chat, and never write a password into any file or seed it into the database — not even the user's own. If the user wants their own account, build the signup form and tell them to register there themselves (note: it's stored encrypted and can't currently be reset, so they should remember it). If they paste a password into the chat anyway, do not store or reuse it; point them to the in-app signup form instead.
    - Record in \`/CONCEPT.md\` that this app uses the managed database (and which tables are per-user vs shared), so it stays consistent across turns.
 
 ## SEO & GEO (discoverability)
