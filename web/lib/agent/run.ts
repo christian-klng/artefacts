@@ -82,11 +82,13 @@ export async function runAgent({
         // extended-thinking signature — it returns thinking blocks with an empty
         // `signature`, and echoing one back on the next turn is rejected upstream
         // with an intermittent "API Error: 400 An unexpected error occurred.".
-        // Disabling adaptive thinking stops Opus 4.8 from emitting thinking
-        // blocks, which removes the failure. (Verified by bisecting configs in
-        // the container: this is the reliable fix; CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS
-        // did NOT help and appeared to trigger the empty-signature block.)
-        CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING: "1",
+        // Every turn that emits a thinking block fails; turns without one succeed.
+        // We must therefore disable thinking ENTIRELY: DISABLE_ADAPTIVE_THINKING
+        // only turns off the *adaptive* mode (Opus 4.8 still emitted thinking
+        // blocks in 7/8 container runs → 400), so we use DISABLE_THINKING, the
+        // full off-switch. Trade-off: no separate reasoning phase (see the cortecs
+        // gateway bug — remove this once cortecs passes thinking signatures through).
+        CLAUDE_CODE_DISABLE_THINKING: "1",
       },
     },
   });
