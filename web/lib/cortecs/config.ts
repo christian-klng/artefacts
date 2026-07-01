@@ -132,6 +132,29 @@ export async function modelForTask(
   }
 }
 
+/**
+ * cortecs catalog model ids per Claude tier. The builder routes Claude Code
+ * through cortecs as an **LLM gateway**, and cortecs uses its OWN model ids
+ * (e.g. `claude-opus4-8`, not Anthropic's `claude-opus-4-8`). Claude Code
+ * validates model ids against its built-in list and would reject ours ("may not
+ * exist or you may not have access") unless it is told the gateway's ids: these
+ * feed the `ANTHROPIC_DEFAULT_*_MODEL` env vars (alias resolution, the
+ * background/"haiku" calls, and the Fable→Opus safety fallback) in
+ * lib/agent/run.ts. Overridable via settings/env; defaults are current cortecs
+ * ids from GET https://api.cortecs.ai/v1/models.
+ */
+export async function cortecsTierModels(): Promise<{
+  opus: string;
+  sonnet: string;
+  haiku: string;
+}> {
+  return {
+    opus: await settingString("CORTECS_BUILD_MODEL", "claude-opus4-8"),
+    sonnet: await settingString("CORTECS_SONNET_MODEL", "claude-4-6-sonnet"),
+    haiku: await settingString("CORTECS_CLEANUP_MODEL", "claude-haiku-4-5"),
+  };
+}
+
 // --- helpers ---------------------------------------------------------------
 
 function stripTrailingSlash(url: string): string {

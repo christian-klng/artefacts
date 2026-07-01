@@ -10,6 +10,7 @@ import { SYSTEM_PROMPT } from "./system-prompt";
 import {
   cortecsAnthropicBaseUrl,
   cortecsApiKey,
+  cortecsTierModels,
   modelForTask,
 } from "@/lib/cortecs/config";
 
@@ -33,6 +34,7 @@ export async function runAgent({
 
   const { model } = await modelForTask("build");
   const anthropicBaseUrl = await cortecsAnthropicBaseUrl();
+  const tiers = await cortecsTierModels();
 
   return query({
     prompt,
@@ -60,6 +62,22 @@ export async function runAgent({
         ...process.env,
         ANTHROPIC_BASE_URL: anthropicBaseUrl,
         ANTHROPIC_AUTH_TOKEN: cortecsApiKey(),
+        // cortecs is an LLM GATEWAY that serves models under its OWN catalog ids
+        // (e.g. `claude-opus4-8`, not Anthropic's `claude-opus-4-8`). Claude Code
+        // validates model ids against its built-in list and rejects unknown ones
+        // with "There's an issue with the selected model (…). It may not exist or
+        // you may not have access to it." — even though cortecs serves the model
+        // fine. We teach Claude Code the gateway's catalog three ways (belt &
+        // suspenders, all just env for the spawned CLI):
+        //  1. discover the gateway's /v1/models list (v2.1.129+),
+        //  2. whitelist our exact build-model id, skipping validation for it,
+        //  3. map every tier alias + the background/"haiku" model to real cortecs
+        //     ids (background calls otherwise use an Anthropic id cortecs lacks).
+        CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: "1",
+        ANTHROPIC_CUSTOM_MODEL_OPTION: model,
+        ANTHROPIC_DEFAULT_OPUS_MODEL: tiers.opus,
+        ANTHROPIC_DEFAULT_SONNET_MODEL: tiers.sonnet,
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: tiers.haiku,
       },
     },
   });
