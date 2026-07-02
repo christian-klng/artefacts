@@ -83,7 +83,15 @@ export async function POST(request: Request) {
 
       send({ type: "project", id: project.id });
 
-      let assistantText = "";
+      // Ordered log of what this turn produced, mirroring the client's live
+      // view: separate assistant text bubbles interleaved with tool-call rows.
+      // Persisted row-by-row so a reload reconstructs the same transcript
+      // instead of one merged blob with the tool lines lost.
+      const turnMessages: {
+        role: "assistant" | "tool";
+        content: string;
+        tool?: string;
+      }[] = [];
       let filesChanged = false;
       // The SDK's terminal `result` message carries per-model token usage — our
       // billing source (we self-compute EUR cost; total_cost_usd is Anthropic-
@@ -106,7 +114,13 @@ export async function POST(request: Request) {
           if (msg.type === "assistant") {
             for (const block of msg.message.content) {
               if (block.type === "text" && block.text) {
-                assistantText += block.text;
+                // Merge into the current assistant bubble, or start a new one
+                // if a tool row intervened — matches the client's live
+                // assistant_text handling so live and reloaded views agree.
+                const last = turnMessages[turnMessages.length - 1];
+                if (last?.role === "assistant") last.content += block.text;
+                else
+                  turnMessages.push({ role: "assistant", content: block.text });
                 send({ type: "assistant_text", text: block.text });
               } else if (block.type === "tool_use") {
                 const tool = block.name.replace(
@@ -115,6 +129,8 @@ export async function POST(request: Request) {
                 );
                 const path = (block.input as { path?: string } | undefined)
                   ?.path;
+                const label = `${tool}${path ? ` ${path}` : ""}`;
+                turnMessages.push({ role: "tool", content: label, tool });
                 send({ type: "tool_use", tool, path });
               }
             }
@@ -123,8 +139,13 @@ export async function POST(request: Request) {
           }
         }
 
-        if (assistantText.trim() !== "") {
-          await addMessage(project.id, "assistant", assistantText);
+        // Persist the turn in order. Sequential awaits keep createdAt
+        // monotonic, so getMessages' createdAt ordering restores this exact
+        // sequence. Skip empty assistant bubbles (e.g. a trailing tool call
+        // with no closing text).
+        for (const tm of turnMessages) {
+          if (tm.role === "assistant" && tm.content.trim() === "") continue;
+          await addMessage(project.id, tm.role, tm.content, tm.tool);
         }
         const client = await getClientFiles(project.id);
         send({ type: "files", files: client.files, assets: client.assets });

@@ -44,6 +44,7 @@ export default async function ProjectPage({
     id: m.id,
     role: m.role as ChatMessage["role"],
     content: m.content,
+    tool: m.tool ?? undefined,
   }));
   const versions = versionRows.map((v) => ({
     id: v.id,

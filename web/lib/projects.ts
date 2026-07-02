@@ -256,12 +256,13 @@ export async function deleteFile(
 
 export async function addMessage(
   projectId: string,
-  role: "user" | "assistant" | "system",
+  role: "user" | "assistant" | "system" | "tool",
   content: string,
+  tool?: string,
 ) {
   const [row] = await db
     .insert(messages)
-    .values({ projectId, role, content })
+    .values({ projectId, role, content, tool })
     .returning();
   return row;
 }

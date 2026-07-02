@@ -169,9 +169,12 @@ export const messages = pgTable(
     projectId: uuid("projectId")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
-    // "user" | "assistant" | "system"
+    // "user" | "assistant" | "system" | "tool"
     role: text("role").notNull(),
     content: text("content").notNull(),
+    // For "tool" rows: the agent tool name (e.g. "write_file"), used by the
+    // client to pick an icon. Null for user/assistant/system messages.
+    tool: text("tool"),
     createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
   },
   (message) => [index("message_project_idx").on(message.projectId)],
