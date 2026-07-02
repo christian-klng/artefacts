@@ -123,10 +123,7 @@ export async function POST(request: Request) {
                   turnMessages.push({ role: "assistant", content: block.text });
                 send({ type: "assistant_text", text: block.text });
               } else if (block.type === "tool_use") {
-                const tool = block.name.replace(
-                  /^mcp__(?:vfs|attachments|appdb)__/,
-                  "",
-                );
+                const tool = block.name.replace(/^mcp__[a-z]+__/, "");
                 const path = (block.input as { path?: string } | undefined)
                   ?.path;
                 const label = `${tool}${path ? ` ${path}` : ""}`;

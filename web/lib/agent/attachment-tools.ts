@@ -8,7 +8,8 @@ import {
   getAttachmentData,
   deleteAttachment,
 } from "@/lib/attachments";
-import { readFileRaw, writeBinaryFile } from "@/lib/projects";
+import { writeBinaryFile } from "@/lib/projects";
+import { assetPath } from "./vfs-paths";
 import type { VfsEvent } from "./tools";
 
 function ok(text: string) {
@@ -17,24 +18,6 @@ function ok(text: string) {
 
 function err(text: string) {
   return { content: [{ type: "text" as const, text }], isError: true };
-}
-
-// Turns a filename into a safe VFS path under /assets, avoiding collisions.
-async function assetPath(
-  projectId: string,
-  filename: string,
-  desired?: string,
-): Promise<string> {
-  if (desired) return desired.startsWith("/") ? desired : `/${desired}`;
-  const clean = filename.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+/, "");
-  const dot = clean.lastIndexOf(".");
-  const base = dot === -1 ? clean : clean.slice(0, dot);
-  const ext = dot === -1 ? "" : clean.slice(dot);
-  for (let i = 0; i < 100; i += 1) {
-    const candidate = `/assets/${base}${i === 0 ? "" : `-${i}`}${ext}`;
-    if ((await readFileRaw(projectId, candidate)) === null) return candidate;
-  }
-  return `/assets/${base}-${Date.now()}${ext}`;
 }
 
 // Default text window per read, so a huge reference file (e.g. a whole foreign

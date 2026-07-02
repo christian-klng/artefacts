@@ -6,7 +6,9 @@ import {
   ATTACHMENT_TOOL_NAMES,
 } from "./attachment-tools";
 import { buildDatabaseServer, DATABASE_TOOL_NAMES } from "./tools-db";
-import { SYSTEM_PROMPT } from "./system-prompt";
+import { buildMediaServer, MEDIA_TOOL_NAMES } from "./tools-media";
+import { pexelsApiKey } from "./pexels";
+import { buildSystemPrompt } from "./system-prompt";
 import {
   cortecsAnthropicBaseUrl,
   cortecsApiKey,
@@ -31,6 +33,7 @@ export async function runAgent({
   const vfs = buildVfsServer(projectId, onFileEvent);
   const attachments = buildAttachmentsServer(projectId, onFileEvent);
   const appdb = buildDatabaseServer(projectId, onFileEvent);
+  const media = buildMediaServer(projectId, onFileEvent);
 
   const { model } = await modelForTask("build");
   const anthropicBaseUrl = await cortecsAnthropicBaseUrl();
@@ -40,12 +43,14 @@ export async function runAgent({
     prompt,
     options: {
       model,
-      systemPrompt: SYSTEM_PROMPT,
-      mcpServers: { vfs, attachments, appdb },
+      // The photo passages are only promised when the Pexels key is configured.
+      systemPrompt: buildSystemPrompt({ stockPhotos: pexelsApiKey() !== null }),
+      mcpServers: { vfs, attachments, appdb, media },
       allowedTools: [
         ...VFS_TOOL_NAMES,
         ...ATTACHMENT_TOOL_NAMES,
         ...DATABASE_TOOL_NAMES,
+        ...MEDIA_TOOL_NAMES,
       ],
       // Only the sandboxed VFS tools are available, so auto-approving them is
       // safe and avoids interactive permission prompts on the server.
@@ -87,7 +92,9 @@ export async function runAgent({
         // only turns off the *adaptive* mode (Opus 4.8 still emitted thinking
         // blocks in 7/8 container runs → 400), so we use DISABLE_THINKING, the
         // full off-switch. Trade-off: no separate reasoning phase (see the cortecs
-        // gateway bug — remove this once cortecs passes thinking signatures through).
+        // gateway bug — remove this once cortecs passes thinking signatures through;
+        // `npm run canary:thinking` (scripts/cortecs-thinking-canary.mjs) probes
+        // for exactly that fix).
         CLAUDE_CODE_DISABLE_THINKING: "1",
       },
     },
