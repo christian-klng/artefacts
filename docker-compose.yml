@@ -59,6 +59,11 @@ services:
       FREE_TIER_GRANT_EUR: ${FREE_TIER_GRANT_EUR}
       CORTECS_PRICE_TTL_MS: ${CORTECS_PRICE_TTL_MS}
       CORTECS_FEE_MULTIPLIER: ${CORTECS_FEE_MULTIPLIER}
+      # Referral coupons (also editable in the admin /settings; empty → code
+      # default 10 / 5 / 14 via settingNumber).
+      REFERRAL_RECIPIENT_EUR: ${REFERRAL_RECIPIENT_EUR}
+      REFERRAL_REFERRER_EUR: ${REFERRAL_REFERRER_EUR}
+      REFERRAL_WINDOW_DAYS: ${REFERRAL_WINDOW_DAYS}
       # Pexels stock-photo search for the builder agent (free key from
       # https://www.pexels.com/api/). Optional: without it the photo tools are
       # disabled and the agent falls back to SVG/CSS imagery.

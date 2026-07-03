@@ -1,7 +1,10 @@
 import { desc, eq, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "./db";
 import {
   appSettings,
+  coupons,
+  couponRedemptions,
   mailTemplates,
   projects,
   userCredits,
@@ -194,4 +197,102 @@ export async function getTotals(): Promise<Totals> {
     consumedEur: Number(usage?.n ?? 0),
     balanceEur: Number(credit?.n ?? 0),
   };
+}
+
+export type CouponRow = {
+  id: string;
+  code: string;
+  kind: string;
+  ownerEmail: string | null;
+  recipientAmountEur: number;
+  referrerAmountEur: number;
+  maxRedemptions: number | null;
+  expiresAt: Date | null;
+  expired: boolean;
+  active: boolean;
+  createdByAdmin: boolean;
+  createdAt: Date;
+  redemptionCount: number;
+};
+
+/** All coupons with their owner (who activated it) and redemption count. */
+export async function listCoupons(): Promise<CouponRow[]> {
+  const [rows, counts] = await Promise.all([
+    db
+      .select({
+        id: coupons.id,
+        code: coupons.code,
+        kind: coupons.kind,
+        ownerEmail: users.email,
+        recipientAmountEur: coupons.recipientAmountEur,
+        referrerAmountEur: coupons.referrerAmountEur,
+        maxRedemptions: coupons.maxRedemptions,
+        expiresAt: coupons.expiresAt,
+        active: coupons.active,
+        createdByAdmin: coupons.createdByAdmin,
+        createdAt: coupons.createdAt,
+      })
+      .from(coupons)
+      .leftJoin(users, eq(coupons.ownerId, users.id))
+      .orderBy(desc(coupons.createdAt)),
+    db
+      .select({
+        couponId: couponRedemptions.couponId,
+        n: sql<string>`count(*)`,
+      })
+      .from(couponRedemptions)
+      .groupBy(couponRedemptions.couponId),
+  ]);
+
+  const countMap = new Map(counts.map((c) => [c.couponId, Number(c.n)]));
+  const now = Date.now();
+  return rows.map((r) => ({
+    ...r,
+    recipientAmountEur: Number(r.recipientAmountEur),
+    referrerAmountEur: Number(r.referrerAmountEur),
+    expired: r.expiresAt != null && r.expiresAt.getTime() < now,
+    redemptionCount: countMap.get(r.id) ?? 0,
+  }));
+}
+
+export type RedemptionRow = {
+  id: string;
+  code: string | null;
+  couponKind: string;
+  redeemerEmail: string | null;
+  ownerEmail: string | null;
+  recipientCreditedEur: number;
+  referrerRewardEur: number;
+  referrerRewardStatus: string;
+  redeemedAt: Date;
+};
+
+/** Recent redemptions: who redeemed which code, and the referrer reward status. */
+export async function listRedemptions(limit = 200): Promise<RedemptionRow[]> {
+  const redeemer = alias(users, "redeemer");
+  const owner = alias(users, "owner");
+  const rows = await db
+    .select({
+      id: couponRedemptions.id,
+      code: coupons.code,
+      couponKind: couponRedemptions.couponKind,
+      redeemerEmail: redeemer.email,
+      ownerEmail: owner.email,
+      recipientCreditedEur: couponRedemptions.recipientCreditedEur,
+      referrerRewardEur: couponRedemptions.referrerRewardEur,
+      referrerRewardStatus: couponRedemptions.referrerRewardStatus,
+      redeemedAt: couponRedemptions.redeemedAt,
+    })
+    .from(couponRedemptions)
+    .leftJoin(coupons, eq(couponRedemptions.couponId, coupons.id))
+    .leftJoin(redeemer, eq(couponRedemptions.redeemerId, redeemer.id))
+    .leftJoin(owner, eq(couponRedemptions.ownerId, owner.id))
+    .orderBy(desc(couponRedemptions.redeemedAt))
+    .limit(limit);
+
+  return rows.map((r) => ({
+    ...r,
+    recipientCreditedEur: Number(r.recipientCreditedEur),
+    referrerRewardEur: Number(r.referrerRewardEur),
+  }));
 }

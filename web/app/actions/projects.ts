@@ -37,18 +37,22 @@ export async function renameProjectAction(formData: FormData) {
   redirect(projectId ? `/app/${projectId}` : "/app");
 }
 
-/** Publishes the project and returns its public URL (or an error message). */
+/**
+ * Publishes the project and returns its public URL (or an error message).
+ * `firstPublish` is true only for the project's very first publish — the
+ * client celebrates that one with confetti.
+ */
 export async function publishProjectAction(
   projectId: string,
-): Promise<{ url: string } | { error: string }> {
+): Promise<{ url: string; firstPublish: boolean } | { error: string }> {
   const userId = await requireUserId();
   const appsDomain = process.env.APPS_DOMAIN;
   if (!appsDomain) {
     return { error: "Publishing is not configured on this instance." };
   }
   try {
-    const { slug } = await publishProject(projectId, userId);
-    return { url: buildAppOrigin(appsDomain, slug) };
+    const { slug, firstPublish } = await publishProject(projectId, userId);
+    return { url: buildAppOrigin(appsDomain, slug), firstPublish };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Publish failed" };
   }

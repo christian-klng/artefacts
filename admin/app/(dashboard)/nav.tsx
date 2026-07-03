@@ -7,6 +7,7 @@ const links = [
   { href: "/", label: "Übersicht" },
   { href: "/users", label: "Nutzer" },
   { href: "/apps", label: "Apps" },
+  { href: "/coupons", label: "Gutscheine" },
   { href: "/mail", label: "E-Mails" },
   { href: "/settings", label: "Einstellungen" },
 ];

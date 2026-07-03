@@ -67,3 +67,54 @@ export const appSettings = pgTable("app_setting", {
   value: text("value").notNull().default(""),
   updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
 });
+
+// Coupons / referral credit (mirrors web/lib/db/schema.ts). The admin READS all
+// coupons + redemptions and WRITES new "admin" coupons. Indexes/constraints live
+// on the real table (created by the builder's migrate) — the mirror omits them.
+export const coupons = pgTable("coupon", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  code: text("code").notNull(),
+  ownerId: uuid("owner_id"),
+  kind: text("kind").notNull(),
+  recipientAmountEur: numeric("recipient_amount_eur", {
+    precision: 12,
+    scale: 6,
+  }).notNull(),
+  referrerAmountEur: numeric("referrer_amount_eur", {
+    precision: 12,
+    scale: 6,
+  })
+    .notNull()
+    .default("0"),
+  referrerRequiresSubscription: boolean("referrer_requires_subscription")
+    .notNull()
+    .default(true),
+  rewardWindowDays: integer("reward_window_days").notNull().default(14),
+  maxRedemptions: integer("max_redemptions"),
+  expiresAt: timestamp("expires_at", { mode: "date" }),
+  active: boolean("active").notNull().default(true),
+  createdByAdmin: boolean("created_by_admin").notNull().default(false),
+  createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
+});
+
+export const couponRedemptions = pgTable("coupon_redemption", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  couponId: uuid("coupon_id").notNull(),
+  redeemerId: uuid("redeemer_id").notNull(),
+  couponKind: text("coupon_kind").notNull(),
+  recipientCreditedEur: numeric("recipient_credited_eur", {
+    precision: 12,
+    scale: 6,
+  }).notNull(),
+  ownerId: uuid("owner_id"),
+  referrerRewardEur: numeric("referrer_reward_eur", {
+    precision: 12,
+    scale: 6,
+  }).notNull(),
+  referrerRewardStatus: text("referrer_reward_status").notNull(),
+  referrerRewardDeadline: timestamp("referrer_reward_deadline", {
+    mode: "date",
+  }),
+  redeemedAt: timestamp("redeemed_at", { mode: "date" }).notNull().defaultNow(),
+});

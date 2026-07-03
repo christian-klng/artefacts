@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check } from "lucide-react";
+import { Check, CloudOff, Copy, Pencil, RefreshCw } from "lucide-react";
 
 export type Version = {
   id: string;
@@ -208,6 +208,11 @@ function ExportControls({
   );
 }
 
+// Menu row inside the publish panel — full-width action with a leading icon.
+const publishMenuRow =
+  "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs " +
+  "enabled:hover:bg-neutral-100 disabled:opacity-50 dark:enabled:hover:bg-neutral-800";
+
 function PublishControls({
   canPublish,
   publishing,
@@ -225,8 +230,21 @@ function PublishControls({
   onUnpublish: () => void;
   onSetSlug: (desired: string) => Promise<string | undefined>;
 }) {
+  const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [editing, setEditing] = useState(false);
+
+  const published = !!publishUrl;
+
+  // Close on Escape while the panel is open.
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
 
   const copy = async () => {
     if (!publishUrl) return;
@@ -239,93 +257,160 @@ function PublishControls({
     }
   };
 
-  if (!publishUrl) {
-    return (
-      <button
-        onClick={onPublish}
-        disabled={!canPublish || publishing}
-        className="rounded-md border border-success px-3 py-1 text-xs font-medium text-success hover:bg-success/10 disabled:opacity-50"
-        title={canPublish ? "App öffentlich veröffentlichen" : "Noch keine /index.html"}
-      >
-        {publishing ? "Veröffentlichen…" : "Veröffentlichen"}
-      </button>
-    );
-  }
-
   // Split host into the editable slug (label) and the fixed ".apps.<domain>".
-  const host = publishUrl.replace(/^https?:\/\//, "");
+  const host = publishUrl ? publishUrl.replace(/^https?:\/\//, "") : "";
   const dot = host.indexOf(".");
-  const slug = host.slice(0, dot);
-  const domainSuffix = host.slice(dot); // includes leading dot
+  const slug = dot === -1 ? host : host.slice(0, dot);
+  const domainSuffix = dot === -1 ? "" : host.slice(dot); // includes leading dot
 
-  if (editing) {
-    return (
-      <SlugEditor
-        initialSlug={slug}
-        domainSuffix={domainSuffix}
-        onSetSlug={onSetSlug}
-        onClose={() => setEditing(false)}
-      />
-    );
-  }
+  const statusText = publishDirty
+    ? "Es gibt Änderungen, die noch nicht veröffentlicht sind."
+    : "Der veröffentlichte Stand entspricht dem aktuellen Code.";
 
+  // Like the download button: the panel is absolutely positioned beneath the
+  // button (out of flow) so the toolbar row never changes height.
   return (
-    <div className="flex items-center gap-1.5 rounded-md border border-neutral-300 px-2 py-1 dark:border-neutral-700">
-      <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden />
-      <a
-        href={publishUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="max-w-[180px] truncate text-xs text-success hover:underline"
-        title={publishUrl}
-      >
-        {host}
-      </a>
+    <div className="relative">
       <button
-        onClick={() => setEditing(true)}
-        className="rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
-        title="Adresse ändern"
+        onClick={() => {
+          setEditing(false);
+          setCopied(false);
+          setOpen((o) => !o);
+        }}
+        disabled={!published && !canPublish}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        title={
+          published
+            ? statusText
+            : canPublish
+              ? "App öffentlich veröffentlichen"
+              : "Noch keine /index.html"
+        }
+        className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1 text-xs font-medium disabled:opacity-50 ${
+          published
+            ? "border-neutral-300 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+            : "border-success text-success hover:bg-success/10"
+        }`}
       >
-        Adresse
-      </button>
-      <button
-        onClick={copy}
-        className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
-        title="Link kopieren"
-      >
-        {copied ? (
-          <>
-            <Check className="h-3.5 w-3.5" aria-hidden /> Kopiert
-          </>
-        ) : (
-          "Kopieren"
+        {published && (
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${publishDirty ? "bg-warning" : "bg-success"}`}
+            aria-hidden
+          />
         )}
+        {published
+          ? "Veröffentlicht"
+          : publishing
+            ? "Veröffentlichen…"
+            : "Veröffentlichen"}
       </button>
-      {publishDirty ? (
-        <button
-          onClick={onPublish}
-          disabled={publishing}
-          className="rounded px-1.5 py-0.5 text-xs font-medium text-success hover:opacity-80 disabled:opacity-50"
-          title="Es gibt Änderungen seit der Veröffentlichung — neu veröffentlichen"
-        >
-          {publishing ? "…" : "Aktualisieren"}
-        </button>
-      ) : (
-        <span
-          className="px-1.5 py-0.5 text-xs text-neutral-400"
-          title="Der veröffentlichte Stand entspricht dem aktuellen Code"
-        >
-          Aktueller Stand
-        </span>
+
+      {open && (
+        <>
+          {/* click-away catcher */}
+          <button
+            aria-label="Schließen"
+            tabIndex={-1}
+            onClick={() => setOpen(false)}
+            className="fixed inset-0 z-40 cursor-default"
+          />
+          <div
+            role="dialog"
+            aria-label="Veröffentlichen"
+            className="absolute right-0 top-full z-50 mt-1.5 w-72 rounded-lg border border-neutral-200 bg-white p-3 text-left shadow-lg dark:border-neutral-800 dark:bg-neutral-950"
+          >
+            {!published ? (
+              <>
+                <p className="mb-2 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">
+                  Deine App wird unter einer eigenen öffentlichen Adresse
+                  verfügbar — jeder, der den Link kennt, kann sie öffnen. Du
+                  kannst sie jederzeit wieder offline nehmen.
+                </p>
+                <button
+                  onClick={onPublish}
+                  disabled={!canPublish || publishing}
+                  className="w-full rounded bg-success px-3 py-1.5 text-xs font-medium text-info-deep hover:opacity-90 disabled:opacity-50"
+                >
+                  {publishing ? "Wird veröffentlicht…" : "Veröffentlichen"}
+                </button>
+              </>
+            ) : editing ? (
+              <SlugEditor
+                initialSlug={slug}
+                domainSuffix={domainSuffix}
+                onSetSlug={onSetSlug}
+                onClose={() => setEditing(false)}
+              />
+            ) : (
+              <>
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${publishDirty ? "bg-warning" : "bg-success"}`}
+                    aria-hidden
+                  />
+                  <a
+                    href={publishUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="min-w-0 truncate text-xs font-medium text-success hover:underline"
+                    title={publishUrl}
+                  >
+                    {host}
+                  </a>
+                </div>
+                <p className="mt-1.5 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">
+                  {statusText}
+                </p>
+                <div className="mt-2 space-y-0.5 border-t border-neutral-200 pt-2 dark:border-neutral-800">
+                  <button
+                    onClick={onPublish}
+                    disabled={!publishDirty || publishing}
+                    title={
+                      publishDirty
+                        ? "Die aktuellen Änderungen veröffentlichen"
+                        : "Der veröffentlichte Stand ist aktuell"
+                    }
+                    className={`${publishMenuRow} ${
+                      publishDirty ? "font-medium text-success" : ""
+                    }`}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    {publishing ? "Wird aktualisiert…" : "Aktualisieren"}
+                  </button>
+                  <button onClick={copy} className={publishMenuRow}>
+                    {copied ? (
+                      <Check
+                        className="h-3.5 w-3.5 shrink-0 text-success"
+                        aria-hidden
+                      />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    )}
+                    {copied ? "Link kopiert" : "Link kopieren"}
+                  </button>
+                  <button
+                    onClick={() => setEditing(true)}
+                    className={publishMenuRow}
+                  >
+                    <Pencil className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    Adresse ändern
+                  </button>
+                  <button
+                    onClick={onUnpublish}
+                    disabled={publishing}
+                    title="Die App ist danach nicht mehr öffentlich erreichbar"
+                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-danger enabled:hover:bg-danger/10 disabled:opacity-50"
+                  >
+                    <CloudOff className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    Offline nehmen
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </>
       )}
-      <button
-        onClick={onUnpublish}
-        disabled={publishing}
-        className="rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:text-danger disabled:opacity-50"
-        title="Offline nehmen"
-      >
-        Offline
-      </button>
     </div>
   );
 }
@@ -357,39 +442,52 @@ function SlugEditor({
   };
 
   return (
-    <div className="flex items-center gap-1.5 rounded-md border border-neutral-300 px-2 py-1 dark:border-neutral-700">
+    <>
+      <p className="mb-2 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">
+        Öffentliche Adresse der App — nur a–z, 0–9 und Bindestriche.
+      </p>
       <input
         autoFocus
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter") save();
-          if (e.key === "Escape") onClose();
+          if (e.key === "Escape") {
+            // Leave the editor but keep the publish panel open.
+            e.stopPropagation();
+            onClose();
+          }
         }}
         disabled={saving}
         spellCheck={false}
-        className="w-32 rounded border border-neutral-300 bg-transparent px-1.5 py-0.5 text-xs outline-none focus:border-success disabled:opacity-50 dark:border-neutral-600"
+        className="w-full rounded border border-neutral-300 bg-transparent px-2 py-1 text-xs outline-none focus:border-neutral-900 disabled:opacity-50 dark:border-neutral-600 dark:focus:border-white"
         aria-label="Öffentliche Adresse"
       />
-      <span className="text-xs text-neutral-400" title={domainSuffix}>
+      <p
+        className="mt-1.5 truncate text-xs text-neutral-400"
+        title={`${value.trim() || initialSlug}${domainSuffix}`}
+      >
+        {value.trim() || initialSlug}
         {domainSuffix}
-      </span>
-      <button
-        onClick={save}
-        disabled={saving}
-        className="rounded bg-success px-2 py-0.5 text-xs font-medium text-info-deep disabled:opacity-50"
-      >
-        {saving ? "…" : "Speichern"}
-      </button>
-      <button
-        onClick={onClose}
-        disabled={saving}
-        className="rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:text-neutral-900 disabled:opacity-50 dark:hover:text-white"
-      >
-        Abbrechen
-      </button>
-      {error && <span className="text-xs text-danger">{error}</span>}
-    </div>
+      </p>
+      {error && <p className="mt-1.5 text-xs text-danger">{error}</p>}
+      <div className="mt-2.5 flex justify-end gap-2">
+        <button
+          onClick={onClose}
+          disabled={saving}
+          className="rounded px-2 py-1 text-xs text-neutral-500 hover:text-neutral-900 disabled:opacity-50 dark:hover:text-white"
+        >
+          Abbrechen
+        </button>
+        <button
+          onClick={save}
+          disabled={saving}
+          className="rounded bg-success px-3 py-1 text-xs font-medium text-info-deep hover:opacity-90 disabled:opacity-50"
+        >
+          {saving ? "…" : "Speichern"}
+        </button>
+      </div>
+    </>
   );
 }
 

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { clearPendingPrompt } from "@/app/actions/start";
 import { ChatPanel, type ChatMessage } from "./chat-panel";
 import { AttachmentsView, type AttachmentMeta } from "./attachments-view";
+import { ConfettiBurst } from "./confetti";
 import { DataView } from "./data-view";
 import type { AssetMeta } from "./sandpack-workspace";
 import { canonicalSignatureMap, filesSignature } from "@/lib/files-signature";
@@ -21,6 +22,7 @@ import {
   setSiteUrlAction,
 } from "@/app/actions/projects";
 import { substituteSiteUrl, normalizeSiteOrigin } from "@/lib/site-url";
+import { CREDIT_CHANGED_EVENT } from "@/lib/credit-events";
 
 // Sandpack is heavy and browser-only — load it client-side only.
 const SandpackWorkspace = dynamic(
@@ -131,6 +133,8 @@ export function Workspace({
     initialPublishUrl,
   );
   const [publishing, setPublishing] = useState(false);
+  // One-shot confetti over the whole builder, fired on the first publish ever.
+  const [celebrating, setCelebrating] = useState(false);
   // Signature of the published snapshot; compared against the live files to tell
   // whether the public app is behind the current code.
   const [publishedSignature, setPublishedSignature] = useState<
@@ -272,6 +276,19 @@ export function Workspace({
     };
   }, []);
 
+  // Keep the composer balance in sync when a coupon is redeemed in the account
+  // modal (it lives elsewhere in the tree; see lib/credit-events.ts).
+  useEffect(() => {
+    function onCredit(e: Event) {
+      const detail = (e as CustomEvent).detail;
+      if (detail && typeof detail.balanceEur === "number") {
+        setBalanceEur(detail.balanceEur);
+      }
+    }
+    window.addEventListener(CREDIT_CHANGED_EVENT, onCredit);
+    return () => window.removeEventListener(CREDIT_CHANGED_EVENT, onCredit);
+  }, []);
+
   const saveBlob = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
     const a = Object.assign(document.createElement("a"), {
@@ -365,6 +382,7 @@ export function Workspace({
         setPublishUrl(result.url);
         // Publish froze exactly the current files → now in sync.
         setPublishedSignature(currentSignature);
+        if (result.firstPublish) setCelebrating(true);
       }
     } catch {
       appendMessage("assistant", "Publish failed", { kind: "error" });
@@ -471,6 +489,9 @@ export function Workspace({
 
   return (
     <div className="grid h-full grid-cols-[minmax(300px,380px)_1fr]">
+      {celebrating && (
+        <ConfettiBurst onDone={() => setCelebrating(false)} />
+      )}
       <ChatPanel
         messages={messages}
         streaming={streaming}

@@ -87,6 +87,34 @@ export const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
   {
+    title: "Referral / Gutscheine",
+    description:
+      "Standardwerte für neu aktivierte Referral-Codes. Ändert nur künftige Codes — bereits aktivierte behalten ihre gespeicherten Beträge.",
+    fields: [
+      {
+        key: "REFERRAL_RECIPIENT_EUR",
+        label: "Einlöser-Guthaben (EUR)",
+        placeholder: "10.00",
+        type: "number",
+        help: "Der neue Nutzer erhält dies sofort beim Einlösen.",
+      },
+      {
+        key: "REFERRAL_REFERRER_EUR",
+        label: "Werber-Bonus (EUR)",
+        placeholder: "5.00",
+        type: "number",
+        help: "Der Werber erhält dies, sobald der Eingeladene ein Abo abschließt (später via Stripe).",
+      },
+      {
+        key: "REFERRAL_WINDOW_DAYS",
+        label: "Abo-Frist (Tage)",
+        placeholder: "14",
+        type: "number",
+        help: "Zeitfenster, in dem der Eingeladene ein Abo abschließen muss, damit der Werber-Bonus gilt.",
+      },
+    ],
+  },
+  {
     title: "E-Mail (SMTP)",
     description:
       "Zugangsdaten für den Mailversand. Das Passwort (SMTP_PASS) bleibt aus Sicherheitsgründen in der Server-Umgebung.",

@@ -57,6 +57,26 @@ export function cortecsFeeMultiplier(): Promise<number> {
   return settingNumber("CORTECS_FEE_MULTIPLIER", 1.0);
 }
 
+// --- Referral / coupons ----------------------------------------------------
+// Defaults for a newly-activated personal referral coupon. DB/env-overridable
+// in the admin app (lib/settings.ts precedence: DB > env > default). Admin-
+// created coupons carry their own per-code amounts and ignore these.
+
+/** Credit (EUR) the REDEEMER of a standard referral coupon receives. */
+export function referralRecipientEur(): Promise<number> {
+  return settingNumber("REFERRAL_RECIPIENT_EUR", 10.0);
+}
+
+/** Credit (EUR) the REFERRER earns per qualifying redemption (subscription). */
+export function referralReferrerEur(): Promise<number> {
+  return settingNumber("REFERRAL_REFERRER_EUR", 5.0);
+}
+
+/** Days the redeemer has to subscribe for the referrer reward to qualify. */
+export function referralWindowDays(): Promise<number> {
+  return settingNumber("REFERRAL_WINDOW_DAYS", 14);
+}
+
 // --- Base URLs / auth ------------------------------------------------------
 
 export function cortecsApiKey(): string {

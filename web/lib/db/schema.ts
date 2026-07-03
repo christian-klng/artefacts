@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   text,
@@ -354,4 +355,119 @@ export const appUsers = pgTable(
   // uniqueIndex (NOT .unique()) so drizzle-kit push never hits the populated-
   // table truncate prompt that hangs the non-TTY migrate container.
   (u) => [uniqueIndex("app_user_project_email_idx").on(u.projectId, u.email)],
+);
+
+// ---------------------------------------------------------------------------
+// Coupons / referral credit (lib/coupons.ts). Two kinds share one table:
+//   - "referral": a user activates ONE personal code. Redeeming grants the
+//     redeemer `recipient_amount_eur` (default 10€) IMMEDIATELY; the referrer's
+//     `referrer_amount_eur` (default 5€) is only RECORDED as pending — it is not
+//     paid out until the future Stripe/subscription integration settles it.
+//   - "admin": fully configurable codes the admin creates for test users
+//     (custom amount, optional referrer/owner, redemption cap, expiry).
+// Codes are stored UPPERCASED and compared case-insensitively.
+// ---------------------------------------------------------------------------
+export const coupons = pgTable(
+  "coupon",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    code: text("code").notNull(),
+    // The referrer, for "referral" coupons; null for admin-created codes.
+    ownerId: uuid("owner_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    // "referral" | "admin"
+    kind: text("kind").notNull(),
+    // Credit granted to the redeemer, immediately, on redemption.
+    recipientAmountEur: numeric("recipient_amount_eur", {
+      precision: 12,
+      scale: 6,
+    }).notNull(),
+    // Potential credit to the owner/referrer — only on a qualifying redemption.
+    referrerAmountEur: numeric("referrer_amount_eur", {
+      precision: 12,
+      scale: 6,
+    })
+      .notNull()
+      .default("0"),
+    // Referral: the referrer reward requires the redeemer to subscribe within
+    // reward_window_days. Admin codes usually set this false.
+    referrerRequiresSubscription: boolean("referrer_requires_subscription")
+      .notNull()
+      .default(true),
+    rewardWindowDays: integer("reward_window_days").notNull().default(14),
+    // null = unlimited total redemptions.
+    maxRedemptions: integer("max_redemptions"),
+    // null = never expires.
+    expiresAt: timestamp("expires_at", { mode: "date" }),
+    active: boolean("active").notNull().default(true),
+    createdByAdmin: boolean("created_by_admin").notNull().default(false),
+    createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
+  },
+  (c) => [
+    uniqueIndex("coupon_code_idx").on(c.code),
+    // One referral coupon per user (admin codes have a null owner → not covered
+    // by this partial index).
+    uniqueIndex("coupon_owner_referral_idx")
+      .on(c.ownerId)
+      .where(sql`${c.kind} = 'referral'`),
+  ],
+);
+
+// One row per redemption. The recipient credit is applied in the same
+// transaction; the referrer reward is recorded as pending and settled later.
+export const couponRedemptions = pgTable(
+  "coupon_redemption",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    couponId: uuid("coupon_id")
+      .notNull()
+      .references(() => coupons.id, { onDelete: "cascade" }),
+    // The "new" user who redeemed (the Empfänger).
+    redeemerId: uuid("redeemer_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // Snapshot of the coupon kind — drives the "one referral per user" rule.
+    couponKind: text("coupon_kind").notNull(),
+    recipientCreditedEur: numeric("recipient_credited_eur", {
+      precision: 12,
+      scale: 6,
+    }).notNull(),
+    // Referrer snapshot + the (pending) reward.
+    ownerId: uuid("owner_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    referrerRewardEur: numeric("referrer_reward_eur", {
+      precision: 12,
+      scale: 6,
+    })
+      .notNull()
+      .default("0"),
+    // "pending" | "granted" | "expired" | "none"
+    referrerRewardStatus: text("referrer_reward_status")
+      .notNull()
+      .default("none"),
+    referrerRewardDeadline: timestamp("referrer_reward_deadline", {
+      mode: "date",
+    }),
+    referrerRewardGrantedAt: timestamp("referrer_reward_granted_at", {
+      mode: "date",
+    }),
+    redeemedAt: timestamp("redeemed_at", { mode: "date" })
+      .notNull()
+      .defaultNow(),
+  },
+  (r) => [
+    // A given coupon can be redeemed at most once per user.
+    uniqueIndex("coupon_redemption_coupon_user_idx").on(
+      r.couponId,
+      r.redeemerId,
+    ),
+    // At most one REFERRAL redemption per user (the welcome bonus is once-ever).
+    uniqueIndex("coupon_redemption_referral_user_idx")
+      .on(r.redeemerId)
+      .where(sql`${r.couponKind} = 'referral'`),
+    index("coupon_redemption_owner_idx").on(r.ownerId),
+  ],
 );

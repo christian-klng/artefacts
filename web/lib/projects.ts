@@ -414,16 +414,19 @@ export async function setPublishSlug(
 
 /**
  * Publishes the project: freezes the current files as a new version and serves
- * that snapshot publicly. Reuses the existing slug on re-publish. Returns it.
+ * that snapshot publicly. Reuses the existing slug on re-publish. Returns the
+ * slug plus whether this was the project's very first publish (the
+ * published-version pointer survives unpublish, so it marks "never published").
  */
 export async function publishProject(
   projectId: string,
   userId: string,
-): Promise<{ slug: string }> {
+): Promise<{ slug: string; firstPublish: boolean }> {
   const project = await getOwnedProject(projectId, userId);
   if ((await readFile(projectId, "/index.html")) == null) {
     throw new Error("Nothing to publish: no /index.html yet");
   }
+  const firstPublish = project.publishedVersionId == null;
 
   const version = await createVersion(projectId, "Published");
   const slug =
@@ -439,7 +442,7 @@ export async function publishProject(
     })
     .where(and(eq(projects.id, projectId), eq(projects.userId, userId)));
 
-  return { slug };
+  return { slug, firstPublish };
 }
 
 /**
