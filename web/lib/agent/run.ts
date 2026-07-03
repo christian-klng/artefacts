@@ -58,6 +58,12 @@ export async function runAgent({
       // Hermetic: ignore any local CLAUDE.md / settings on the server host.
       settingSources: [],
       maxTurns: 50,
+      // Also emit the raw API stream events (`stream_event` messages). Without
+      // them the SDK only yields COMPLETE content blocks — during a long
+      // write_file input (the bulk of a build) nothing arrives at all and the
+      // UI looks stalled. The agent route turns these into live text deltas
+      // and tool progress events.
+      includePartialMessages: true,
       // Route the builder through cortecs.ai's Anthropic-compatible endpoint.
       // The SDK spawns a subprocess and reads ANTHROPIC_BASE_URL/AUTH_TOKEN from
       // its environment. NOTE: options.env REPLACES the subprocess environment

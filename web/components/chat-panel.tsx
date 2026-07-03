@@ -26,6 +26,8 @@ export type ChatMessage = {
   tool?: string;
   // Marks a client-side error/warning notice (rendered with a danger style).
   kind?: "error";
+  // Tool row whose input is still being generated (live progress, pulses).
+  pending?: boolean;
 };
 
 // Agent tool → icon for the chat tool-log rows.
@@ -128,8 +130,21 @@ export function ChatPanel({
     setUploadError(null);
   }
 
-  const lastRole = messages[messages.length - 1]?.role;
-  const showWorking = streaming && lastRole !== "assistant";
+  // Visible for the WHOLE run (the old lastRole !== "assistant" condition
+  // hid it after the first sentence — right before the longest silent
+  // stretch, which read as "the agent stopped"). The timer makes long tool
+  // generations legible as ongoing work.
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!streaming) return;
+    setElapsed(0);
+    const t0 = Date.now();
+    const iv = setInterval(
+      () => setElapsed(Math.floor((Date.now() - t0) / 1000)),
+      1000,
+    );
+    return () => clearInterval(iv);
+  }, [streaming]);
 
   return (
     <div className="flex h-full min-h-0 flex-col border-r border-neutral-200 dark:border-neutral-800">
@@ -142,9 +157,9 @@ export function ChatPanel({
         {messages.map((m) => (
           <MessageRow key={m.id} message={m} />
         ))}
-        {showWorking && (
-          <p className="animate-pulse pl-1 text-xs text-neutral-500">
-            arbeitet…
+        {streaming && (
+          <p className="animate-pulse pl-1 text-xs tabular-nums text-neutral-500">
+            arbeitet… {formatElapsed(elapsed)}
           </p>
         )}
         <div ref={endRef} />
@@ -274,11 +289,22 @@ export function ChatPanel({
   );
 }
 
+/** m:ss for the working indicator. */
+function formatElapsed(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 function MessageRow({ message }: { message: ChatMessage }) {
   if (message.role === "tool") {
     const Icon = (message.tool && TOOL_ICON[message.tool]) || Wrench;
     return (
-      <div className="flex items-center gap-1.5 pl-1 font-mono text-xs text-neutral-500">
+      <div
+        className={`flex items-center gap-1.5 pl-1 font-mono text-xs text-neutral-500 ${
+          message.pending ? "animate-pulse" : ""
+        }`}
+      >
         <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
         <span className="truncate">{message.content}</span>
       </div>

@@ -76,10 +76,22 @@ export async function POST(request: Request) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
-      const send = (event: unknown) =>
-        controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify(event)}\n\n`),
-        );
+      const send = (event: unknown) => {
+        // A closed controller (client navigated away mid-run) must not kill
+        // the turn — persistence and billing below still have to happen.
+        try {
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify(event)}\n\n`),
+          );
+        } catch {}
+      };
+      // SSE comment frames keep idle proxies (Traefik) from cutting the
+      // connection during long silent stretches; the client skips non-data lines.
+      const heartbeat = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode(`: ping\n\n`));
+        } catch {}
+      }, 15_000);
 
       send({ type: "project", id: project.id });
 
@@ -97,6 +109,25 @@ export async function POST(request: Request) {
       // billing source (we self-compute EUR cost; total_cost_usd is Anthropic-
       // priced and meaningless under Cortecs).
       let modelUsage: Record<string, ModelTokens> | null = null;
+      // --- Live progress (includePartialMessages) ---
+      // Raw stream events let us forward assistant text as it's generated and
+      // show tool-input generation (the minutes-long silent stretch of a build)
+      // as live progress. The complete assistant message still follows and
+      // stays the source of truth for persistence; streamedTextChars tracks how
+      // much of the current message's text already went out as deltas so the
+      // committed block isn't sent twice.
+      let streamedTextChars = 0;
+      // The tool_use block currently streaming its input, if any.
+      let liveTool: {
+        name: string;
+        path?: string;
+        chars: number;
+        // First bytes of the input JSON, scanned once for a complete "path"
+        // value (capped so a content-first input can't trigger O(n²) rescans).
+        sniff: string;
+        lastSentChars: number;
+        lastSentAt: number;
+      } | null = null;
       try {
         const run = await runAgent({
           projectId: project.id,
@@ -111,7 +142,64 @@ export async function POST(request: Request) {
         });
 
         for await (const msg of run) {
-          if (msg.type === "assistant") {
+          if (msg.type === "stream_event") {
+            if (msg.parent_tool_use_id) continue; // subagent-internal, not ours
+            const ev = msg.event;
+            if (ev.type === "message_start") {
+              streamedTextChars = 0;
+            } else if (ev.type === "content_block_start") {
+              if (ev.content_block.type === "tool_use") {
+                const tool = ev.content_block.name.replace(/^mcp__[a-z]+__/, "");
+                liveTool = {
+                  name: tool,
+                  chars: 0,
+                  sniff: "",
+                  lastSentChars: 0,
+                  lastSentAt: Date.now(),
+                };
+                send({ type: "tool_start", tool });
+              }
+            } else if (ev.type === "content_block_delta") {
+              if (ev.delta.type === "text_delta" && ev.delta.text) {
+                streamedTextChars += ev.delta.text.length;
+                send({ type: "assistant_text", text: ev.delta.text });
+              } else if (ev.delta.type === "input_json_delta" && liveTool) {
+                liveTool.chars += ev.delta.partial_json.length;
+                let pathFound = false;
+                if (liveTool.path === undefined && liveTool.sniff.length < 8192) {
+                  liveTool.sniff += ev.delta.partial_json;
+                  const m = liveTool.sniff.match(
+                    /"path"\s*:\s*"((?:[^"\\]|\\.)*)"/,
+                  );
+                  if (m) {
+                    try {
+                      liveTool.path = JSON.parse(`"${m[1]}"`) as string;
+                    } catch {
+                      liveTool.path = m[1];
+                    }
+                    pathFound = true;
+                  }
+                }
+                const now = Date.now();
+                if (
+                  pathFound ||
+                  liveTool.chars - liveTool.lastSentChars >= 2048 ||
+                  now - liveTool.lastSentAt >= 750
+                ) {
+                  liveTool.lastSentChars = liveTool.chars;
+                  liveTool.lastSentAt = now;
+                  send({
+                    type: "tool_progress",
+                    tool: liveTool.name,
+                    path: liveTool.path,
+                    chars: liveTool.chars,
+                  });
+                }
+              }
+            } else if (ev.type === "content_block_stop") {
+              liveTool = null;
+            }
+          } else if (msg.type === "assistant") {
             for (const block of msg.message.content) {
               if (block.type === "text" && block.text) {
                 // Merge into the current assistant bubble, or start a new one
@@ -121,7 +209,15 @@ export async function POST(request: Request) {
                 if (last?.role === "assistant") last.content += block.text;
                 else
                   turnMessages.push({ role: "assistant", content: block.text });
-                send({ type: "assistant_text", text: block.text });
+                // Live view: only what wasn't already streamed as deltas
+                // (normally nothing — the whole block streamed already).
+                const alreadyStreamed = Math.min(
+                  streamedTextChars,
+                  block.text.length,
+                );
+                streamedTextChars -= alreadyStreamed;
+                const remainder = block.text.slice(alreadyStreamed);
+                if (remainder) send({ type: "assistant_text", text: remainder });
               } else if (block.type === "tool_use") {
                 const tool = block.name.replace(/^mcp__[a-z]+__/, "");
                 const path = (block.input as { path?: string } | undefined)
@@ -131,6 +227,9 @@ export async function POST(request: Request) {
                 send({ type: "tool_use", tool, path });
               }
             }
+            // A message that streamed no deltas (or was synthetic) must not
+            // leak its counter into the next round.
+            streamedTextChars = 0;
           } else if (msg.type === "result") {
             modelUsage = msg.modelUsage as Record<string, ModelTokens>;
           }
@@ -196,7 +295,10 @@ export async function POST(request: Request) {
           message: error instanceof Error ? error.message : "Agent error",
         });
       } finally {
-        controller.close();
+        clearInterval(heartbeat);
+        try {
+          controller.close();
+        } catch {}
       }
     },
   });

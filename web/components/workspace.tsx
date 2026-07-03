@@ -49,6 +49,11 @@ function genId() {
 type AgentEvent =
   | { type: "project"; id: string }
   | { type: "assistant_text"; text: string }
+  // A tool_use block started streaming its input — shown as a pending row
+  // long before the input is complete (a large write_file takes minutes).
+  | { type: "tool_start"; tool: string }
+  // Throttled generation progress for that block (path appears once sniffed).
+  | { type: "tool_progress"; tool: string; path?: string; chars: number }
   | { type: "tool_use"; tool: string; path?: string }
   | { type: "file_changed"; path: string; content: string }
   | { type: "asset_changed"; path: string; asset: AssetMeta }
@@ -77,6 +82,13 @@ type AgentEvent =
 /** Formats a EUR amount with enough precision for sub-cent per-turn costs. */
 function formatEur(n: number): string {
   return `€${n.toFixed(n !== 0 && Math.abs(n) < 0.01 ? 4 : 2)}`;
+}
+
+/** Rough size of the tool input generated so far, for the progress rows. */
+function formatKb(chars: number): string {
+  if (chars < 1024) return `${chars} B`;
+  const kb = chars / 1024;
+  return `${kb >= 100 ? Math.round(kb) : kb.toFixed(1).replace(".", ",")} kB`;
 }
 
 export function Workspace({
@@ -197,9 +209,42 @@ export function Workspace({
             ];
           });
           break;
+        case "tool_start":
+          appendMessage("tool", event.tool, { tool: event.tool, pending: true });
+          break;
+        case "tool_progress": {
+          const label = `${event.tool}${event.path ? ` ${event.path}` : ""} · ${formatKb(event.chars)}`;
+          setMessages((prev) => {
+            // Update the newest pending row — the block currently streaming.
+            for (let i = prev.length - 1; i >= 0; i--) {
+              if (prev[i].role === "tool" && prev[i].pending) {
+                return prev.map((m, j) =>
+                  j === i ? { ...m, content: label } : m,
+                );
+              }
+            }
+            return prev;
+          });
+          break;
+        }
         case "tool_use": {
           const label = `${event.tool}${event.path ? ` ${event.path}` : ""}`;
-          appendMessage("tool", label, { tool: event.tool });
+          setMessages((prev) => {
+            // Finalize the oldest pending row (commits arrive in block order).
+            // Without stream events (none pending) append as before.
+            const idx = prev.findIndex((m) => m.role === "tool" && m.pending);
+            if (idx === -1) {
+              return [
+                ...prev,
+                { id: genId(), role: "tool", content: label, tool: event.tool },
+              ];
+            }
+            return prev.map((m, j) =>
+              j === idx
+                ? { ...m, content: label, tool: event.tool, pending: false }
+                : m,
+            );
+          });
           break;
         }
         case "file_changed":
@@ -253,7 +298,17 @@ export function Workspace({
           );
           break;
         case "error":
+          setMessages((prev) =>
+            prev.map((m) => (m.pending ? { ...m, pending: false } : m)),
+          );
           appendMessage("assistant", event.message, { kind: "error" });
+          break;
+        case "done":
+          // A block that streamed but never committed (aborted run) must not
+          // keep pulsing forever.
+          setMessages((prev) =>
+            prev.map((m) => (m.pending ? { ...m, pending: false } : m)),
+          );
           break;
       }
     },
