@@ -18,7 +18,7 @@ import { settingNumber, settingString } from "@/lib/settings";
 //     this path can pass Cortecs' eu_native / preference routing params.
 
 /** Task categories, each mapped to its own env-configured model + transport. */
-export type TaskKind = "build" | "cleanup" | "sovereign_build";
+export type TaskKind = "build" | "cleanup" | "sovereign_build" | "interview";
 
 export type Preference = "speed" | "cost" | "balanced";
 
@@ -143,6 +143,18 @@ export async function modelForTask(
         model: await settingString("CORTECS_CLEANUP_MODEL", "claude-haiku-4-5"),
         path: "openai",
         preference: opts?.preference ?? "cost",
+        euNative: opts?.euNative,
+      };
+    case "interview":
+      // The first-prompt concept interview: user-facing latency, so prefer
+      // speed over cost. Sonnet balances question quality against wait time.
+      return {
+        model: await settingString(
+          "CORTECS_INTERVIEW_MODEL",
+          "claude-4-6-sonnet",
+        ),
+        path: "openai",
+        preference: opts?.preference ?? "speed",
         euNative: opts?.euNative,
       };
     case "sovereign_build": {

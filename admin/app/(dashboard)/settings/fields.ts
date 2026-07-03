@@ -36,6 +36,12 @@ export const SETTING_GROUPS: SettingGroup[] = [
         placeholder: "claude-haiku-4-5",
       },
       {
+        key: "CORTECS_INTERVIEW_MODEL",
+        label: "Interview-Modell",
+        placeholder: "claude-4-6-sonnet",
+        help: "Erzeugt die Konzeptfragen (3 Fragen + Farbpaletten) nach dem ersten Prompt eines Projekts. Läuft über den OpenAI-Pfad.",
+      },
+      {
         key: "CORTECS_SOVEREIGN_BUILD_MODEL",
         label: "Sovereign-Builder-Modell",
         placeholder: "claude-opus4-8",

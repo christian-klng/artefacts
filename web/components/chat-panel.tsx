@@ -17,6 +17,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { AttachmentMeta } from "./attachments-view";
+import { InterviewCard } from "./interview-card";
+import type { InterviewSubmission } from "@/lib/interview";
 
 export type ChatMessage = {
   id: string;
@@ -24,8 +26,10 @@ export type ChatMessage = {
   content: string;
   // For tool-log rows: the agent tool name, used to pick an icon.
   tool?: string;
-  // Marks a client-side error/warning notice (rendered with a danger style).
-  kind?: "error";
+  // "error" marks a client-side error/warning notice (danger style);
+  // "interview" marks the first-prompt concept interview card, whose content
+  // is a JSON InterviewState (lib/interview.ts).
+  kind?: "error" | "interview";
   // Tool row whose input is still being generated (live progress, pulses).
   pending?: boolean;
 };
@@ -47,6 +51,7 @@ export function ChatPanel({
   streaming,
   projectId,
   onSend,
+  onInterviewSubmit,
   onAttachmentsChanged,
   balanceEur,
 }: {
@@ -54,6 +59,11 @@ export function ChatPanel({
   streaming: boolean;
   projectId: string;
   onSend: (text: string, attachmentIds: string[]) => void;
+  /** Submits the concept-interview card (answers or skip). */
+  onInterviewSubmit: (
+    messageId: string,
+    submission: InterviewSubmission,
+  ) => void;
   onAttachmentsChanged: () => void;
   /** Spendable EUR credit, shown above the composer; null while loading. */
   balanceEur?: number | null;
@@ -130,21 +140,6 @@ export function ChatPanel({
     setUploadError(null);
   }
 
-  // Visible for the WHOLE run (the old lastRole !== "assistant" condition
-  // hid it after the first sentence — right before the longest silent
-  // stretch, which read as "the agent stopped"). The timer makes long tool
-  // generations legible as ongoing work.
-  const [elapsed, setElapsed] = useState(0);
-  useEffect(() => {
-    if (!streaming) return;
-    setElapsed(0);
-    const t0 = Date.now();
-    const iv = setInterval(
-      () => setElapsed(Math.floor((Date.now() - t0) / 1000)),
-      1000,
-    );
-    return () => clearInterval(iv);
-  }, [streaming]);
 
   return (
     <div className="flex h-full min-h-0 flex-col border-r border-neutral-200 dark:border-neutral-800">
@@ -155,11 +150,16 @@ export function ChatPanel({
           </p>
         )}
         {messages.map((m) => (
-          <MessageRow key={m.id} message={m} />
+          <MessageRow
+            key={m.id}
+            message={m}
+            streaming={streaming}
+            onInterviewSubmit={onInterviewSubmit}
+          />
         ))}
         {streaming && (
           <p className="animate-pulse pl-1 text-xs tabular-nums text-neutral-500">
-            arbeitet… {formatElapsed(elapsed)}
+            arbeitet… <WorkingTimer />
           </p>
         )}
         <div ref={endRef} />
@@ -289,14 +289,56 @@ export function ChatPanel({
   );
 }
 
-/** m:ss for the working indicator. */
-function formatElapsed(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
+/**
+ * m:ss since mount. Rendered only while streaming — visible for the WHOLE run
+ * (the old lastRole !== "assistant" condition hid the indicator after the
+ * first sentence, right before the longest silent stretch, which read as "the
+ * agent stopped"). Mounting fresh per run resets the clock without setState
+ * in an effect body.
+ */
+function WorkingTimer() {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const t0 = Date.now();
+    const iv = setInterval(
+      () => setElapsed(Math.floor((Date.now() - t0) / 1000)),
+      1000,
+    );
+    return () => clearInterval(iv);
+  }, []);
+  const m = Math.floor(elapsed / 60);
+  const s = elapsed % 60;
+  return (
+    <>
+      {m}:{String(s).padStart(2, "0")}
+    </>
+  );
 }
 
-function MessageRow({ message }: { message: ChatMessage }) {
+function MessageRow({
+  message,
+  streaming,
+  onInterviewSubmit,
+}: {
+  message: ChatMessage;
+  streaming: boolean;
+  onInterviewSubmit: (
+    messageId: string,
+    submission: InterviewSubmission,
+  ) => void;
+}) {
+  // The first-prompt concept interview card (interactive while pending).
+  if (message.kind === "interview") {
+    return (
+      <InterviewCard
+        messageId={message.id}
+        content={message.content}
+        streaming={streaming}
+        onSubmit={onInterviewSubmit}
+      />
+    );
+  }
+
   if (message.role === "tool") {
     const Icon = (message.tool && TOOL_ICON[message.tool]) || Wrench;
     return (

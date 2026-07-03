@@ -259,12 +259,29 @@ export async function addMessage(
   role: "user" | "assistant" | "system" | "tool",
   content: string,
   tool?: string,
+  kind?: string,
 ) {
   const [row] = await db
     .insert(messages)
-    .values({ projectId, role, content, tool })
+    .values({ projectId, role, content, tool, kind })
     .returning();
   return row;
+}
+
+/**
+ * Rewrites a message's content in place (used to move an interview card from
+ * pending → answered/skipped). Scoped by projectId — the caller's ownership
+ * check on the project is what authorizes touching its messages.
+ */
+export async function updateMessageContent(
+  messageId: string,
+  projectId: string,
+  content: string,
+) {
+  await db
+    .update(messages)
+    .set({ content })
+    .where(and(eq(messages.id, messageId), eq(messages.projectId, projectId)));
 }
 
 export async function getMessages(projectId: string) {

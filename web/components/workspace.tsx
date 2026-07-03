@@ -23,6 +23,12 @@ import {
 } from "@/app/actions/projects";
 import { substituteSiteUrl, normalizeSiteOrigin } from "@/lib/site-url";
 import { CREDIT_CHANGED_EVENT } from "@/lib/credit-events";
+import {
+  parseInterviewState,
+  type InterviewSpec,
+  type InterviewState,
+  type InterviewSubmission,
+} from "@/lib/interview";
 
 // Sandpack is heavy and browser-only — load it client-side only.
 const SandpackWorkspace = dynamic(
@@ -64,6 +70,8 @@ type AgentEvent =
       assets: Record<string, AssetMeta>;
     }
   | { type: "version"; id: string; label: string | null; createdAt: string }
+  // The first-prompt concept interview card (3 questions + palette choice).
+  | { type: "interview"; id: string; spec: InterviewSpec }
   | { type: "attachments_changed" }
   | { type: "database_changed"; tables: string[] }
   | {
@@ -275,6 +283,21 @@ export function Workspace({
             ...prev,
           ]);
           break;
+        case "interview":
+          // Persist-shaped content (same JSON as the DB row) so the live card
+          // and a reloaded card render identically. The server id lets the
+          // answer request reference the row.
+          appendMessage(
+            "assistant",
+            JSON.stringify({
+              v: 1,
+              status: "pending",
+              spec: event.spec,
+              answers: null,
+            } satisfies InterviewState),
+            { id: event.id, kind: "interview" },
+          );
+          break;
         case "attachments_changed":
           refreshAttachments();
           break;
@@ -469,16 +492,17 @@ export function Workspace({
     [projectId],
   );
 
-  const onSend = useCallback(
-    async (text: string, attachmentIds: string[] = []) => {
-      appendMessage("user", text);
+  // Shared POST-and-stream loop for both /api/agent request variants (chat
+  // message and interview answers) — the SSE handling is identical.
+  const streamAgentRequest = useCallback(
+    async (payload: Record<string, unknown>) => {
       setStreaming(true);
 
       try {
         const res = await fetch("/api/agent", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: text, projectId, attachmentIds }),
+          body: JSON.stringify({ ...payload, projectId }),
         });
         if (res.status === 402) {
           const data = (await res.json().catch(() => null)) as {
@@ -525,6 +549,38 @@ export function Workspace({
     [projectId, appendMessage, handleEvent],
   );
 
+  const onSend = useCallback(
+    async (text: string, attachmentIds: string[] = []) => {
+      appendMessage("user", text);
+      await streamAgentRequest({ message: text, attachmentIds });
+    },
+    [appendMessage, streamAgentRequest],
+  );
+
+  // Submits the concept-interview card (answers or skip). The card is frozen
+  // optimistically — its persisted-shape content flips to answered/skipped —
+  // so a double click can't fire twice; the build streams in right after.
+  const onInterviewSubmit = useCallback(
+    async (messageId: string, submission: InterviewSubmission) => {
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== messageId || m.kind !== "interview") return m;
+          const state = parseInterviewState(m.content);
+          if (!state || state.status !== "pending") return m;
+          const next: InterviewState =
+            "skip" in submission
+              ? { ...state, status: "skipped" }
+              : { ...state, status: "answered", answers: submission };
+          return { ...m, content: JSON.stringify(next) };
+        }),
+      );
+      await streamAgentRequest({
+        interview: { messageId, ...submission },
+      });
+    },
+    [streamAgentRequest],
+  );
+
   // Auto-run the landing-page prompt exactly once on first mount of a fresh
   // project, then strip ?run=1 and clear the server cookie so a reload is inert.
   const initialPromptFired = useRef(false);
@@ -552,6 +608,7 @@ export function Workspace({
         streaming={streaming}
         projectId={projectId}
         onSend={onSend}
+        onInterviewSubmit={onInterviewSubmit}
         onAttachmentsChanged={refreshAttachments}
         balanceEur={balanceEur}
       />

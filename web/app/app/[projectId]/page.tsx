@@ -45,6 +45,8 @@ export default async function ProjectPage({
     role: m.role as ChatMessage["role"],
     content: m.content,
     tool: m.tool ?? undefined,
+    // A pending interview card re-renders interactive after a reload.
+    kind: m.kind === "interview" ? ("interview" as const) : undefined,
   }));
   const versions = versionRows.map((v) => ({
     id: v.id,

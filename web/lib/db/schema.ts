@@ -176,6 +176,10 @@ export const messages = pgTable(
     // For "tool" rows: the agent tool name (e.g. "write_file"), used by the
     // client to pick an icon. Null for user/assistant/system messages.
     tool: text("tool"),
+    // Special message kinds. 'interview' = the first-prompt concept interview
+    // card; its `content` is a JSON InterviewState (lib/interview.ts). Null for
+    // plain chat messages.
+    kind: text("kind"),
     createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
   },
   (message) => [index("message_project_idx").on(message.projectId)],

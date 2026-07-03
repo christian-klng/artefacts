@@ -7,6 +7,7 @@ import {
   getClientFiles,
   createVersion,
   readFile,
+  updateMessageContent,
 } from "@/lib/projects";
 import { CONCEPT_PATH, isInternalVfsPath } from "@/lib/concept";
 import { listAttachments } from "@/lib/attachments";
@@ -15,9 +16,17 @@ import { modelForTask } from "@/lib/cortecs/config";
 import {
   ensureCredit,
   billModelUsage,
+  computeBilledEur,
   recordUsageAndDeduct,
   type ModelTokens,
 } from "@/lib/cortecs/billing";
+import { parseInterviewState, validateAnswers } from "@/lib/interview";
+import {
+  buildAnswersPrompt,
+  buildSkipPrompt,
+  generateInterview,
+  renderInterviewForTranscript,
+} from "@/lib/agent/interview";
 
 // The Agent SDK needs Node APIs (and may spawn a subprocess) — never the edge
 // runtime. Allow long-running agent turns.
@@ -32,8 +41,11 @@ export async function POST(request: Request) {
   const userId = session.user.id;
 
   const body = await request.json().catch(() => null);
-  const message = body?.message;
-  if (typeof message !== "string" || message.trim() === "") {
+  // A turn is EITHER a chat message OR the answers to a pending concept
+  // interview (the second request of the first-prompt interview flow).
+  const message = typeof body?.message === "string" ? body.message : "";
+  const interviewInput = parseInterviewInput(body);
+  if (!interviewInput && message.trim() === "") {
     return Response.json({ error: "message is required" }, { status: 400 });
   }
 
@@ -61,17 +73,44 @@ export async function POST(request: Request) {
   // The agent's distilled design memory (durable decisions). Survives the
   // transcript window cap; always re-injected so it's considered every turn.
   const concept = await readFile(project.id, CONCEPT_PATH);
-  await addMessage(project.id, "user", message);
 
-  // Make the agent aware of the project's uploaded reference files so it knows
-  // to reach for list_attachments / read_attachment. The note is prepended to
-  // the prompt (not stored as the user's message). attachmentIds flags the ones
-  // just attached this turn for extra emphasis.
-  const withAttachments = await withAttachmentContext(project.id, message, body);
+  let turnPrompt: string;
+  // Whether this turn should open with the concept interview instead of a
+  // build (first user prompt of the project; generation failure falls back).
+  let firstPromptInterview = false;
+  if (interviewInput) {
+    // Second request of the interview flow: validate + persist the answers and
+    // turn them into the build prompt. The original request is already in the
+    // history; no new user message is recorded.
+    const resolved = await resolveInterviewTurn(
+      project.id,
+      history,
+      interviewInput,
+    );
+    if ("error" in resolved) {
+      return Response.json(
+        { error: resolved.error },
+        { status: resolved.status },
+      );
+    }
+    turnPrompt = await withAttachmentContext(project.id, resolved.prompt, body);
+  } else {
+    // Typing a normal message while an interview card is still open counts as
+    // skipping it — the card must never dead-end the chat.
+    await skipPendingInterviews(project.id, history);
+    firstPromptInterview = history.every((m) => m.role !== "user");
+    await addMessage(project.id, "user", message);
+
+    // Make the agent aware of the project's uploaded reference files so it knows
+    // to reach for list_attachments / read_attachment. The note is prepended to
+    // the prompt (not stored as the user's message). attachmentIds flags the ones
+    // just attached this turn for extra emphasis.
+    turnPrompt = await withAttachmentContext(project.id, message, body);
+  }
   // Each agent turn is a fresh SDK query() with no memory of prior turns, so we
   // reconstruct context from the persisted concept + chat history and prepend it.
   // This is what lets the agent iterate on the existing app instead of rebuilding.
-  const prompt = withProjectContext(concept, history, withAttachments);
+  const prompt = withProjectContext(concept, history, turnPrompt);
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -129,6 +168,23 @@ export async function POST(request: Request) {
         lastSentAt: number;
       } | null = null;
       try {
+        // First user prompt: ask the concept interview instead of building.
+        // The build then runs on the follow-up request that carries the
+        // answers. If generation fails, fall through to a normal build — the
+        // interview must never block a user's first version.
+        if (firstPromptInterview) {
+          const asked = await runInterviewPhase({
+            userId,
+            projectId: project.id,
+            message,
+            send,
+          });
+          if (asked) {
+            send({ type: "done" });
+            return; // finally below closes the stream
+          }
+        }
+
         const run = await runAgent({
           projectId: project.id,
           prompt,
@@ -358,10 +414,20 @@ const HISTORY_MAX_CHARS_PER_MESSAGE = 4000;
  */
 function withProjectContext(
   concept: string | null,
-  history: { role: string; content: string }[],
+  history: { role: string; content: string; kind?: string | null }[],
   currentPrompt: string,
 ): string {
   const prior = history
+    // Interview cards persist as JSON — replay answered ones as a readable
+    // Q→A block and drop pending/skipped ones, so raw JSON never leaks into
+    // the agent's transcript.
+    .map((m) => {
+      if (m.kind !== "interview") return m;
+      const state = parseInterviewState(m.content);
+      const rendered = state ? renderInterviewForTranscript(state) : null;
+      return rendered ? { role: "assistant", content: rendered } : null;
+    })
+    .filter((m): m is { role: string; content: string } => m !== null)
     .filter((m) => m.role === "user" || m.role === "assistant")
     .slice(-HISTORY_MAX_MESSAGES);
   if (prior.length === 0 && !concept?.trim()) return currentPrompt;
@@ -399,4 +465,170 @@ function withProjectContext(
 
   sections.push(`## New request\n${currentPrompt}`);
   return sections.join("\n\n");
+}
+
+// --- First-prompt concept interview ------------------------------------------
+
+type InterviewInput = {
+  messageId: string;
+  skip: boolean;
+  selections: Record<string, string>;
+  paletteId: string;
+};
+
+/** Extracts and type-checks the `interview` request variant; null if absent. */
+function parseInterviewInput(body: unknown): InterviewInput | null {
+  const raw = (body as { interview?: unknown } | null)?.interview;
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.messageId !== "string" || r.messageId === "") return null;
+
+  const selections: Record<string, string> = {};
+  if (r.selections && typeof r.selections === "object") {
+    for (const [key, value] of Object.entries(
+      r.selections as Record<string, unknown>,
+    )) {
+      if (typeof value === "string") selections[key] = value;
+    }
+  }
+  return {
+    messageId: r.messageId,
+    skip: r.skip === true,
+    selections,
+    paletteId: typeof r.paletteId === "string" ? r.paletteId : "",
+  };
+}
+
+/**
+ * Validates the submitted answers against the pending interview card, persists
+ * the answered/skipped state on the SAME message row, and returns the build
+ * turn's prompt. The in-memory `history` row keeps its pending content on
+ * purpose: this turn's transcript then omits the card, so the answers appear
+ * exactly once (in "New request"); later turns re-read the row as answered.
+ */
+async function resolveInterviewTurn(
+  projectId: string,
+  history: { id: string; content: string; kind: string | null }[],
+  input: InterviewInput,
+): Promise<{ prompt: string } | { error: string; status: number }> {
+  const row = history.find(
+    (m) => m.id === input.messageId && m.kind === "interview",
+  );
+  if (!row) return { error: "interview_not_found", status: 400 };
+  const state = parseInterviewState(row.content);
+  if (!state) return { error: "interview_invalid", status: 400 };
+  if (state.status !== "pending") {
+    return { error: "interview_not_pending", status: 409 };
+  }
+
+  if (input.skip) {
+    state.status = "skipped";
+  } else {
+    if (!validateAnswers(state.spec, input.selections, input.paletteId)) {
+      return { error: "interview_invalid_answers", status: 400 };
+    }
+    state.status = "answered";
+    state.answers = {
+      selections: input.selections,
+      paletteId: input.paletteId,
+    };
+  }
+  await updateMessageContent(row.id, projectId, JSON.stringify(state));
+  return {
+    prompt: input.skip ? buildSkipPrompt() : buildAnswersPrompt(state),
+  };
+}
+
+/** Marks any still-pending interview card as skipped (user typed past it). */
+async function skipPendingInterviews(
+  projectId: string,
+  history: { id: string; content: string; kind: string | null }[],
+) {
+  for (const m of history) {
+    if (m.kind !== "interview") continue;
+    const state = parseInterviewState(m.content);
+    if (!state || state.status !== "pending") continue;
+    state.status = "skipped";
+    await updateMessageContent(m.id, projectId, JSON.stringify(state));
+  }
+}
+
+/**
+ * Generates the interview for the project's first prompt, persists it as an
+ * assistant message (kind 'interview'), bills the call, and streams it to the
+ * client. Returns false when generation failed — the caller then proceeds
+ * with a normal build turn.
+ */
+async function runInterviewPhase({
+  userId,
+  projectId,
+  message,
+  send,
+}: {
+  userId: string;
+  projectId: string;
+  message: string;
+  send: (event: unknown) => void;
+}): Promise<boolean> {
+  const attachmentNames = (await listAttachments(projectId)).map(
+    (a) => a.filename,
+  );
+  const generated = await generateInterview(message, attachmentNames);
+  if (!generated) return false;
+
+  const state = {
+    v: 1 as const,
+    status: "pending" as const,
+    spec: generated.spec,
+    answers: null,
+  };
+  const row = await addMessage(
+    projectId,
+    "assistant",
+    JSON.stringify(state),
+    undefined,
+    "interview",
+  );
+  send({ type: "interview", id: row.id, spec: generated.spec });
+
+  // Bill the generation call. Isolated like the build billing — a billing
+  // failure must not lose the interview that was already sent.
+  const { usage } = generated;
+  const usedTokens =
+    usage.inputTokens +
+    usage.outputTokens +
+    usage.cacheReadTokens +
+    usage.cacheCreationTokens;
+  if (usedTokens > 0) {
+    try {
+      const { model: configuredModel } = await modelForTask("interview");
+      const cost = await computeBilledEur(
+        generated.model,
+        usage,
+        configuredModel,
+      );
+      const newBalanceEur = await recordUsageAndDeduct({
+        userId,
+        projectId,
+        task: "interview",
+        model: generated.model,
+        provider: cost.provider,
+        usage,
+        cost,
+      });
+      send({
+        type: "usage",
+        model: generated.model,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        cacheReadTokens: usage.cacheReadTokens,
+        cacheCreationTokens: usage.cacheCreationTokens,
+        billedEur: cost.billedEur,
+        balanceEur: newBalanceEur,
+      });
+    } catch (billingError) {
+      console.error("[agent] interview billing failed", billingError);
+    }
+  }
+  return true;
 }
