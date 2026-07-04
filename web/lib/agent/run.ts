@@ -46,6 +46,15 @@ export async function runAgent({
       // The photo passages are only promised when the Pexels key is configured.
       systemPrompt: buildSystemPrompt({ stockPhotos: pexelsApiKey() !== null }),
       mcpServers: { vfs, attachments, appdb, media },
+      // Remove ALL built-in Claude Code tools (Bash, Write, Read, WebFetch,
+      // AskUserQuestion, …). `allowedTools` below does NOT restrict
+      // availability — it is only a permission auto-approve list — and with
+      // bypassPermissions every available tool is approved. Without this the
+      // model could run shell commands in the web container (env secrets!) or
+      // call the interactive AskUserQuestion, which has no UI here and leaves
+      // the user staring at a question that never renders. The MCP servers
+      // above are unaffected: the agent's world is exactly those tools.
+      tools: [],
       allowedTools: [
         ...VFS_TOOL_NAMES,
         ...ATTACHMENT_TOOL_NAMES,
