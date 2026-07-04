@@ -1,5 +1,5 @@
 import "server-only";
-import { eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { userCredits, usageEvents } from "@/lib/db/schema";
 import {
@@ -245,4 +245,29 @@ export async function recordUsageAndDeduct(args: {
 
     return Number(updated.balanceEur);
   });
+}
+
+/**
+ * A project's chat-turn costs from the ledger, oldest first. Costs are never
+ * persisted as message rows — the transcript merges these in by timestamp on
+ * load (a turn's usage is recorded right after its messages), so per-turn
+ * cost lines survive reloads without double bookkeeping. Only chat-turn tasks
+ * are included; background tasks would show as anchorless lines mid-chat.
+ */
+export async function listProjectUsage(projectId: string) {
+  return db
+    .select({
+      id: usageEvents.id,
+      task: usageEvents.task,
+      billedEur: usageEvents.billedEur,
+      createdAt: usageEvents.createdAt,
+    })
+    .from(usageEvents)
+    .where(
+      and(
+        eq(usageEvents.projectId, projectId),
+        inArray(usageEvents.task, ["build", "interview"]),
+      ),
+    )
+    .orderBy(asc(usageEvents.createdAt));
 }

@@ -10,6 +10,7 @@ import {
   Image as ImageIcon,
   Paperclip,
   Pencil,
+  Receipt,
   TriangleAlert,
   Trash2,
   Wrench,
@@ -44,6 +45,9 @@ const TOOL_ICON: Record<string, LucideIcon> = {
   list_attachments: Paperclip,
   read_attachment: Paperclip,
   embed_attachment: ImageIcon,
+  // The per-turn cost line (live from the usage SSE event; restored from the
+  // usage_event ledger on reload).
+  usage: Receipt,
 };
 
 export function ChatPanel({

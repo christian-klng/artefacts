@@ -23,6 +23,7 @@ import {
 } from "@/app/actions/projects";
 import { substituteSiteUrl, normalizeSiteOrigin } from "@/lib/site-url";
 import { CREDIT_CHANGED_EVENT } from "@/lib/credit-events";
+import { formatEur } from "@/lib/eur";
 import {
   parseInterviewState,
   type InterviewSpec,
@@ -87,10 +88,6 @@ type AgentEvent =
   | { type: "error"; message: string }
   | { type: "done" };
 
-/** Formats a EUR amount with enough precision for sub-cent per-turn costs. */
-function formatEur(n: number): string {
-  return `€${n.toFixed(n !== 0 && Math.abs(n) < 0.01 ? 4 : 2)}`;
-}
 
 /** Rough size of the tool input generated so far, for the progress rows. */
 function formatKb(chars: number): string {

@@ -9,6 +9,8 @@ import {
   getPublishedSignature,
 } from "@/lib/projects";
 import { listAttachments } from "@/lib/attachments";
+import { listProjectUsage } from "@/lib/cortecs/billing";
+import { formatEur } from "@/lib/eur";
 import { Workspace } from "@/components/workspace";
 import type { ChatMessage } from "@/components/chat-panel";
 import { signPreviewToken } from "@/lib/preview-token";
@@ -31,23 +33,46 @@ export default async function ProjectPage({
   );
   if (!project) redirect("/app");
 
-  const [clientFiles, messageRows, versionRows, attachmentRows] =
+  const [clientFiles, messageRows, versionRows, attachmentRows, usageRows] =
     await Promise.all([
       getClientFiles(project.id),
       getMessages(project.id),
       listVersions(project.id),
       listAttachments(project.id),
+      listProjectUsage(project.id),
     ]);
 
   const { files, assets } = clientFiles;
-  const messages: ChatMessage[] = messageRows.map((m) => ({
-    id: m.id,
-    role: m.role as ChatMessage["role"],
-    content: m.content,
-    tool: m.tool ?? undefined,
-    // A pending interview card re-renders interactive after a reload.
-    kind: m.kind === "interview" ? ("interview" as const) : undefined,
-  }));
+  // Costs live only in the usage_event ledger (never as message rows) — merge
+  // them into the transcript by timestamp so reloads keep the per-turn
+  // "Kosten: …" lines the live stream showed. A turn's usage is recorded
+  // right after its messages are persisted, so a strict `<` interleaves each
+  // cost line between its own turn and the next user message.
+  const messages: ChatMessage[] = [];
+  let u = 0;
+  const pushUsage = () => {
+    const row = usageRows[u++];
+    messages.push({
+      id: `usage-${row.id}`,
+      role: "tool",
+      content: `Kosten: ${formatEur(Number(row.billedEur))}`,
+      tool: "usage",
+    });
+  };
+  for (const m of messageRows) {
+    while (u < usageRows.length && usageRows[u].createdAt < m.createdAt) {
+      pushUsage();
+    }
+    messages.push({
+      id: m.id,
+      role: m.role as ChatMessage["role"],
+      content: m.content,
+      tool: m.tool ?? undefined,
+      // A pending interview card re-renders interactive after a reload.
+      kind: m.kind === "interview" ? ("interview" as const) : undefined,
+    });
+  }
+  while (u < usageRows.length) pushUsage();
   const versions = versionRows.map((v) => ({
     id: v.id,
     label: v.label,
