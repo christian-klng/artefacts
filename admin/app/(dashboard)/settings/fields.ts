@@ -90,6 +90,20 @@ export const SETTING_GROUPS: SettingGroup[] = [
         type: "number",
         help: "1.05, falls der Katalogpreis netto (ohne Cortecs' 5 %-Fee) ist.",
       },
+      {
+        key: "CACHE_READ_PRICE_RATIO",
+        label: "Cache-Read-Preisfaktor",
+        placeholder: "0.1",
+        type: "number",
+        help: "Anteil des Inputpreises für Cache-Reads (Anthropic: 0,1×). Greift nur, solange der Cortecs-Katalog keine eigenen Cache-Preise ausweist — Agent-Turns sind zu ~90 % Cache-Reads.",
+      },
+      {
+        key: "CACHE_WRITE_PRICE_RATIO",
+        label: "Cache-Write-Preisfaktor",
+        placeholder: "1.25",
+        type: "number",
+        help: "Anteil des Inputpreises für Cache-Writes (Anthropic: 1,25×). Greift nur, solange der Cortecs-Katalog keine eigenen Cache-Preise ausweist.",
+      },
     ],
   },
   {

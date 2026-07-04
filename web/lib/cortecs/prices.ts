@@ -15,6 +15,14 @@ export type ModelPrice = {
   inputPerMillion: number;
   /** EUR cost per 1,000,000 output tokens. */
   outputPerMillion: number;
+  /**
+   * EUR per 1,000,000 cache-read/-write tokens IF the catalog exposes them —
+   * currently it doesn't, so these are null and billing derives cache prices
+   * from the input price via the CACHE_*_PRICE_RATIO settings. Real catalog
+   * values take precedence automatically once Cortecs ships them.
+   */
+  cacheReadPerMillion: number | null;
+  cacheCreationPerMillion: number | null;
   currency: string;
   /** Cortecs providers that can serve the model (providers[0] is recorded). */
   providers: string[];
@@ -25,6 +33,10 @@ type CatalogEntry = {
   pricing?: {
     input_token?: number | string;
     output_token?: number | string;
+    // Speculative field names (mirroring input_token/output_token) — verify
+    // against the real payload once Cortecs exposes cache prices.
+    cache_read_token?: number | string;
+    cache_write_token?: number | string;
     currency?: string;
   };
   providers?: string[];
@@ -60,9 +72,15 @@ async function loadCatalog(): Promise<Cache> {
     if (!e?.id) continue;
     const input = toNumber(e.pricing?.input_token);
     const output = toNumber(e.pricing?.output_token);
+    const cacheRead = toNumber(e.pricing?.cache_read_token);
+    const cacheWrite = toNumber(e.pricing?.cache_write_token);
     map.set(e.id, {
       inputPerMillion: input,
       outputPerMillion: output,
+      cacheReadPerMillion:
+        Number.isFinite(cacheRead) && cacheRead >= 0 ? cacheRead : null,
+      cacheCreationPerMillion:
+        Number.isFinite(cacheWrite) && cacheWrite >= 0 ? cacheWrite : null,
       currency: e.pricing?.currency ?? "EUR",
       providers: Array.isArray(e.providers) ? e.providers : [],
     });

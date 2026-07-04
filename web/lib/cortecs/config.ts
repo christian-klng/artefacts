@@ -57,6 +57,22 @@ export function cortecsFeeMultiplier(): Promise<number> {
   return settingNumber("CORTECS_FEE_MULTIPLIER", 1.0);
 }
 
+/**
+ * Cache-token prices as a fraction of the input price, used while the Cortecs
+ * catalog exposes no cache prices of its own (real catalog values win when
+ * they appear — see lib/cortecs/prices.ts). Defaults mirror Anthropic's
+ * pricing: cache READ = 0.1× input, cache WRITE (5-min TTL) = 1.25× input.
+ * Billing cache tokens at the full input rate instead overcharged cache-heavy
+ * agent turns ~3× vs. the real Cortecs cost.
+ */
+export function cacheReadPriceRatio(): Promise<number> {
+  return settingNumber("CACHE_READ_PRICE_RATIO", 0.1);
+}
+
+export function cacheWritePriceRatio(): Promise<number> {
+  return settingNumber("CACHE_WRITE_PRICE_RATIO", 1.25);
+}
+
 // --- Referral / coupons ----------------------------------------------------
 // Defaults for a newly-activated personal referral coupon. DB/env-overridable
 // in the admin app (lib/settings.ts precedence: DB > env > default). Admin-

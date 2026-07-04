@@ -4,6 +4,8 @@ import { db } from "@/lib/db";
 import { userCredits, usageEvents } from "@/lib/db/schema";
 import {
   billingMargin,
+  cacheReadPriceRatio,
+  cacheWritePriceRatio,
   cortecsFeeMultiplier,
   freeTierGrantEur,
   type TaskKind,
@@ -36,9 +38,11 @@ export type BilledCost = {
  * token counts × the model's EUR catalog price. The margin lives in the price:
  * `billedEur = cortecsCostEur × BILLING_MARGIN`.
  *
- * v1 cache treatment is conservative — cache-read and cache-creation tokens are
- * billed at the input rate (Cortecs doesn't expose separate cache prices in the
- * catalog). Refine here if it does.
+ * Cache tokens are priced separately: real catalog cache prices when Cortecs
+ * exposes them, otherwise derived from the input price via the Anthropic
+ * ratios (read 0.1×, write 1.25× — admin-tunable). Billing them at the full
+ * input rate (the old v1 behavior) overcharged cache-heavy agent turns ~3×
+ * vs. the real Cortecs cost.
  */
 export async function computeBilledEur(
   model: string,
@@ -46,11 +50,17 @@ export async function computeBilledEur(
   fallbackModel?: string,
 ): Promise<BilledCost> {
   const price = await getModelPrice(model, fallbackModel);
+  const cacheReadPerMillion =
+    price.cacheReadPerMillion ??
+    price.inputPerMillion * (await cacheReadPriceRatio());
+  const cacheCreationPerMillion =
+    price.cacheCreationPerMillion ??
+    price.inputPerMillion * (await cacheWritePriceRatio());
 
-  const inputBillable =
-    usage.inputTokens + usage.cacheCreationTokens + usage.cacheReadTokens;
   const rawCost =
-    (inputBillable * price.inputPerMillion +
+    (usage.inputTokens * price.inputPerMillion +
+      usage.cacheCreationTokens * cacheCreationPerMillion +
+      usage.cacheReadTokens * cacheReadPerMillion +
       usage.outputTokens * price.outputPerMillion) /
     1_000_000;
 
