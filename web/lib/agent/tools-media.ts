@@ -5,6 +5,14 @@ import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { writeBinaryFile } from "@/lib/projects";
 import { searchIcons, getIcons } from "./icons";
 import {
+  getFont,
+  searchFonts,
+  loadFontFile,
+  fontFaceCss,
+  vfsFontFilename,
+  type FontCut,
+} from "./fonts";
+import {
   pexelsApiKey,
   searchPexelsPhotos,
   getPexelsPhoto,
@@ -58,9 +66,11 @@ function extensionFor(mimeType: string): string {
 /**
  * In-process MCP server giving the agent design media: two fixed offline icon
  * libraries (Lucide UI icons + Simple Icons brand logos, returned as
- * inline-ready SVG markup) and Pexels stock-photo search/download. Photos are
- * fetched SERVER-side and written into the project's VFS as binary assets —
- * the generated app itself still makes no external network requests.
+ * inline-ready SVG markup), a bundled offline webfont catalog (OFL fonts
+ * saved into the VFS as woff2 + ready @font-face CSS), and Pexels stock-photo
+ * search/download. Fonts and photos are resolved SERVER-side and written into
+ * the project's VFS as binary assets — the generated app itself still makes
+ * no external network requests.
  */
 export function buildMediaServer(
   projectId: string,
@@ -70,9 +80,11 @@ export function buildMediaServer(
     name: "media",
     version: "1.0.0",
     instructions:
-      "Icons (Lucide + brand logos) as inline SVG, and Pexels stock photos " +
-      "saved into the project as local assets. Use these instead of emoji " +
-      "icons, hand-drawn common glyphs, or external image URLs.",
+      "Icons (Lucide + brand logos) as inline SVG, real webfonts (bundled OFL " +
+      "catalog, saved as local woff2 assets), and Pexels stock photos saved " +
+      "into the project as local assets. Use these instead of emoji icons, " +
+      "hand-drawn common glyphs, system-font-only typography, or external " +
+      "font/image URLs.",
     tools: [
       tool(
         "search_icons",
@@ -124,6 +136,98 @@ export function buildMediaServer(
           const anyFound = results.some((r) => r.found);
           const text = parts.join("\n\n");
           return anyFound ? ok(text) : err(text);
+        },
+      ),
+
+      tool(
+        "search_fonts",
+        "Search the bundled offline font catalog (~29 OFL families across serif/sans/display/mono/slab/script — no Inter/Roboto). Query by name, category, or vibe (e.g. 'editorial serif', 'bauhaus geometric', 'terminal'). Empty query lists everything. Add your picks with add_font.",
+        {
+          query: z
+            .string()
+            .optional()
+            .describe(
+              "Name, category or vibe terms in English (e.g. 'luxury serif', 'mono terminal'); empty lists the full catalog",
+            ),
+          limit: z.number().int().min(1).max(30).optional(),
+        },
+        async ({ query, limit }) => {
+          const matches = searchFonts(query ?? "", limit ?? 30);
+          if (matches.length === 0) {
+            return ok(
+              `No fonts match "${query}". Try a category (serif, sans, display, mono, slab, script) or broader vibe terms — or an empty query to list everything.`,
+            );
+          }
+          const lines = matches.map((m) => {
+            const italic =
+              m.italicWeights.length > 0
+                ? `, italics ${m.italicWeights.join("/")}`
+                : "";
+            return `${m.id} — ${m.family} (${m.category}) · ${m.vibes.join(", ")} · weights ${m.weights.join("/")}${italic}`;
+          });
+          return ok(
+            `Fonts${query?.trim() ? ` matching "${query}"` : ""} (save with add_font):\n${lines.join("\n")}`,
+          );
+        },
+      ),
+
+      tool(
+        "add_font",
+        "Save cuts of a catalog font into the project as local woff2 assets and get ready-to-inline @font-face CSS (relative urls, font-display: swap). Keep it lean: 1-2 families per app, 2-4 cuts per family (e.g. [400, 700]). Paste the returned CSS into your <style> and use the given font-family stack.",
+        {
+          id: z.string().describe("Catalog id from search_fonts, e.g. 'space-grotesk'"),
+          weights: z
+            .array(z.number().int())
+            .min(1)
+            .max(4)
+            .optional()
+            .describe("Normal-style weights to save (default [400, 700])"),
+          italicWeights: z
+            .array(z.number().int())
+            .max(2)
+            .optional()
+            .describe("Italic weights to also save (only for families that have italics)"),
+        },
+        async ({ id, weights, italicWeights }) => {
+          const entry = getFont(id);
+          if (!entry) {
+            return err(
+              `Unknown font "${id}". Use search_fonts to find valid catalog ids.`,
+            );
+          }
+          const cuts: FontCut[] = [
+            ...(weights ?? [400, 700]).map((w) => ({ weight: w, italic: false })),
+            ...(italicWeights ?? []).map((w) => ({ weight: w, italic: true })),
+          ];
+          if (cuts.length > 6) {
+            return err(
+              "Too many cuts (max 6 files per family). Fewer weights keep the app light.",
+            );
+          }
+          try {
+            let totalBytes = 0;
+            for (const cut of cuts) {
+              const file = await loadFontFile(entry.id, cut); // validates the cut
+              const target = `/assets/fonts/${vfsFontFilename(entry.id, cut)}`;
+              await writeBinaryFile(projectId, target, file.base64, "font/woff2");
+              totalBytes += file.bytes;
+              onEvent({
+                type: "asset_changed",
+                path: target,
+                asset: {
+                  mimeType: "font/woff2",
+                  size: file.bytes,
+                  hash: createHash("sha256").update(file.base64).digest("hex"),
+                },
+              });
+            }
+            return ok(
+              `Saved ${entry.family} (${cuts.length} cut${cuts.length === 1 ? "" : "s"}, ${Math.round(totalBytes / 1024)} KB) under /assets/fonts/.\n` +
+                `Inline this in your <style>:\n\n${fontFaceCss(entry, cuts)}`,
+            );
+          } catch (e) {
+            return err(e instanceof Error ? e.message : String(e));
+          }
         },
       ),
 
@@ -240,6 +344,8 @@ export function buildMediaServer(
 export const MEDIA_TOOL_NAMES = [
   "mcp__media__search_icons",
   "mcp__media__get_icons",
+  "mcp__media__search_fonts",
+  "mcp__media__add_font",
   "mcp__media__search_stock_photos",
   "mcp__media__add_stock_photo",
 ];

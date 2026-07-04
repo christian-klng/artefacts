@@ -1,0 +1,263 @@
+[
+  {
+    "id": "abril-fatface",
+    "family": "Abril Fatface",
+    "category": "display",
+    "vibes": ["art-deco", "poster", "fat-face", "editorial-display", "statement"],
+    "weights": [400],
+    "italicWeights": [],
+    "fallback": "Georgia, 'Times New Roman', serif"
+  },
+  {
+    "id": "alfa-slab-one",
+    "family": "Alfa Slab One",
+    "category": "display",
+    "vibes": ["slab", "retro", "poster", "sports", "loud"],
+    "weights": [400],
+    "italicWeights": [],
+    "fallback": "Georgia, 'Times New Roman', serif"
+  },
+  {
+    "id": "amatic-sc",
+    "family": "Amatic SC",
+    "category": "script",
+    "vibes": ["hand-drawn", "chalkboard", "playful", "cafe", "casual"],
+    "weights": [400, 700],
+    "italicWeights": [],
+    "fallback": "'Comic Sans MS', cursive"
+  },
+  {
+    "id": "archivo",
+    "family": "Archivo",
+    "category": "sans",
+    "vibes": ["grotesque", "swiss", "neutral", "contemporary", "versatile"],
+    "weights": [100, 200, 300, 400, 500, 600, 700, 800, 900],
+    "italicWeights": [100, 200, 300, 400, 500, 600, 700, 800, 900],
+    "fallback": "Helvetica, Arial, sans-serif"
+  },
+  {
+    "id": "bebas-neue",
+    "family": "Bebas Neue",
+    "category": "display",
+    "vibes": ["condensed", "poster", "industrial", "sport", "loud"],
+    "weights": [400],
+    "italicWeights": [],
+    "fallback": "'Arial Narrow', Arial, sans-serif"
+  },
+  {
+    "id": "bitter",
+    "family": "Bitter",
+    "category": "slab",
+    "vibes": ["slab", "sturdy", "editorial", "technical", "warm"],
+    "weights": [100, 200, 300, 400, 500, 600, 700, 800, 900],
+    "italicWeights": [100, 200, 300, 400, 500, 600, 700, 800, 900],
+    "fallback": "Georgia, 'Times New Roman', serif"
+  },
+  {
+    "id": "bricolage-grotesque",
+    "family": "Bricolage Grotesque",
+    "category": "sans",
+    "vibes": ["quirky", "characterful", "contemporary", "editorial-sans"],
+    "weights": [200, 300, 400, 500, 600, 700, 800],
+    "italicWeights": [],
+    "fallback": "Helvetica, Arial, sans-serif"
+  },
+  {
+    "id": "cormorant-garamond",
+    "family": "Cormorant Garamond",
+    "category": "serif",
+    "vibes": ["luxury", "classic", "elegant", "fashion", "refined"],
+    "weights": [300, 400, 500, 600, 700],
+    "italicWeights": [300, 400, 500, 600, 700],
+    "fallback": "Garamond, Georgia, serif"
+  },
+  {
+    "id": "dm-serif-display",
+    "family": "DM Serif Display",
+    "category": "display",
+    "vibes": ["didone", "elegant", "high-contrast", "fashion", "editorial-display"],
+    "weights": [400],
+    "italicWeights": [400],
+    "fallback": "Georgia, 'Times New Roman', serif"
+  },
+  {
+    "id": "eb-garamond",
+    "family": "EB Garamond",
+    "category": "serif",
+    "vibes": ["bookish", "classic", "literary", "humanist", "print"],
+    "weights": [400, 500, 600, 700, 800],
+    "italicWeights": [400, 500, 600, 700, 800],
+    "fallback": "Garamond, Georgia, serif"
+  },
+  {
+    "id": "fraunces",
+    "family": "Fraunces",
+    "category": "serif",
+    "vibes": ["warm", "editorial", "retro-modern", "food", "expressive", "soft"],
+    "weights": [100, 200, 300, 400, 500, 600, 700, 800, 900],
+    "italicWeights": [100, 200, 300, 400, 500, 600, 700, 800, 900],
+    "fallback": "Georgia, 'Times New Roman', serif"
+  },
+  {
+    "id": "ibm-plex-mono",
+    "family": "IBM Plex Mono",
+    "category": "mono",
+    "vibes": ["technical", "terminal", "engineering", "precise"],
+    "weights": [100, 200, 300, 400, 500, 600, 700],
+    "italicWeights": [100, 200, 300, 400, 500, 600, 700],
+    "fallback": "'Courier New', monospace"
+  },
+  {
+    "id": "ibm-plex-sans",
+    "family": "IBM Plex Sans",
+    "category": "sans",
+    "vibes": ["technical", "corporate", "neutral", "engineering", "clean"],
+    "weights": [100, 200, 300, 400, 500, 600, 700],
+    "italicWeights": [100, 200, 300, 400, 500, 600, 700],
+    "fallback": "Helvetica, Arial, sans-serif"
+  },
+  {
+    "id": "jetbrains-mono",
+    "family": "JetBrains Mono",
+    "category": "mono",
+    "vibes": ["code", "terminal", "developer", "modern-mono"],
+    "weights": [100, 200, 300, 400, 500, 600, 700, 800],
+    "italicWeights": [100, 200, 300, 400, 500, 600, 700, 800],
+    "fallback": "'Courier New', monospace"
+  },
+  {
+    "id": "josefin-sans",
+    "family": "Josefin Sans",
+    "category": "sans",
+    "vibes": ["art-deco", "vintage", "geometric", "elegant", "1920s"],
+    "weights": [100, 200, 300, 400, 500, 600, 700],
+    "italicWeights": [100, 200, 300, 400, 500, 600, 700],
+    "fallback": "Futura, 'Century Gothic', sans-serif"
+  },
+  {
+    "id": "jost",
+    "family": "Jost",
+    "category": "sans",
+    "vibes": ["bauhaus", "geometric", "modernist", "futura-like", "1920s"],
+    "weights": [100, 200, 300, 400, 500, 600, 700, 800, 900],
+    "italicWeights": [100, 200, 300, 400, 500, 600, 700, 800, 900],
+    "fallback": "Futura, 'Century Gothic', sans-serif"
+  },
+  {
+    "id": "lexend",
+    "family": "Lexend",
+    "category": "sans",
+    "vibes": ["friendly", "accessible", "clean", "rounded", "approachable"],
+    "weights": [100, 200, 300, 400, 500, 600, 700, 800, 900],
+    "italicWeights": [],
+    "fallback": "Verdana, Arial, sans-serif"
+  },
+  {
+    "id": "libre-caslon-text",
+    "family": "Libre Caslon Text",
+    "category": "serif",
+    "vibes": ["bookish", "classic", "editorial", "print", "traditional"],
+    "weights": [400, 700],
+    "italicWeights": [400],
+    "fallback": "Georgia, 'Times New Roman', serif"
+  },
+  {
+    "id": "lora",
+    "family": "Lora",
+    "category": "serif",
+    "vibes": ["editorial", "calm", "literary", "warm", "contemporary-serif"],
+    "weights": [400, 500, 600, 700],
+    "italicWeights": [400, 500, 600, 700],
+    "fallback": "Georgia, 'Times New Roman', serif"
+  },
+  {
+    "id": "outfit",
+    "family": "Outfit",
+    "category": "sans",
+    "vibes": ["geometric", "contemporary", "product", "clean", "minimal"],
+    "weights": [100, 200, 300, 400, 500, 600, 700, 800, 900],
+    "italicWeights": [],
+    "fallback": "Helvetica, Arial, sans-serif"
+  },
+  {
+    "id": "pacifico",
+    "family": "Pacifico",
+    "category": "script",
+    "vibes": ["retro", "script", "1950s", "diner", "surf", "casual"],
+    "weights": [400],
+    "italicWeights": [],
+    "fallback": "'Brush Script MT', cursive"
+  },
+  {
+    "id": "playfair-display",
+    "family": "Playfair Display",
+    "category": "serif",
+    "vibes": ["editorial", "magazine", "luxury", "high-contrast", "classic"],
+    "weights": [400, 500, 600, 700, 800, 900],
+    "italicWeights": [400, 500, 600, 700, 800, 900],
+    "fallback": "Georgia, 'Times New Roman', serif"
+  },
+  {
+    "id": "sora",
+    "family": "Sora",
+    "category": "sans",
+    "vibes": ["tech", "precise", "contemporary", "crypto", "sharp"],
+    "weights": [100, 200, 300, 400, 500, 600, 700, 800],
+    "italicWeights": [],
+    "fallback": "Helvetica, Arial, sans-serif"
+  },
+  {
+    "id": "space-grotesk",
+    "family": "Space Grotesk",
+    "category": "sans",
+    "vibes": ["tech", "space", "quirky", "contemporary", "grotesque"],
+    "weights": [300, 400, 500, 600, 700],
+    "italicWeights": [],
+    "fallback": "Helvetica, Arial, sans-serif"
+  },
+  {
+    "id": "space-mono",
+    "family": "Space Mono",
+    "category": "mono",
+    "vibes": ["retro-tech", "terminal", "quirky", "editorial-mono"],
+    "weights": [400, 700],
+    "italicWeights": [400, 700],
+    "fallback": "'Courier New', monospace"
+  },
+  {
+    "id": "special-elite",
+    "family": "Special Elite",
+    "category": "mono",
+    "vibes": ["typewriter", "vintage", "noir", "documentary", "analog"],
+    "weights": [400],
+    "italicWeights": [],
+    "fallback": "'Courier New', monospace"
+  },
+  {
+    "id": "syne",
+    "family": "Syne",
+    "category": "display",
+    "vibes": ["avant-garde", "art", "futuristic", "editorial-display", "bold"],
+    "weights": [400, 500, 600, 700, 800],
+    "italicWeights": [],
+    "fallback": "Helvetica, Arial, sans-serif"
+  },
+  {
+    "id": "vt323",
+    "family": "VT323",
+    "category": "mono",
+    "vibes": ["pixel", "terminal", "y2k", "game", "crt", "retro-computer"],
+    "weights": [400],
+    "italicWeights": [],
+    "fallback": "'Courier New', monospace"
+  },
+  {
+    "id": "work-sans",
+    "family": "Work Sans",
+    "category": "sans",
+    "vibes": ["neutral", "friendly", "contemporary", "versatile", "workhorse"],
+    "weights": [100, 200, 300, 400, 500, 600, 700, 800, 900],
+    "italicWeights": [100, 200, 300, 400, 500, 600, 700, 800, 900],
+    "fallback": "Helvetica, Arial, sans-serif"
+  }
+]

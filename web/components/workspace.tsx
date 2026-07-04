@@ -70,7 +70,7 @@ type AgentEvent =
       assets: Record<string, AssetMeta>;
     }
   | { type: "version"; id: string; label: string | null; createdAt: string }
-  // The first-prompt concept interview card (3 questions + palette choice).
+  // The first-prompt concept interview card (3 questions + style choice).
   | { type: "interview"; id: string; spec: InterviewSpec }
   | { type: "attachments_changed" }
   | { type: "database_changed"; tables: string[] }
@@ -290,7 +290,7 @@ export function Workspace({
           appendMessage(
             "assistant",
             JSON.stringify({
-              v: 1,
+              v: 2,
               status: "pending",
               spec: event.spec,
               answers: null,
@@ -567,11 +567,19 @@ export function Workspace({
           if (m.id !== messageId || m.kind !== "interview") return m;
           const state = parseInterviewState(m.content);
           if (!state || state.status !== "pending") return m;
-          const next: InterviewState =
-            "skip" in submission
-              ? { ...state, status: "skipped" }
-              : { ...state, status: "answered", answers: submission };
-          return { ...m, content: JSON.stringify(next) };
+          // Version-aware: v2 answers carry a styleId, legacy v1 a paletteId.
+          let next: InterviewState | null = null;
+          if ("skip" in submission) {
+            next =
+              state.v === 1
+                ? { ...state, status: "skipped" }
+                : { ...state, status: "skipped" };
+          } else if (state.v === 1 && "paletteId" in submission) {
+            next = { ...state, status: "answered", answers: submission };
+          } else if (state.v === 2 && "styleId" in submission) {
+            next = { ...state, status: "answered", answers: submission };
+          }
+          return next ? { ...m, content: JSON.stringify(next) } : m;
         }),
       );
       await streamAgentRequest({

@@ -15,7 +15,13 @@ const nextConfig: NextConfig = {
     "/api/agent": [
       "./node_modules/@anthropic-ai/claude-agent-sdk/**/*",
       "./node_modules/@anthropic-ai/claude-agent-sdk-*/**/*",
+      // The font catalog's woff2 files are read via fs at runtime (add_font
+      // tool) — unlike the statically imported icon packages they are NOT
+      // auto-traced, and missing them only breaks in the Docker standalone.
+      "./node_modules/@fontsource/**/*",
     ],
+    // The interview card's font-specimen previews read the same files.
+    "/api/fonts/**": ["./node_modules/@fontsource/**/*"],
     // Attachment text extraction needs the full pdf-parse/pdfjs/mammoth trees in
     // the standalone output (external packages aren't bundled, only traced).
     "/api/attachments": [

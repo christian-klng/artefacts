@@ -4,17 +4,23 @@ import { useMemo, useState } from "react";
 import {
   parseInterviewState,
   resolvedAnswers,
-  type InterviewPalette,
+  type InterviewSpec,
+  type InterviewSpecV1,
   type InterviewSubmission,
+  type StyleDirection,
 } from "@/lib/interview";
+import fontCatalog from "@/lib/agent/font-catalog.json";
 
 /**
  * The first-prompt concept interview card: 3 single-select questions as pill
- * buttons plus the color-scheme question as clickable palettes. Clicking a
- * palette (enabled once all questions are answered) CONFIRMS the interview and
- * starts the build — there is no separate submit button. Once answered or
- * skipped (content flips to that status, optimistically or from the DB) the
- * card renders as a static summary.
+ * buttons plus the design-direction question as clickable style tiles (v2 —
+ * name, vibe, a real font specimen served by /api/fonts, shape demo, palette
+ * swatches). Legacy v1 rows (palette interviews from before the style-world
+ * upgrade) keep rendering with their palette grid. Clicking a tile/palette
+ * (enabled once all questions are answered) CONFIRMS the interview and starts
+ * the build — there is no separate submit button. Once answered or skipped
+ * (content flips to that status, optimistically or from the DB) the card
+ * renders as a static summary.
  */
 export function InterviewCard({
   messageId,
@@ -49,9 +55,7 @@ export function InterviewCard({
   }
 
   if (state.status === "answered") {
-    const resolved = state.answers
-      ? resolvedAnswers(spec, state.answers)
-      : null;
+    const resolved = resolvedAnswers(state);
     if (!resolved) return null;
     return (
       <div className="max-w-[95%] space-y-1.5 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 text-sm dark:border-neutral-800 dark:bg-neutral-900">
@@ -68,9 +72,17 @@ export function InterviewCard({
         ))}
         {resolved.palette && (
           <div className="flex items-center gap-2 pt-1">
-            <PaletteSwatches palette={resolved.palette} className="h-4 w-24" />
+            <ColorSwatches colors={resolved.palette.colors} className="h-4 w-24" />
             <span className="text-xs text-neutral-500">
               {resolved.palette.name}
+            </span>
+          </div>
+        )}
+        {resolved.style && (
+          <div className="flex items-center gap-2 pt-1">
+            <ColorSwatches colors={resolved.style.palette} className="h-4 w-24" />
+            <span className="text-xs text-neutral-500">
+              {resolved.style.name} — {resolved.style.vibe}
             </span>
           </div>
         )}
@@ -115,33 +127,27 @@ export function InterviewCard({
         </div>
       ))}
 
-      <div className="space-y-1.5">
-        <p className="font-medium">{spec.paletteQuestion}</p>
-        <p className="text-xs text-neutral-500">
-          {allAnswered
-            ? "Klick auf eine Palette bestätigt deine Auswahl und startet den Bau."
-            : "Beantworte zuerst die drei Fragen, dann wähle hier dein Farbschema."}
-        </p>
-        <div className="grid grid-cols-2 gap-2">
-          {spec.palettes.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              disabled={locked || !allAnswered}
-              onClick={() => {
-                setSubmitted(true);
-                onSubmit(messageId, { selections, paletteId: p.id });
-              }}
-              className="rounded-xl border border-neutral-300 p-2 text-left transition enabled:hover:border-neutral-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-700 dark:enabled:hover:border-white"
-            >
-              <PaletteSwatches palette={p} className="h-6" />
-              <span className="mt-1.5 block truncate text-xs text-neutral-600 dark:text-neutral-400">
-                {p.name}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
+      {state.v === 1 ? (
+        <PaletteChoice
+          spec={state.spec}
+          allAnswered={allAnswered}
+          locked={locked}
+          onPick={(paletteId) => {
+            setSubmitted(true);
+            onSubmit(messageId, { selections, paletteId });
+          }}
+        />
+      ) : (
+        <StyleChoice
+          spec={state.spec}
+          allAnswered={allAnswered}
+          locked={locked}
+          onPick={(styleId) => {
+            setSubmitted(true);
+            onSubmit(messageId, { selections, styleId });
+          }}
+        />
+      )}
 
       <button
         type="button"
@@ -158,17 +164,198 @@ export function InterviewCard({
   );
 }
 
-/** A palette's colors as one rounded swatch strip. */
-function PaletteSwatches({
-  palette,
+// --- v1 (legacy): palette grid --------------------------------------------------
+
+function PaletteChoice({
+  spec,
+  allAnswered,
+  locked,
+  onPick,
+}: {
+  spec: InterviewSpecV1;
+  allAnswered: boolean;
+  locked: boolean;
+  onPick: (paletteId: string) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <p className="font-medium">{spec.paletteQuestion}</p>
+      <p className="text-xs text-neutral-500">
+        {allAnswered
+          ? "Klick auf eine Palette bestätigt deine Auswahl und startet den Bau."
+          : "Beantworte zuerst die drei Fragen, dann wähle hier dein Farbschema."}
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        {spec.palettes.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            disabled={locked || !allAnswered}
+            onClick={() => onPick(p.id)}
+            className="rounded-xl border border-neutral-300 p-2 text-left transition enabled:hover:border-neutral-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-700 dark:enabled:hover:border-white"
+          >
+            <ColorSwatches colors={p.colors} className="h-6" />
+            <span className="mt-1.5 block truncate text-xs text-neutral-600 dark:text-neutral-400">
+              {p.name}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// --- v2: style-direction tiles ---------------------------------------------------
+
+type CatalogFont = {
+  id: string;
+  family: string;
+  weights: number[];
+  fallback: string;
+};
+
+const CATALOG = fontCatalog as CatalogFont[];
+
+function fontMeta(id: string): CatalogFont & { previewWeight: number } {
+  const font = CATALOG.find((f) => f.id === id);
+  if (!font) {
+    return { id, family: "", weights: [], fallback: "serif", previewWeight: 700 };
+  }
+  // Heaviest cut up to 700 reads best at specimen size (some display faces
+  // ship only 400).
+  const previewWeight =
+    [...font.weights].filter((w) => w <= 700).pop() ?? font.weights[0] ?? 400;
+  return { ...font, previewWeight };
+}
+
+function StyleChoice({
+  spec,
+  allAnswered,
+  locked,
+  onPick,
+}: {
+  spec: InterviewSpec;
+  allAnswered: boolean;
+  locked: boolean;
+  onPick: (styleId: string) => void;
+}) {
+  // Real specimens: one @font-face per distinct heading font, served by the
+  // public catalog route. ~15 KB each, cached immutable; the catalog fallback
+  // stack shows until (or if never) loaded.
+  const faces = useMemo(() => {
+    const ids = [...new Set(spec.styles.map((s) => s.headingFontId))];
+    return ids
+      .map((id) => {
+        const meta = fontMeta(id);
+        if (!meta.family) return "";
+        return (
+          `@font-face { font-family: '${meta.family}'; ` +
+          `src: url('/api/fonts/${meta.id}/${meta.previewWeight}.woff2') format('woff2'); ` +
+          `font-weight: ${meta.previewWeight}; font-style: normal; font-display: swap; }`
+        );
+      })
+      .filter(Boolean)
+      .join("\n");
+  }, [spec.styles]);
+
+  return (
+    <div className="space-y-1.5">
+      {faces && <style>{faces}</style>}
+      <p className="font-medium">{spec.styleQuestion}</p>
+      <p className="text-xs text-neutral-500">
+        {allAnswered
+          ? "Klick auf eine Stilrichtung bestätigt deine Auswahl und startet den Bau."
+          : "Beantworte zuerst die drei Fragen, dann wähle hier deine Stilrichtung."}
+      </p>
+      <div className="grid gap-2 sm:grid-cols-3">
+        {spec.styles.map((s) => (
+          <StyleTile
+            key={s.id}
+            style={s}
+            disabled={locked || !allAnswered}
+            onPick={() => onPick(s.id)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StyleTile({
+  style,
+  disabled,
+  onPick,
+}: {
+  style: StyleDirection;
+  disabled: boolean;
+  onPick: () => void;
+}) {
+  const heading = fontMeta(style.headingFontId);
+  const [bg, surface, primary, accent, text] = style.palette;
+  const radius = style.mutations.radius.split(" ")[0] || "0";
+
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onPick}
+      className="group rounded-xl border border-neutral-300 p-2 text-left transition enabled:hover:border-neutral-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-700 dark:enabled:hover:border-white"
+    >
+      {/* Specimen in the direction's own world: its colors, its heading font. */}
+      <div
+        className="flex h-20 items-center justify-between overflow-hidden rounded-lg px-3"
+        style={{ backgroundColor: bg }}
+        aria-hidden
+      >
+        <span
+          className="text-4xl leading-none"
+          style={{
+            color: text,
+            fontFamily: heading.family
+              ? `'${heading.family}', ${heading.fallback}`
+              : "serif",
+            fontWeight: heading.previewWeight,
+          }}
+        >
+          Ag
+        </span>
+        <span className="flex flex-col items-end gap-1">
+          {/* Shape demo: the sampled radius on this world's primary color. */}
+          <span
+            className="block h-6 w-12"
+            style={{ backgroundColor: primary, borderRadius: radius }}
+          />
+          <span
+            className="block h-2.5 w-8"
+            style={{ backgroundColor: accent, borderRadius: radius }}
+          />
+        </span>
+      </div>
+      <span className="mt-1.5 block truncate text-xs font-medium text-neutral-800 dark:text-neutral-200">
+        {style.name}
+      </span>
+      <span className="block truncate text-xs text-neutral-500" title={style.vibe}>
+        {style.vibe}
+      </span>
+      <ColorSwatches
+        colors={[bg, surface, primary, accent, text]}
+        className="mt-1.5 h-3"
+      />
+    </button>
+  );
+}
+
+/** A color list as one rounded swatch strip. */
+function ColorSwatches({
+  colors,
   className,
 }: {
-  palette: InterviewPalette;
+  colors: string[];
   className?: string;
 }) {
   return (
     <span className={`flex overflow-hidden rounded-md ${className ?? ""}`}>
-      {palette.colors.map((color, i) => (
+      {colors.map((color, i) => (
         <span
           key={`${color}-${i}`}
           className="flex-1"

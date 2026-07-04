@@ -7,9 +7,12 @@ import {
   getClientFiles,
   createVersion,
   readFile,
+  writeFile,
   updateMessageContent,
 } from "@/lib/projects";
-import { CONCEPT_PATH, isInternalVfsPath } from "@/lib/concept";
+import { CONCEPT_PATH, DESIGN_PATH, isInternalVfsPath } from "@/lib/concept";
+import { getWorld, sampleWorldCandidates } from "@/lib/design-worlds";
+import { composeDesignMd, composeFallbackDesignMd } from "@/lib/agent/design";
 import { listAttachments } from "@/lib/attachments";
 import { runAgent } from "@/lib/agent/run";
 import { modelForTask } from "@/lib/cortecs/config";
@@ -20,7 +23,11 @@ import {
   recordUsageAndDeduct,
   type ModelTokens,
 } from "@/lib/cortecs/billing";
-import { parseInterviewState, validateAnswers } from "@/lib/interview";
+import {
+  parseInterviewState,
+  validateAnswers,
+  validateAnswersV1,
+} from "@/lib/interview";
 import {
   buildAnswersPrompt,
   buildSkipPrompt,
@@ -107,11 +114,6 @@ export async function POST(request: Request) {
     // just attached this turn for extra emphasis.
     turnPrompt = await withAttachmentContext(project.id, message, body);
   }
-  // Each agent turn is a fresh SDK query() with no memory of prior turns, so we
-  // reconstruct context from the persisted concept + chat history and prepend it.
-  // This is what lets the agent iterate on the existing app instead of rebuilding.
-  const prompt = withProjectContext(concept, history, turnPrompt);
-
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -183,7 +185,30 @@ export async function POST(request: Request) {
             send({ type: "done" });
             return; // finally below closes the stream
           }
+          // Interview generation failed → normal build, but still with a
+          // deliberate design direction: sample ONE world and write its DNA
+          // (the prompt below is assembled after this, so it's included).
+          try {
+            const [candidate] = sampleWorldCandidates(1);
+            await writeFile(
+              project.id,
+              DESIGN_PATH,
+              composeFallbackDesignMd(candidate.world, candidate.mutations),
+            );
+          } catch (designError) {
+            // Never let the DNA fallback break a user's first build.
+            console.error("[agent] fallback design DNA failed", designError);
+          }
         }
+
+        // Each agent turn is a fresh SDK query() with no memory of prior
+        // turns, so we reconstruct context from the persisted concept, the
+        // design DNA and the chat history and prepend it. Assembled HERE —
+        // after the interview handling — so a /DESIGN.md that this very
+        // request just wrote (interview answered/skipped, or the fallback
+        // below) is already part of the prompt.
+        const design = await readFile(project.id, DESIGN_PATH);
+        const prompt = withProjectContext(concept, design, history, turnPrompt);
 
         const run = await runAgent({
           projectId: project.id,
@@ -414,6 +439,7 @@ const HISTORY_MAX_CHARS_PER_MESSAGE = 4000;
  */
 function withProjectContext(
   concept: string | null,
+  design: string | null,
   history: { role: string; content: string; kind?: string | null }[],
   currentPrompt: string,
 ): string {
@@ -430,7 +456,9 @@ function withProjectContext(
     .filter((m): m is { role: string; content: string } => m !== null)
     .filter((m) => m.role === "user" || m.role === "assistant")
     .slice(-HISTORY_MAX_MESSAGES);
-  if (prior.length === 0 && !concept?.trim()) return currentPrompt;
+  if (prior.length === 0 && !concept?.trim() && !design?.trim()) {
+    return currentPrompt;
+  }
 
   const sections: string[] = [];
 
@@ -440,6 +468,16 @@ function withProjectContext(
         `These are the established decisions for this project. Honor them, and ` +
         `keep this file (${CONCEPT_PATH}) up to date as decisions evolve.\n\n` +
         concept.trim(),
+    );
+  }
+
+  if (design?.trim()) {
+    sections.push(
+      `## Design DNA (${DESIGN_PATH} — binding)\n` +
+        `This project's deliberate visual identity. Every styling decision in ` +
+        `this turn must stay inside it, including its VERBOTEN list; change it ` +
+        `only on an explicit redesign request.\n\n` +
+        design.trim(),
     );
   }
 
@@ -473,6 +511,8 @@ type InterviewInput = {
   messageId: string;
   skip: boolean;
   selections: Record<string, string>;
+  /** v2 answers pick a style; v1 (legacy pending rows) pick a palette. */
+  styleId: string;
   paletteId: string;
 };
 
@@ -495,16 +535,20 @@ function parseInterviewInput(body: unknown): InterviewInput | null {
     messageId: r.messageId,
     skip: r.skip === true,
     selections,
+    styleId: typeof r.styleId === "string" ? r.styleId : "",
     paletteId: typeof r.paletteId === "string" ? r.paletteId : "",
   };
 }
 
 /**
  * Validates the submitted answers against the pending interview card, persists
- * the answered/skipped state on the SAME message row, and returns the build
- * turn's prompt. The in-memory `history` row keeps its pending content on
- * purpose: this turn's transcript then omits the card, so the answers appear
- * exactly once (in "New request"); later turns re-read the row as answered.
+ * the answered/skipped state on the SAME message row, writes the chosen (or,
+ * on skip, a system-picked) style's design DNA to /DESIGN.md, and returns the
+ * build turn's prompt. The in-memory `history` row keeps its pending content
+ * on purpose: this turn's transcript then omits the card, so the answers
+ * appear exactly once (in "New request"); later turns re-read the row as
+ * answered. Legacy v1 rows (palette interviews from before the style-world
+ * upgrade) keep their original palette flow and never touch /DESIGN.md.
  */
 async function resolveInterviewTurn(
   projectId: string,
@@ -523,8 +567,8 @@ async function resolveInterviewTurn(
 
   if (input.skip) {
     state.status = "skipped";
-  } else {
-    if (!validateAnswers(state.spec, input.selections, input.paletteId)) {
+  } else if (state.v === 1) {
+    if (!validateAnswersV1(state.spec, input.selections, input.paletteId)) {
       return { error: "interview_invalid_answers", status: 400 };
     }
     state.status = "answered";
@@ -532,10 +576,42 @@ async function resolveInterviewTurn(
       selections: input.selections,
       paletteId: input.paletteId,
     };
+  } else {
+    if (!validateAnswers(state.spec, input.selections, input.styleId)) {
+      return { error: "interview_invalid_answers", status: 400 };
+    }
+    state.status = "answered";
+    state.answers = {
+      selections: input.selections,
+      styleId: input.styleId,
+    };
   }
   await updateMessageContent(row.id, projectId, JSON.stringify(state));
+
+  // Persist the design DNA before the build turn (the prompt is assembled
+  // after this, so the fresh /DESIGN.md is already injected). On skip the
+  // server picks one of the generated, project-fitted directions — skipping
+  // means "no preference", not "give me the generic AI look".
+  let designWritten = false;
+  if (state.v === 2) {
+    const style = input.skip
+      ? state.spec.styles[Math.floor(Math.random() * state.spec.styles.length)]
+      : (state.spec.styles.find((s) => s.id === input.styleId) ?? null);
+    const world = style ? getWorld(style.worldId) : null;
+    if (style && world) {
+      await writeFile(
+        projectId,
+        DESIGN_PATH,
+        composeDesignMd(world, style, { systemChosen: input.skip }),
+      );
+      designWritten = true;
+    }
+  }
+
   return {
-    prompt: input.skip ? buildSkipPrompt() : buildAnswersPrompt(state),
+    prompt: input.skip
+      ? buildSkipPrompt(designWritten)
+      : buildAnswersPrompt(state),
   };
 }
 
@@ -573,11 +649,14 @@ async function runInterviewPhase({
   const attachmentNames = (await listAttachments(projectId)).map(
     (a) => a.filename,
   );
-  const generated = await generateInterview(message, attachmentNames);
+  // The dice roll: which style worlds (and which in-world variation) this
+  // project gets offered at all. Real server entropy — see lib/design-worlds.
+  const candidates = sampleWorldCandidates(6);
+  const generated = await generateInterview(message, attachmentNames, candidates);
   if (!generated) return false;
 
   const state = {
-    v: 1 as const,
+    v: 2 as const,
     status: "pending" as const,
     spec: generated.spec,
     answers: null,
