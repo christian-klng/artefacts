@@ -35,6 +35,13 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
+# curl: used by the daily-backup Coolify Scheduled Task to POST /api/cron/backup
+# from inside this container (node:24-slim ships neither curl nor wget). Runs as
+# root here, before dropping to the `node` user below.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends curl \
+  && rm -rf /var/lib/apt/lists/*
+
 # The official node image already ships a non-root `node` user (uid 1000).
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=node:node /app/.next/standalone ./
