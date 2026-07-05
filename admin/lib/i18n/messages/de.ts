@@ -157,6 +157,11 @@ const de = {
         description:
           "Standardwerte für neu aktivierte Referral-Codes. Ändert nur künftige Codes — bereits aktivierte behalten ihre gespeicherten Beträge.",
       },
+      stripe: {
+        title: "Stripe (Zahlungen)",
+        description:
+          "Statische Stripe-Payment-Links: 5€/Monat Hosting-Abo pro App + Top-Ups. Die Links werden im Stripe-Dashboard erstellt und hier eingetragen; leer = der jeweilige Button ist ausgeblendet. Der Secret-Key und das Webhook-Secret bleiben aus Sicherheitsgründen in der Server-Umgebung.",
+      },
       backups: {
         title: "Backups",
         description:
@@ -219,6 +224,17 @@ const de = {
       REFERRAL_WINDOW_DAYS: {
         label: "Abo-Frist (Tage)",
         help: "Zeitfenster, in dem der Eingeladene ein Abo abschließen muss, damit der Werber-Bonus gilt.",
+      },
+      STRIPE_SUBSCRIPTION_LINK: {
+        label: "Abo Payment-Link",
+        help: "Stripe-Payment-Link für das 5€/Monat Hosting-Abo (pro App). Erfolgs-URL im Dashboard auf die App zeigen lassen.",
+      },
+      STRIPE_TOPUP_LINK_5: { label: "Top-Up-Link 5 €", help: "" },
+      STRIPE_TOPUP_LINK_10: { label: "Top-Up-Link 10 €", help: "" },
+      STRIPE_TOPUP_LINK_20: { label: "Top-Up-Link 20 €", help: "" },
+      SUBSCRIPTION_MONTHLY_CREDIT_EUR: {
+        label: "Monats-Guthaben pro Abo (EUR)",
+        help: "Guthaben, das jedes aktive Abo pro Monat gutschreibt. Verfällt bei Nichtnutzung.",
       },
       BACKUP_ENABLED: { label: "Automatische Backups", help: "" },
       BACKUP_RETENTION_DAYS: {

@@ -157,6 +157,11 @@ const en: Messages = {
         description:
           "Defaults for newly activated referral codes. Only affects future codes — already-activated ones keep their stored amounts.",
       },
+      stripe: {
+        title: "Stripe (payments)",
+        description:
+          "Static Stripe Payment Links: a 5€/month per-app hosting subscription + top-ups. Create the links in the Stripe dashboard and paste them here; blank = the corresponding button is hidden. The secret key and webhook secret stay in the server environment for security.",
+      },
       backups: {
         title: "Backups",
         description:
@@ -219,6 +224,17 @@ const en: Messages = {
       REFERRAL_WINDOW_DAYS: {
         label: "Subscription window (days)",
         help: "The window within which the invitee must subscribe for the referrer bonus to apply.",
+      },
+      STRIPE_SUBSCRIPTION_LINK: {
+        label: "Subscription Payment Link",
+        help: "Stripe Payment Link for the 5€/month hosting subscription (per app). Point its success URL at the app in the dashboard.",
+      },
+      STRIPE_TOPUP_LINK_5: { label: "Top-up link 5 €", help: "" },
+      STRIPE_TOPUP_LINK_10: { label: "Top-up link 10 €", help: "" },
+      STRIPE_TOPUP_LINK_20: { label: "Top-up link 20 €", help: "" },
+      SUBSCRIPTION_MONTHLY_CREDIT_EUR: {
+        label: "Monthly credit per subscription (EUR)",
+        help: "Credit each active subscription grants per month. Expires if unused.",
       },
       BACKUP_ENABLED: { label: "Automatic backups", help: "" },
       BACKUP_RETENTION_DAYS: {

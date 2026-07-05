@@ -20,22 +20,31 @@ import type { AdapterAccountType } from "next-auth/adapters";
 // a migration churn.
 // ---------------------------------------------------------------------------
 
-export const users = pgTable("user", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  name: text("name"),
-  email: text("email").notNull().unique(),
-  emailVerified: timestamp("emailVerified", { mode: "date" }),
-  image: text("image"),
-  // Credentials provider: bcrypt hash. Null for OAuth-only users.
-  passwordHash: text("passwordHash"),
-  // UI language ('de' | 'en'). NULLABLE and NO default on purpose: NULL means
-  // "never chosen" → keep auto-detecting (cookie/Accept-Language); a value is an
-  // explicit settings choice that then follows the user across devices and is
-  // used to localise their transactional emails. Plain nullable text column →
-  // safe for drizzle-kit push --force in the non-TTY migrate container.
-  locale: text("locale"),
-  createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
-});
+export const users = pgTable(
+  "user",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name"),
+    email: text("email").notNull().unique(),
+    emailVerified: timestamp("emailVerified", { mode: "date" }),
+    image: text("image"),
+    // Credentials provider: bcrypt hash. Null for OAuth-only users.
+    passwordHash: text("passwordHash"),
+    // UI language ('de' | 'en'). NULLABLE and NO default on purpose: NULL means
+    // "never chosen" → keep auto-detecting (cookie/Accept-Language); a value is an
+    // explicit settings choice that then follows the user across devices and is
+    // used to localise their transactional emails. Plain nullable text column →
+    // safe for drizzle-kit push --force in the non-TTY migrate container.
+    locale: text("locale"),
+    // Stripe customer id (cus_…), set on the user's first successful checkout.
+    // Needed to open the billing portal (cancel/payment method). Nullable; the
+    // unique INDEX (not .unique()) allows the many NULLs of not-yet-paying users
+    // and is migrate-safe on this populated table.
+    stripeCustomerId: text("stripe_customer_id"),
+    createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+  },
+  (u) => [uniqueIndex("user_stripe_customer_idx").on(u.stripeCustomerId)],
+);
 
 export const accounts = pgTable(
   "account",
@@ -150,6 +159,13 @@ export const projects = pgTable(
     // Plain default column (no unique) → safe for the non-TTY migrate push.
     // Prepared for a future paid-plan toggle; no UI flips it yet.
     badgeHidden: boolean("badge_hidden").notNull().default(false),
+    // --- Hosting subscription (Stripe) ---
+    // True while this app has an ACTIVE 5€/month hosting subscription. Set by the
+    // Stripe webhook (see lib/stripe/). Denormalised from the `subscription` table
+    // for cheap reads; it gates FUTURE premium features (custom domain, more
+    // storage/traffic) — nothing in the serve path consumes it yet, because the
+    // free <slug>.apps.<APPS_DOMAIN> subdomain always stays online.
+    hostingActive: boolean("hosting_active").notNull().default(false),
     createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
   },
@@ -488,10 +504,21 @@ export const couponRedemptions = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     // Snapshot of the coupon kind — drives the "one referral per user" rule.
     couponKind: text("coupon_kind").notNull(),
+    // The redeemer's welcome bonus AMOUNT. For admin coupons it's granted at
+    // redemption (status 'granted'); for referral coupons it's DEFERRED until the
+    // redeemer subscribes (status 'pending' → settled by settleReferralRewards).
     recipientCreditedEur: numeric("recipient_credited_eur", {
       precision: 12,
       scale: 6,
     }).notNull(),
+    // "pending" | "granted" | "expired". Default 'granted' so pre-existing rows
+    // (all credited immediately) backfill correctly + no truncate prompt on push.
+    recipientRewardStatus: text("recipient_reward_status")
+      .notNull()
+      .default("granted"),
+    recipientRewardGrantedAt: timestamp("recipient_reward_granted_at", {
+      mode: "date",
+    }),
     // Referrer snapshot + the (pending) reward.
     ownerId: uuid("owner_id").references(() => users.id, {
       onDelete: "set null",
@@ -529,3 +556,99 @@ export const couponRedemptions = pgTable(
     index("coupon_redemption_owner_idx").on(r.ownerId),
   ],
 );
+
+// ---------------------------------------------------------------------------
+// Stripe billing (Payment Links): per-app hosting subscriptions + credit top-ups.
+// Payment happens on static Stripe Payment Links; the webhook (POST
+// /api/stripe/webhook) writes these rows. Secrets (STRIPE_SECRET_KEY /
+// STRIPE_WEBHOOK_SECRET) are env-only; the Payment Link URLs are non-secret
+// app_settings. All new tables → uniqueIndex (not .unique()), migrate-safe.
+// See web/lib/stripe/*.
+// ---------------------------------------------------------------------------
+
+// One row per Stripe subscription = one published app's 5€/month hosting plan
+// (per-app). An active subscription unlocks that app's future premium features
+// AND grants its owner 5€/month of expiring builder credit (see creditGrants).
+// The free <slug>.apps.<APPS_DOMAIN> subdomain stays online regardless — there
+// is no serving gate.
+export const subscriptions = pgTable(
+  "subscription",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // The hosted app. Nullable + set null: survives project deletion and the
+    // "unlinked" case (a shared Payment Link opened without a client_reference_id).
+    projectId: uuid("project_id").references(() => projects.id, {
+      onDelete: "set null",
+    }),
+    // Our idempotency/lookup key. Unique INDEX (not .unique()) → migrate-safe.
+    stripeSubscriptionId: text("stripe_subscription_id").notNull(),
+    stripeCustomerId: text("stripe_customer_id").notNull(),
+    // Stripe's status: "active" | "past_due" | "canceled" | "incomplete" | "unpaid".
+    status: text("status").notNull(),
+    priceId: text("price_id"),
+    currentPeriodEnd: timestamp("current_period_end", { mode: "date" }),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+    createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
+  },
+  (s) => [
+    uniqueIndex("subscription_stripe_id_idx").on(s.stripeSubscriptionId),
+    index("subscription_user_idx").on(s.userId),
+    index("subscription_project_idx").on(s.projectId),
+  ],
+);
+
+// Expiring monthly builder credit: ONE row per paid subscription invoice. Unlike
+// user_credit.balanceEur (persistent: free grant + coupons + top-ups), this
+// credit EXPIRES if unused (expiresAt = the invoice's billing-period end) and
+// STACKS across subscriptions with different renewal dates. Consumption
+// (recordUsageAndDeduct) draws from the soonest-expiring active grant first, the
+// persistent balance last. Expiry is LAZY — queries filter expiresAt > now();
+// unused credit simply stops counting, no cron needed. stripeInvoiceId is the
+// idempotency key (Stripe re-delivers webhooks): a unique INDEX + ON CONFLICT DO
+// NOTHING makes each grant exactly-once.
+export const creditGrants = pgTable(
+  "credit_grant",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // The source subscription, by Stripe id (string, NOT an FK): the invoice.paid
+    // webhook can arrive before our subscription row exists (event ordering), so
+    // we must not depend on a foreign row being present.
+    stripeSubscriptionId: text("stripe_subscription_id"),
+    stripeInvoiceId: text("stripe_invoice_id").notNull(),
+    amountEur: numeric("amount_eur", { precision: 12, scale: 6 }).notNull(),
+    // What is left to spend from this grant (amountEur minus deductions).
+    remainingEur: numeric("remaining_eur", {
+      precision: 12,
+      scale: 6,
+    }).notNull(),
+    grantedAt: timestamp("granted_at", { mode: "date" }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
+    createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+  },
+  (g) => [
+    uniqueIndex("credit_grant_invoice_idx").on(g.stripeInvoiceId),
+    // Hot-path lookup: the pre-flight balance sum + the FOR UPDATE deduction scan
+    // read a user's still-spendable grants. Partial (remaining_eur > 0) keeps it
+    // tiny as grants drain; expiresAt is filtered at query time.
+    index("credit_grant_user_active_idx")
+      .on(g.userId, g.expiresAt)
+      .where(sql`${g.remainingEur} > 0`),
+  ],
+);
+
+// Webhook idempotency ledger: one row per Stripe event id we've processed. The
+// webhook inserts the id inside the SAME transaction as its writes (ON CONFLICT
+// DO NOTHING); a re-delivered event finds the id present and skips. `id` is the
+// Stripe event id (evt_…), a natural primary key.
+export const stripeEvents = pgTable("stripe_event", {
+  id: text("id").primaryKey(),
+  type: text("type").notNull(),
+  createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+});

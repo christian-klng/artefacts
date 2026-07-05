@@ -76,6 +76,8 @@ type CouponInfo = {
   recipientAmountEur: number;
   referrerAmountEur: number;
   hasRedeemed: boolean;
+  hasSubscription: boolean;
+  pendingWelcomeEur: number;
   redemptions: { redeemedAt: string; rewardEur: number; rewardStatus: string }[];
   stats: { count: number; pendingEur: number; grantedEur: number };
 };
@@ -189,13 +191,27 @@ function CouponTab() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        if (typeof data.balanceEur === "number") {
-          emitCreditChanged(data.balanceEur);
+        if (data.pending) {
+          // Referral welcome bonus is deferred until the redeemer subscribes.
+          setMsg({
+            ok: true,
+            text: m.coupon.creditedPending.replace(
+              "{amount}",
+              eur(Number(data.pendingEur)),
+            ),
+          });
+        } else {
+          if (typeof data.balanceEur === "number") {
+            emitCreditChanged(data.balanceEur);
+          }
+          setMsg({
+            ok: true,
+            text: m.coupon.credited.replace(
+              "{amount}",
+              eur(Number(data.creditedEur)),
+            ),
+          });
         }
-        setMsg({
-          ok: true,
-          text: m.coupon.credited.replace("{amount}", eur(Number(data.creditedEur))),
-        });
         setCode("");
         const fresh = await fetchInfo();
         if (fresh) setInfo(fresh);
@@ -214,7 +230,13 @@ function CouponTab() {
     setActivating(true);
     try {
       const res = await fetch("/api/coupons/me", { method: "POST" });
-      if (res.ok) setInfo(await res.json());
+      if (res.ok) {
+        setInfo(await res.json());
+      } else {
+        // e.g. 403 subscription_required (sub lapsed since load) — reflect state.
+        const fresh = await fetchInfo();
+        if (fresh) setInfo(fresh);
+      }
     } catch {
       // no-op — button stays available to retry
     } finally {
@@ -269,6 +291,14 @@ function CouponTab() {
             {msg.text}
           </p>
         )}
+        {info && info.pendingWelcomeEur > 0 && (
+          <p className="text-xs text-neutral-400">
+            {m.coupon.pendingWelcome.replace(
+              "{amount}",
+              eur(info.pendingWelcomeEur),
+            )}
+          </p>
+        )}
       </section>
 
       <hr className="border-neutral-200 dark:border-neutral-800" />
@@ -317,7 +347,7 @@ function CouponTab() {
               )}
             </p>
           </>
-        ) : (
+        ) : info?.hasSubscription ? (
           <button
             type="button"
             onClick={onActivate}
@@ -326,8 +356,217 @@ function CouponTab() {
           >
             {activating ? "…" : m.coupon.activateCode}
           </button>
+        ) : (
+          <p className="text-sm text-neutral-500">
+            {m.coupon.subscriptionRequired}
+          </p>
         )}
       </section>
+    </div>
+  );
+}
+
+type CreditBreakdown = {
+  balanceEur: number;
+  persistentEur: number;
+  monthlyEur: number;
+  monthlyExpiresAt: string | null;
+};
+
+type BillingOverview = {
+  topupUrls: { "5": string | null; "10": string | null; "20": string | null };
+  portalAvailable: boolean;
+  apps: {
+    projectId: string;
+    name: string;
+    hostingActive: boolean;
+    status: string | null;
+    currentPeriodEnd: string | null;
+    cancelAtPeriodEnd: boolean;
+    subscribeUrl: string | null;
+  }[];
+};
+
+const TOPUP_AMOUNTS = [5, 10, 20] as const;
+
+function SubscriptionTab() {
+  const m = useMessages();
+  const locale = useLocale();
+  const [credit, setCredit] = useState<CreditBreakdown | null>(null);
+  const [overview, setOverview] = useState<BillingOverview | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [portalPending, setPortalPending] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      fetch("/api/credit").then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/billing/overview").then((r) => (r.ok ? r.json() : null)),
+    ])
+      .then(([c, o]) => {
+        if (cancelled) return;
+        if (c) setCredit(c as CreditBreakdown);
+        if (o) setOverview(o as BillingOverview);
+      })
+      .catch(() => {
+        /* leave nulls → the "unavailable" hint shows */
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function openPortal() {
+    if (portalPending) return;
+    setPortalPending(true);
+    fetch("/api/stripe/portal", { method: "POST" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.url) window.location.href = d.url as string;
+      })
+      .finally(() => setPortalPending(false));
+  }
+
+  const fmtDate = (iso: string) => new Date(iso).toLocaleDateString(locale);
+
+  if (loading) {
+    return <p className="text-sm text-neutral-500">{m.common.loading}</p>;
+  }
+
+  const topups = overview?.topupUrls;
+  const hasTopups = !!(
+    topups &&
+    (topups["5"] || topups["10"] || topups["20"])
+  );
+  const anySubscribeUrl = !!overview?.apps.some((a) => a.subscribeUrl);
+
+  return (
+    <div className="max-h-[60vh] space-y-5 overflow-y-auto pr-1">
+      <section className="space-y-1.5">
+        <h3 className="text-sm font-medium">{m.billing.creditHeading}</h3>
+        <div className="rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
+          <div className="flex items-baseline justify-between">
+            <span className="text-sm text-neutral-500">
+              {m.billing.creditPersistent}
+            </span>
+            <span className="text-sm font-medium">
+              {eur(credit?.persistentEur ?? 0)}
+            </span>
+          </div>
+          {(credit?.monthlyEur ?? 0) > 0 && (
+            <div className="mt-1 flex items-baseline justify-between gap-2">
+              <span className="min-w-0 text-sm text-neutral-500">
+                {m.billing.creditMonthly}
+                {credit?.monthlyExpiresAt && (
+                  <span className="ml-1 text-xs text-neutral-400">
+                    {m.billing.creditExpires.replace(
+                      "{date}",
+                      fmtDate(credit.monthlyExpiresAt),
+                    )}
+                  </span>
+                )}
+              </span>
+              <span className="shrink-0 text-sm font-medium">
+                {eur(credit?.monthlyEur ?? 0)}
+              </span>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {hasTopups && (
+        <section className="space-y-2">
+          <h3 className="text-sm font-medium">{m.billing.topupHeading}</h3>
+          <p className="text-xs text-neutral-400">{m.billing.topupHint}</p>
+          <div className="flex gap-2">
+            {TOPUP_AMOUNTS.map((a) => {
+              const url = topups?.[String(a) as "5" | "10" | "20"] ?? null;
+              return (
+                <button
+                  key={a}
+                  type="button"
+                  disabled={!url}
+                  onClick={() => {
+                    if (url) window.location.href = url;
+                  }}
+                  className="flex-1 rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-medium transition hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-900"
+                >
+                  {m.billing.topup.replace("{amount}", eur(a))}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      <hr className="border-neutral-200 dark:border-neutral-800" />
+
+      <section className="space-y-2">
+        <h3 className="text-sm font-medium">{m.billing.hostingHeading}</h3>
+        <p className="text-xs text-neutral-400">{m.billing.hostingHint}</p>
+        {!overview || overview.apps.length === 0 ? (
+          <p className="text-sm text-neutral-500">{m.billing.noApps}</p>
+        ) : (
+          <ul className="space-y-2">
+            {overview.apps.map((app) => (
+              <li
+                key={app.projectId}
+                className="flex items-center justify-between gap-2 rounded-md border border-neutral-200 px-3 py-2 dark:border-neutral-800"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{app.name}</p>
+                  {app.hostingActive ? (
+                    <p className="text-xs text-green-600 dark:text-green-400">
+                      {m.billing.hostingActive}
+                      {app.currentPeriodEnd && (
+                        <span className="text-neutral-400">
+                          {" · "}
+                          {(app.cancelAtPeriodEnd
+                            ? m.billing.cancels
+                            : m.billing.renews
+                          ).replace("{date}", fmtDate(app.currentPeriodEnd))}
+                        </span>
+                      )}
+                    </p>
+                  ) : app.status === "past_due" ? (
+                    <p className="text-xs text-red-600 dark:text-red-400">
+                      {m.billing.pastDue}
+                    </p>
+                  ) : null}
+                </div>
+                {app.hostingActive ? (
+                  <button
+                    type="button"
+                    onClick={openPortal}
+                    disabled={portalPending || !overview.portalAvailable}
+                    className="shrink-0 rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium transition hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-900"
+                  >
+                    {m.billing.manage}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={!app.subscribeUrl}
+                    onClick={() => {
+                      if (app.subscribeUrl) window.location.href = app.subscribeUrl;
+                    }}
+                    className="shrink-0 rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-neutral-700 disabled:opacity-40 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+                  >
+                    {m.billing.hostThis}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {!hasTopups && !anySubscribeUrl && (
+        <p className="text-xs text-neutral-400">{m.billing.unavailable}</p>
+      )}
     </div>
   );
 }
@@ -342,7 +581,9 @@ export function UserMenu({
   const m = useMessages();
   const [details, setDetails] = useState(false);
   const [confirmOut, setConfirmOut] = useState(false);
-  const [tab, setTab] = useState<"account" | "coupon" | "language">("account");
+  const [tab, setTab] = useState<
+    "account" | "coupon" | "billing" | "language"
+  >("account");
 
   const closeDetails = () => {
     setDetails(false);
@@ -397,6 +638,13 @@ export function UserMenu({
             </button>
             <button
               type="button"
+              onClick={() => setTab("billing")}
+              className={tabButton(tab === "billing")}
+            >
+              {m.account.tabBilling}
+            </button>
+            <button
+              type="button"
               onClick={() => setTab("language")}
               className={tabButton(tab === "language")}
             >
@@ -408,6 +656,8 @@ export function UserMenu({
             <AccountInfo name={name} email={email} />
           ) : tab === "coupon" ? (
             <CouponTab />
+          ) : tab === "billing" ? (
+            <SubscriptionTab />
           ) : (
             <LanguageTab />
           )}

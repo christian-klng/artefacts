@@ -398,6 +398,46 @@ export function Workspace({
     return () => window.removeEventListener(CREDIT_CHANGED_EVENT, onCredit);
   }, []);
 
+  // Returning from a Stripe Payment Link: its success_url lands on
+  // /app?checkout=success, but the webhook that grants credit / flips hosting
+  // runs asynchronously — so poll /api/credit a few times to reflect the new
+  // balance, then strip the query param so a refresh doesn't re-trigger it.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("checkout") !== "success") return;
+    params.delete("checkout");
+    const qs = params.toString();
+    window.history.replaceState(
+      null,
+      "",
+      window.location.pathname + (qs ? `?${qs}` : ""),
+    );
+
+    let cancelled = false;
+    let attempts = 0;
+    const poll = () => {
+      if (cancelled) return;
+      attempts += 1;
+      fetch("/api/credit")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data: { balanceEur?: number } | null) => {
+          if (cancelled) return;
+          if (data && typeof data.balanceEur === "number") {
+            setBalanceEur(data.balanceEur);
+          }
+          if (attempts < 5) setTimeout(poll, 2000);
+        })
+        .catch(() => {
+          if (!cancelled && attempts < 5) setTimeout(poll, 2000);
+        });
+    };
+    poll();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const saveBlob = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
     const a = Object.assign(document.createElement("a"), {

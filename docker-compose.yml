@@ -76,6 +76,17 @@ services:
       BACKUP_CRON_SECRET: ${BACKUP_CRON_SECRET}
       BACKUP_ENABLED: ${BACKUP_ENABLED}
       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS}
+      # Stripe billing (Payment Links). SECRET_KEY + WEBHOOK_SECRET are secrets
+      # (env-only, like CORTECS_API_KEY; unset → the webhook route rejects). The
+      # Payment Link URLs + monthly credit are also editable in admin /settings
+      # (blank → the link/button is hidden / 5€ default via settingNumber).
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      STRIPE_SUBSCRIPTION_LINK: ${STRIPE_SUBSCRIPTION_LINK}
+      STRIPE_TOPUP_LINK_5: ${STRIPE_TOPUP_LINK_5}
+      STRIPE_TOPUP_LINK_10: ${STRIPE_TOPUP_LINK_10}
+      STRIPE_TOPUP_LINK_20: ${STRIPE_TOPUP_LINK_20}
+      SUBSCRIPTION_MONTHLY_CREDIT_EUR: ${SUBSCRIPTION_MONTHLY_CREDIT_EUR}
       # Outgoing mail (welcome + password-reset). Referenced here so Coolify UI
       # values actually reach the container. The email subject/HTML are NO LONGER
       # env vars — they live in the `mail_template` DB table and are edited in the

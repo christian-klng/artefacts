@@ -1,7 +1,8 @@
 import "server-only";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { userCredits, usageEvents } from "@/lib/db/schema";
+import type { Tx } from "@/lib/db";
+import { creditGrants, userCredits, usageEvents } from "@/lib/db/schema";
 import {
   billingMargin,
   cacheReadPriceRatio,
@@ -179,6 +180,7 @@ export async function ensureCredit(userId: string): Promise<number> {
       .where(eq(userCredits.userId, userId))
       .for("update");
 
+    let persistent = Number(row?.balanceEur ?? 0);
     if (row && row.freeGrantedAt == null && grant > 0) {
       const granted = round6(grant);
       const [updated] = await tx
@@ -191,25 +193,101 @@ export async function ensureCredit(userId: string): Promise<number> {
         })
         .where(eq(userCredits.userId, userId))
         .returning();
-      return Number(updated.balanceEur);
+      persistent = Number(updated.balanceEur);
     }
 
-    return Number(row?.balanceEur ?? 0);
+    // Return the TOTAL spendable (persistent + non-expired grants) so the
+    // pre-flight gate and the returned balance stay consistent with getBalance.
+    const grants = await activeGrants(tx, userId);
+    return round6(persistent + grants.totalEur);
   });
 }
 
-/** Current spendable balance in EUR (0 if the user has no credit row yet). */
-export async function getBalance(userId: string): Promise<number> {
-  const [row] = await db
-    .select({ balanceEur: userCredits.balanceEur })
-    .from(userCredits)
-    .where(eq(userCredits.userId, userId));
-  return Number(row?.balanceEur ?? 0);
+// Sum of a user's still-spendable expiring credit grants (Stripe subscription
+// perk), plus the soonest expiry for the UI. Lazy expiry: past-due grants are
+// excluded by the `expires_at > now()` predicate — no cron drains them. `runner`
+// may be the db or a transaction (Tx extends the db type), so the deduction path
+// can read grants it just updated inside its own transaction.
+async function activeGrants(
+  runner: typeof db | Tx,
+  userId: string,
+): Promise<{ totalEur: number; soonestExpiry: Date | null }> {
+  const [row] = await runner
+    .select({
+      total: sql<string>`coalesce(sum(${creditGrants.remainingEur}), 0)`,
+      soonest: sql<Date | null>`min(${creditGrants.expiresAt})`,
+    })
+    .from(creditGrants)
+    .where(
+      sql`${creditGrants.userId} = ${userId} and ${creditGrants.expiresAt} > now() and ${creditGrants.remainingEur} > 0`,
+    );
+  return {
+    totalEur: round6(Number(row?.total ?? 0)),
+    soonestExpiry: row?.soonest ?? null,
+  };
 }
 
 /**
- * Records a billed request in the ledger and decrements the user's balance in a
- * single transaction (column + ledger stay consistent). Returns the new balance.
+ * Current spendable balance in EUR: the persistent balance (free grant + coupons
+ * + top-ups) PLUS all non-expired subscription credit grants. This is the
+ * pre-flight budget gate — it must include grants, else a user whose only credit
+ * is their monthly subscription perk would be wrongly blocked.
+ */
+export async function getBalance(userId: string): Promise<number> {
+  const [rows, grants] = await Promise.all([
+    db
+      .select({ balanceEur: userCredits.balanceEur })
+      .from(userCredits)
+      .where(eq(userCredits.userId, userId)),
+    activeGrants(db, userId),
+  ]);
+  return round6(Number(rows[0]?.balanceEur ?? 0) + grants.totalEur);
+}
+
+export type BalanceBreakdown = {
+  /** Total spendable = persistent + monthly. */
+  totalEur: number;
+  /** Never-expiring: free grant + coupons + top-ups. */
+  persistentEur: number;
+  /** Still-active expiring subscription credit. */
+  monthlyEur: number;
+  /** ISO date the soonest-expiring monthly grant lapses, or null if none. */
+  monthlyExpiresAt: string | null;
+};
+
+/** The two credit sources, split for the account UI (persistent vs. expiring). */
+export async function getBalanceBreakdown(
+  userId: string,
+): Promise<BalanceBreakdown> {
+  const [rows, grants] = await Promise.all([
+    db
+      .select({ balanceEur: userCredits.balanceEur })
+      .from(userCredits)
+      .where(eq(userCredits.userId, userId)),
+    activeGrants(db, userId),
+  ]);
+  const persistentEur = round6(Number(rows[0]?.balanceEur ?? 0));
+  return {
+    totalEur: round6(persistentEur + grants.totalEur),
+    persistentEur,
+    monthlyEur: grants.totalEur,
+    monthlyExpiresAt: grants.soonestExpiry
+      ? new Date(grants.soonestExpiry).toISOString()
+      : null,
+  };
+}
+
+/**
+ * Records a billed request in the ledger and deducts its cost in a single
+ * transaction (ledger + credit stay consistent). The cost is drawn from EXPIRING
+ * subscription grants first (soonest expiry, so credit that would lapse is spent
+ * before it does) and only the remainder from the persistent balance. Returns
+ * the new TOTAL spendable balance (persistent + still-active grants).
+ *
+ * Race-safety: the grant rows are locked with SELECT … FOR UPDATE before the
+ * read-decide-write, so two concurrent turns can't both spend the same grant
+ * (the default READ COMMITTED isolation would otherwise lose an update — the
+ * bare balance UPDATE is safe on its own row, but the grants are separate rows).
  */
 export async function recordUsageAndDeduct(args: {
   userId: string;
@@ -238,22 +316,47 @@ export async function recordUsageAndDeduct(args: {
       marginEur: String(cost.marginEur),
     });
 
-    // Make sure a credit row exists (e.g. cleanup task before any agent turn).
+    // 1. Draw from expiring grants first (soonest expiry), locked FOR UPDATE.
+    let owed = round6(cost.billedEur);
+    if (owed > 0) {
+      const grants = await tx
+        .select({ id: creditGrants.id, remainingEur: creditGrants.remainingEur })
+        .from(creditGrants)
+        .where(
+          sql`${creditGrants.userId} = ${userId} and ${creditGrants.expiresAt} > now() and ${creditGrants.remainingEur} > 0`,
+        )
+        .orderBy(asc(creditGrants.expiresAt))
+        .for("update");
+      for (const g of grants) {
+        if (owed <= 0) break;
+        const remaining = round6(Number(g.remainingEur));
+        const take = Math.min(remaining, owed);
+        await tx
+          .update(creditGrants)
+          .set({ remainingEur: String(round6(remaining - take)) })
+          .where(eq(creditGrants.id, g.id));
+        owed = round6(owed - take);
+      }
+    }
+
+    // 2. Remainder from the persistent balance (ensure the row exists first).
+    //    May go slightly negative on a final turn — the next turn's gate blocks.
     await tx
       .insert(userCredits)
       .values({ userId })
       .onConflictDoNothing({ target: userCredits.userId });
-
     const [updated] = await tx
       .update(userCredits)
       .set({
-        balanceEur: sql`${userCredits.balanceEur} - ${cost.billedEur}`,
+        balanceEur: sql`${userCredits.balanceEur} - ${owed}`,
         updatedAt: new Date(),
       })
       .where(eq(userCredits.userId, userId))
       .returning();
 
-    return Number(updated.balanceEur);
+    // 3. Return the new total spendable (persistent + grants after this deduction).
+    const grantsAfter = await activeGrants(tx, userId);
+    return round6(Number(updated.balanceEur) + grantsAfter.totalEur);
   });
 }
 

@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { ensurePersonalCoupon, getUserCouponInfo } from "@/lib/coupons";
+import { userHasActiveSubscription } from "@/lib/stripe/subscriptions";
 
 // The signed-in user's coupon state: their own referral code (+ redemption
 // stats) and whether they've already redeemed one. POST activates the personal
@@ -20,7 +21,11 @@ export async function POST() {
   if (!session?.user) {
     return new Response("Unauthorized", { status: 401 });
   }
-  // FUTURE: gate activation to subscribers here (the "Abo only" rule).
+  // A referral code can only be CREATED by a user with an active subscription
+  // (the "Abo only" rule). Existing codes keep working if the sub later lapses.
+  if (!(await userHasActiveSubscription(session.user.id))) {
+    return Response.json({ error: "subscription_required" }, { status: 403 });
+  }
   await ensurePersonalCoupon(session.user.id);
   const info = await getUserCouponInfo(session.user.id);
   return Response.json(info);

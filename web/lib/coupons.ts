@@ -1,6 +1,6 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { coupons, couponRedemptions, userCredits } from "@/lib/db/schema";
 import {
@@ -8,12 +8,14 @@ import {
   referralReferrerEur,
   referralWindowDays,
 } from "@/lib/cortecs/config";
+import { userHasActiveSubscription } from "@/lib/stripe/subscriptions";
 
-// Coupons / referral credit. Redeeming a coupon grants the redeemer the
-// recipient amount IMMEDIATELY; the referrer's reward is only RECORDED as
-// pending (referrer_reward_status = "pending") and is NOT paid out here — the
-// future Stripe/subscription integration calls settleReferralRewards() to grant
-// it once the redeemer subscribes within the window. See lib/db/schema.ts.
+// Coupons / referral credit. For a REFERRAL coupon, redeeming records BOTH the
+// redeemer's welcome bonus and the referrer's reward as pending — neither pays
+// out here. The Stripe webhook calls settleReferralRewards() once the redeemer
+// subscribes within the window, granting both (else they expire). ADMIN coupons
+// credit the redeemer immediately. Creating a referral code requires an active
+// subscription (gated in the POST /api/coupons/me route). See lib/db/schema.ts.
 
 // EUR is numeric(12,6); compute in a fixed 6-dp space (mirrors lib/cortecs/billing).
 const SCALE = 1_000_000;
@@ -114,13 +116,25 @@ export type RedeemError =
   | "already_referral";
 
 export type RedeemResult =
-  | { ok: true; creditedEur: number; balanceEur: number }
+  | {
+      ok: true;
+      /** Amount credited NOW (0 for a deferred referral welcome bonus). */
+      creditedEur: number;
+      /** The redeemer's persistent balance after this redemption. */
+      balanceEur: number;
+      /** True when the welcome bonus is deferred until the redeemer subscribes. */
+      pending: boolean;
+      /** The deferred welcome-bonus amount (0 unless pending). */
+      pendingEur: number;
+    }
   | { ok: false; error: RedeemError };
 
 /**
  * Redeem `rawCode` for `userId`. One transaction, coupon row locked FOR UPDATE
- * so the redemption count can't race. Credits the redeemer immediately; records
- * the referrer reward as pending (no payout here). Rules enforced:
+ * so the redemption count can't race. For a REFERRAL coupon BOTH rewards are
+ * deferred (recorded pending) and only paid out when the redeemer subscribes
+ * (settleReferralRewards, called from the Stripe webhook); an ADMIN coupon
+ * credits the redeemer immediately. Rules enforced:
  *  - coupon must exist / be active / not expired / under its redemption cap
  *  - a user cannot redeem their own coupon
  *  - a coupon can be redeemed at most once per user
@@ -190,32 +204,52 @@ export async function redeemCoupon(
 
     const recipient = round6(Number(coupon.recipientAmountEur));
     const referrer = round6(Number(coupon.referrerAmountEur));
+    const isReferral = coupon.kind === "referral";
     const hasReferrerReward = coupon.ownerId != null && referrer > 0;
+    const now = new Date();
+    // Referral redemptions defer BOTH rewards until the redeemer subscribes; the
+    // deadline is the whole redemption's window. Admin codes credit immediately.
+    const deadline =
+      isReferral || hasReferrerReward
+        ? new Date(now.getTime() + coupon.rewardWindowDays * DAY_MS)
+        : null;
 
-    // Credit the redeemer immediately (ensure their credit row exists first).
+    // Ensure the redeemer's credit row exists (needed now or on later settle).
     await tx
       .insert(userCredits)
       .values({ userId })
       .onConflictDoNothing({ target: userCredits.userId });
-    const [updated] = await tx
-      .update(userCredits)
-      .set({
-        balanceEur: sql`${userCredits.balanceEur} + ${recipient}`,
-        updatedAt: new Date(),
-      })
-      .where(eq(userCredits.userId, userId))
-      .returning();
 
-    const now = new Date();
-    const deadline = hasReferrerReward
-      ? new Date(now.getTime() + coupon.rewardWindowDays * DAY_MS)
-      : null;
+    let creditedNow = 0;
+    let recipientStatus: "pending" | "granted";
+    if (isReferral) {
+      // Defer the welcome bonus — granted when the redeemer subscribes.
+      recipientStatus = "pending";
+    } else {
+      // Admin code: credit the redeemer immediately.
+      await tx
+        .update(userCredits)
+        .set({
+          balanceEur: sql`${userCredits.balanceEur} + ${recipient}`,
+          updatedAt: now,
+        })
+        .where(eq(userCredits.userId, userId));
+      creditedNow = recipient;
+      recipientStatus = "granted";
+    }
+
+    const [balanceRow] = await tx
+      .select({ balanceEur: userCredits.balanceEur })
+      .from(userCredits)
+      .where(eq(userCredits.userId, userId));
 
     await tx.insert(couponRedemptions).values({
       couponId: coupon.id,
       redeemerId: userId,
       couponKind: coupon.kind,
       recipientCreditedEur: String(recipient),
+      recipientRewardStatus: recipientStatus,
+      recipientRewardGrantedAt: recipientStatus === "granted" ? now : null,
       ownerId: coupon.ownerId,
       referrerRewardEur: String(hasReferrerReward ? referrer : 0),
       referrerRewardStatus: hasReferrerReward ? "pending" : "none",
@@ -224,8 +258,10 @@ export async function redeemCoupon(
 
     return {
       ok: true,
-      creditedEur: recipient,
-      balanceEur: Number(updated.balanceEur),
+      creditedEur: creditedNow,
+      balanceEur: Number(balanceRow?.balanceEur ?? 0),
+      pending: isReferral,
+      pendingEur: isReferral ? recipient : 0,
     };
   });
 }
@@ -237,6 +273,10 @@ export type CouponInfo = {
   referrerAmountEur: number;
   /** Whether the user has already redeemed a referral coupon (can't again). */
   hasRedeemed: boolean;
+  /** Whether the user has an active hosting subscription (gates code creation). */
+  hasSubscription: boolean;
+  /** The user's own deferred welcome bonus, unlocked once they subscribe. */
+  pendingWelcomeEur: number;
   /** Redemptions of the user's OWN code — no redeemer identity is exposed. */
   redemptions: {
     redeemedAt: string;
@@ -252,21 +292,45 @@ export type CouponInfo = {
  * already redeemed a code themselves.
  */
 export async function getUserCouponInfo(userId: string): Promise<CouponInfo> {
-  const [coupon, redeemedRow, defRecipient, defReferrer] = await Promise.all([
-    getReferralCoupon(userId),
-    db
-      .select({ id: couponRedemptions.id })
-      .from(couponRedemptions)
-      .where(
-        and(
-          eq(couponRedemptions.redeemerId, userId),
-          eq(couponRedemptions.couponKind, "referral"),
+  const [coupon, redeemedRow, defRecipient, defReferrer, hasSubscription, pendingRows] =
+    await Promise.all([
+      getReferralCoupon(userId),
+      db
+        .select({ id: couponRedemptions.id })
+        .from(couponRedemptions)
+        .where(
+          and(
+            eq(couponRedemptions.redeemerId, userId),
+            eq(couponRedemptions.couponKind, "referral"),
+          ),
+        )
+        .limit(1),
+      referralRecipientEur(),
+      referralReferrerEur(),
+      userHasActiveSubscription(userId),
+      db
+        .select({
+          amount: couponRedemptions.recipientCreditedEur,
+          deadline: couponRedemptions.referrerRewardDeadline,
+        })
+        .from(couponRedemptions)
+        .where(
+          and(
+            eq(couponRedemptions.redeemerId, userId),
+            eq(couponRedemptions.recipientRewardStatus, "pending"),
+          ),
         ),
-      )
-      .limit(1),
-    referralRecipientEur(),
-    referralReferrerEur(),
-  ]);
+    ]);
+
+  // The redeemer's own deferred welcome bonus (still within its window).
+  let pendingWelcomeEur = 0;
+  const nowMs = Date.now();
+  for (const p of pendingRows) {
+    if (p.deadline == null || p.deadline.getTime() >= nowMs) {
+      pendingWelcomeEur += Number(p.amount);
+    }
+  }
+  pendingWelcomeEur = round6(pendingWelcomeEur);
 
   let redemptions: CouponInfo["redemptions"] = [];
   const stats = { count: 0, pendingEur: 0, grantedEur: 0 };
@@ -307,17 +371,20 @@ export async function getUserCouponInfo(userId: string): Promise<CouponInfo> {
       ? Number(coupon.referrerAmountEur)
       : round6(defReferrer),
     hasRedeemed: redeemedRow.length > 0,
+    hasSubscription,
+    pendingWelcomeEur,
     redemptions,
     stats,
   };
 }
 
 /**
- * FUTURE (Stripe/subscription — not wired yet): call when `redeemerId`
- * subscribes. Grants each still-pending referrer reward whose deadline hasn't
- * passed to the coupon owner, marking it "granted"; past-deadline rewards are
- * marked "expired". Intentionally not invoked anywhere until Stripe lands, so
- * no referrer payout happens now (per the agreed scope).
+ * Called from the Stripe webhook when `redeemerId` subscribes. Settles BOTH
+ * sides of their still-pending referral redemptions, if within the window:
+ *  - the redeemer's own deferred welcome bonus → their balance ("granted");
+ *  - the referrer reward → the coupon owner's balance ("granted").
+ * Past-deadline sides are marked "expired". Idempotent: already-granted/expired
+ * sides are skipped, so calling it again on a later subscription is a no-op.
  */
 export async function settleReferralRewards(redeemerId: string): Promise<void> {
   const now = new Date();
@@ -328,7 +395,10 @@ export async function settleReferralRewards(redeemerId: string): Promise<void> {
       .where(
         and(
           eq(couponRedemptions.redeemerId, redeemerId),
-          eq(couponRedemptions.referrerRewardStatus, "pending"),
+          or(
+            eq(couponRedemptions.recipientRewardStatus, "pending"),
+            eq(couponRedemptions.referrerRewardStatus, "pending"),
+          ),
         ),
       )
       .for("update");
@@ -337,31 +407,66 @@ export async function settleReferralRewards(redeemerId: string): Promise<void> {
       const expired =
         r.referrerRewardDeadline != null &&
         r.referrerRewardDeadline.getTime() < now.getTime();
-      const reward = round6(Number(r.referrerRewardEur));
 
-      if (expired || r.ownerId == null || reward <= 0) {
-        await tx
-          .update(couponRedemptions)
-          .set({ referrerRewardStatus: "expired" })
-          .where(eq(couponRedemptions.id, r.id));
-        continue;
+      // 1. The redeemer's own deferred welcome bonus.
+      if (r.recipientRewardStatus === "pending") {
+        const welcome = round6(Number(r.recipientCreditedEur));
+        if (expired || welcome <= 0) {
+          await tx
+            .update(couponRedemptions)
+            .set({ recipientRewardStatus: "expired" })
+            .where(eq(couponRedemptions.id, r.id));
+        } else {
+          await tx
+            .insert(userCredits)
+            .values({ userId: redeemerId })
+            .onConflictDoNothing({ target: userCredits.userId });
+          await tx
+            .update(userCredits)
+            .set({
+              balanceEur: sql`${userCredits.balanceEur} + ${welcome}`,
+              updatedAt: now,
+            })
+            .where(eq(userCredits.userId, redeemerId));
+          await tx
+            .update(couponRedemptions)
+            .set({
+              recipientRewardStatus: "granted",
+              recipientRewardGrantedAt: now,
+            })
+            .where(eq(couponRedemptions.id, r.id));
+        }
       }
 
-      await tx
-        .insert(userCredits)
-        .values({ userId: r.ownerId })
-        .onConflictDoNothing({ target: userCredits.userId });
-      await tx
-        .update(userCredits)
-        .set({
-          balanceEur: sql`${userCredits.balanceEur} + ${reward}`,
-          updatedAt: now,
-        })
-        .where(eq(userCredits.userId, r.ownerId));
-      await tx
-        .update(couponRedemptions)
-        .set({ referrerRewardStatus: "granted", referrerRewardGrantedAt: now })
-        .where(eq(couponRedemptions.id, r.id));
+      // 2. The referrer reward (to the coupon owner).
+      if (r.referrerRewardStatus === "pending") {
+        const reward = round6(Number(r.referrerRewardEur));
+        if (expired || r.ownerId == null || reward <= 0) {
+          await tx
+            .update(couponRedemptions)
+            .set({ referrerRewardStatus: "expired" })
+            .where(eq(couponRedemptions.id, r.id));
+        } else {
+          await tx
+            .insert(userCredits)
+            .values({ userId: r.ownerId })
+            .onConflictDoNothing({ target: userCredits.userId });
+          await tx
+            .update(userCredits)
+            .set({
+              balanceEur: sql`${userCredits.balanceEur} + ${reward}`,
+              updatedAt: now,
+            })
+            .where(eq(userCredits.userId, r.ownerId));
+          await tx
+            .update(couponRedemptions)
+            .set({
+              referrerRewardStatus: "granted",
+              referrerRewardGrantedAt: now,
+            })
+            .where(eq(couponRedemptions.id, r.id));
+        }
+      }
     }
   });
 }

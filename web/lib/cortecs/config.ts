@@ -93,6 +93,28 @@ export function referralWindowDays(): Promise<number> {
   return settingNumber("REFERRAL_WINDOW_DAYS", 14);
 }
 
+// --- Stripe billing (Payment Links) ----------------------------------------
+// The Payment Link URLs and the monthly credit amount are NON-secret and
+// admin-editable (app_setting; blank → the link/feature is simply hidden). The
+// Stripe secret key + webhook signing secret are env-only and read in
+// lib/stripe/env.ts. buildCheckoutLinks() appends ?client_reference_id=…&
+// prefilled_email=… to these base URLs at click time (see lib/stripe/links.ts).
+
+/** Stripe Payment Link for the 5€/month per-app hosting subscription ("" = unset). */
+export function stripeSubscriptionLinkUrl(): Promise<string> {
+  return settingString("STRIPE_SUBSCRIPTION_LINK", "");
+}
+
+/** Stripe Payment Link for a one-time top-up of the given EUR amount ("" = unset). */
+export function stripeTopupLinkUrl(amount: 5 | 10 | 20): Promise<string> {
+  return settingString(`STRIPE_TOPUP_LINK_${amount}`, "");
+}
+
+/** EUR builder credit granted per paid subscription invoice (expires monthly). */
+export function subscriptionMonthlyCreditEur(): Promise<number> {
+  return settingNumber("SUBSCRIPTION_MONTHLY_CREDIT_EUR", 5.0);
+}
+
 // --- Base URLs / auth ------------------------------------------------------
 
 export function cortecsApiKey(): string {

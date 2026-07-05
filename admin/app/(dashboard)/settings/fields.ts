@@ -21,6 +21,7 @@ export type SettingGroupId =
   | "cortecs"
   | "billing"
   | "referral"
+  | "stripe"
   | "backups"
   | "smtp";
 
@@ -58,6 +59,20 @@ export const SETTING_SCHEMA: SettingSchemaGroup[] = [
       { key: "REFERRAL_RECIPIENT_EUR", placeholder: "10.00", type: "number" },
       { key: "REFERRAL_REFERRER_EUR", placeholder: "5.00", type: "number" },
       { key: "REFERRAL_WINDOW_DAYS", placeholder: "14", type: "number" },
+    ],
+  },
+  {
+    id: "stripe",
+    fields: [
+      { key: "STRIPE_SUBSCRIPTION_LINK", placeholder: "https://buy.stripe.com/..." },
+      { key: "STRIPE_TOPUP_LINK_5", placeholder: "https://buy.stripe.com/..." },
+      { key: "STRIPE_TOPUP_LINK_10", placeholder: "https://buy.stripe.com/..." },
+      { key: "STRIPE_TOPUP_LINK_20", placeholder: "https://buy.stripe.com/..." },
+      {
+        key: "SUBSCRIPTION_MONTHLY_CREDIT_EUR",
+        placeholder: "5.00",
+        type: "number",
+      },
     ],
   },
   {

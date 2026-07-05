@@ -2,7 +2,7 @@ import { auth } from "@/auth";
 import { desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { userCredits, usageEvents } from "@/lib/db/schema";
-import { ensureCredit } from "@/lib/cortecs/billing";
+import { ensureCredit, getBalanceBreakdown } from "@/lib/cortecs/billing";
 
 // Reads the signed-in user's EUR credit balance and, optionally, recent usage
 // history. Touches Postgres + the billing layer, so it must run on Node.
@@ -16,8 +16,11 @@ export async function GET(request: Request) {
   const userId = session.user.id;
 
   // ensureCredit also grants the free tier on first ever read, so a brand-new
-  // user immediately sees their starting balance.
-  const balanceEur = await ensureCredit(userId);
+  // user immediately sees their starting balance. The breakdown then splits the
+  // total into persistent (free grant + coupons + top-ups) vs. expiring monthly
+  // subscription credit for the account UI.
+  await ensureCredit(userId);
+  const balance = await getBalanceBreakdown(userId);
 
   const [credit] = await db
     .select({ freeGrantedEur: userCredits.freeGrantedEur })
@@ -51,7 +54,10 @@ export async function GET(request: Request) {
   }
 
   return Response.json({
-    balanceEur,
+    balanceEur: balance.totalEur,
+    persistentEur: balance.persistentEur,
+    monthlyEur: balance.monthlyEur,
+    monthlyExpiresAt: balance.monthlyExpiresAt,
     freeGrantedEur: Number(credit?.freeGrantedEur ?? 0),
     ...(history ? { history } : {}),
   });

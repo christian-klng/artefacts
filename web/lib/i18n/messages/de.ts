@@ -72,6 +72,7 @@ const de = {
     title: "Konto",
     tabAccount: "Konto",
     tabCoupon: "Gutschein",
+    tabBilling: "Abo",
     tabLanguage: "Sprache",
     languageHeading: "Sprache",
     logout: "Abmelden",
@@ -84,10 +85,13 @@ const de = {
     codePlaceholder: "CODE",
     redeem: "Einlösen",
     credited: "{amount} gutgeschrieben.",
+    creditedPending:
+      "{amount} werden gutgeschrieben, sobald du ein Abo abschließt.",
     redeemFailed: "Einlösen fehlgeschlagen.",
     networkError: "Netzwerkfehler.",
     referralHeading: "Dein Empfehlungscode",
-    inviteLine: "Lade Freunde ein — sie erhalten {amount} Startguthaben.",
+    inviteLine:
+      "Lade Freunde ein — sie erhalten {amount} Startguthaben, sobald sie ein Abo abschließen.",
     copyCode: "Code kopieren",
     copy: "Kopieren",
     notRedeemedYet: "Noch nicht eingelöst.",
@@ -97,6 +101,10 @@ const de = {
     referrerReward:
       "Du erhältst {amount} pro Freund, sobald dieser ein Abo abschließt.",
     activateCode: "Code aktivieren",
+    subscriptionRequired:
+      "Empfehlungscodes kannst du nur mit einem aktiven Abo erstellen.",
+    pendingWelcome:
+      "Dein Willkommens-Guthaben von {amount} wird frei, sobald du ein Abo abschließt.",
     errors: {
       invalid: "Dieser Code ist ungültig.",
       inactive: "Dieser Code ist nicht mehr aktiv.",
@@ -106,6 +114,27 @@ const de = {
       already_redeemed: "Du hast diesen Code bereits eingelöst.",
       already_referral: "Du hast bereits einen Gutschein eingelöst.",
     },
+  },
+  billing: {
+    creditHeading: "Guthaben",
+    creditPersistent: "Dauerhaft",
+    creditMonthly: "Monatlich (Abo)",
+    creditExpires: "gültig bis {date}",
+    topupHeading: "Guthaben aufladen",
+    topupHint: "Einmalige Aufladung — verfällt nicht.",
+    topup: "{amount} aufladen",
+    hostingHeading: "App-Hosting",
+    hostingHint:
+      "5 €/Monat pro App: schaltet Zusatzfunktionen frei und enthält 5 € Guthaben/Monat. Die kostenlose Kubikraum-Adresse deiner App bleibt immer online.",
+    hostingActive: "Aktiv",
+    hostThis: "Hosten · 5 €/Monat",
+    manage: "Verwalten",
+    renews: "verlängert sich am {date}",
+    cancels: "endet am {date}",
+    pastDue: "Zahlung ausstehend",
+    noApps: "Veröffentliche zuerst eine App, um sie zu hosten.",
+    unavailable: "Zahlungen sind derzeit nicht verfügbar.",
+    processing: "Zahlung wird verarbeitet …",
   },
   toolbar: {
     preview: "Vorschau",
