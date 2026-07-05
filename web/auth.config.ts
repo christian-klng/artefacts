@@ -20,12 +20,16 @@ export const authConfig = {
       return true;
     },
     jwt({ token, user }) {
-      if (user) token.id = user.id;
+      if (user) {
+        token.id = user.id;
+        token.locale = user.locale ?? null;
+      }
       return token;
     },
     session({ session, token }) {
       if (token.id && session.user) {
         session.user.id = token.id as string;
+        session.user.locale = (token.locale as string | null | undefined) ?? null;
       }
       return session;
     },

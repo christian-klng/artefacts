@@ -3,18 +3,15 @@
 import { useActionState } from "react";
 import { saveMailTemplates, type SaveState } from "./actions";
 import type { MailTemplate } from "@/lib/queries";
+import { useLocale, useMessages } from "@/lib/i18n/provider";
 
 const initialState: SaveState = {};
 
 // The {{tokens}} each template understands, surfaced as a hint under the body.
+// Language-neutral, so not translated.
 const PLACEHOLDERS: Record<string, string> = {
   welcome: "{{name}}, {{appUrl}}",
   reset: "{{resetUrl}}, {{expiresHours}}",
-};
-
-const LABELS: Record<string, string> = {
-  welcome: "Begrüßungs-Mail",
-  reset: "Passwort zurücksetzen",
 };
 
 export function MailForm({
@@ -24,6 +21,14 @@ export function MailForm({
   welcome: MailTemplate;
   reset: MailTemplate;
 }) {
+  const msgs = useMessages();
+  const m = msgs.mail;
+  const locale = useLocale();
+  const intlLocale = locale === "de" ? "de-DE" : "en-US";
+  const labels: Record<string, string> = {
+    welcome: m.welcomeLabel,
+    reset: m.resetLabel,
+  };
   const [state, formAction, pending] = useActionState(
     saveMailTemplates,
     initialState,
@@ -37,7 +42,7 @@ export function MailForm({
           className="space-y-4 rounded-xl border border-black/10 bg-white p-6 dark:border-white/10 dark:bg-white/[0.03]"
         >
           <legend className="px-1 text-sm font-semibold">
-            {LABELS[tpl.key]}
+            {labels[tpl.key]}
           </legend>
 
           <div className="space-y-1.5">
@@ -45,36 +50,35 @@ export function MailForm({
               htmlFor={`${tpl.key}_subject`}
               className="text-sm font-medium"
             >
-              Betreff
+              {m.subject}
             </label>
             <input
               id={`${tpl.key}_subject`}
               name={`${tpl.key}_subject`}
               type="text"
               defaultValue={tpl.subject}
-              placeholder="Leer = Standardbetreff"
+              placeholder={m.subjectPlaceholder}
               className="w-full rounded-lg border border-black/10 bg-background px-3 py-2 text-sm outline-none focus:border-foreground/40 dark:border-white/15"
             />
           </div>
 
           <div className="space-y-1.5">
             <label htmlFor={`${tpl.key}_html`} className="text-sm font-medium">
-              HTML
+              {m.html}
             </label>
             <textarea
               id={`${tpl.key}_html`}
               name={`${tpl.key}_html`}
               defaultValue={tpl.html}
               rows={12}
-              placeholder="Leer = eingebaute Standardvorlage"
+              placeholder={m.htmlPlaceholder}
               className="w-full rounded-lg border border-black/10 bg-background px-3 py-2 font-mono text-xs leading-relaxed outline-none focus:border-foreground/40 dark:border-white/15"
             />
             <p className="text-xs text-foreground/50">
-              Platzhalter: {PLACEHOLDERS[tpl.key]}
+              {m.placeholdersLabel} {PLACEHOLDERS[tpl.key]}
               {tpl.updatedAt && (
                 <span className="ml-2">
-                  · zuletzt geändert{" "}
-                  {tpl.updatedAt.toLocaleString("de-DE")}
+                  · {m.lastChanged} {tpl.updatedAt.toLocaleString(intlLocale)}
                 </span>
               )}
             </p>
@@ -88,11 +92,11 @@ export function MailForm({
           disabled={pending}
           className="rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
         >
-          {pending ? "Speichern…" : "Speichern"}
+          {pending ? msgs.common.saving : msgs.common.save}
         </button>
         {state.ok && (
           <span className="text-sm text-green-600 dark:text-green-400">
-            Gespeichert.
+            {msgs.common.saved}
           </span>
         )}
         {state.error && (

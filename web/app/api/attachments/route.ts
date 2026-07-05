@@ -2,6 +2,8 @@ import { auth } from "@/auth";
 import { getOwnedProject } from "@/lib/projects";
 import { createAttachment, listAttachments } from "@/lib/attachments";
 import { extractAttachment, MAX_ATTACHMENT_BYTES } from "@/lib/attachments/extract";
+import { resolveLocale } from "@/lib/locale";
+import { getMessages } from "@/lib/i18n/messages";
 
 // Text extraction (pdf-parse/mammoth) needs Node APIs — never the edge runtime.
 export const runtime = "nodejs";
@@ -48,12 +50,18 @@ export async function POST(request: Request) {
     return new Response("Not found", { status: 404 });
   }
 
+  const t = getMessages(await resolveLocale()).attachments;
   if (file.size === 0) {
-    return Response.json({ error: "Datei ist leer" }, { status: 400 });
+    return Response.json({ error: t.errEmpty }, { status: 400 });
   }
   if (file.size > MAX_ATTACHMENT_BYTES) {
     return Response.json(
-      { error: `Datei zu groß (max. ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB)` },
+      {
+        error: t.errTooLarge.replace(
+          "{max}",
+          String(MAX_ATTACHMENT_BYTES / 1024 / 1024),
+        ),
+      },
       { status: 413 },
     );
   }

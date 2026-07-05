@@ -7,6 +7,8 @@ import { eq } from "drizzle-orm";
 import { COOKIE_NAME, verifySession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { coupons, users } from "@/lib/schema";
+import { resolveLocale } from "@/lib/locale";
+import { getMessages } from "@/lib/i18n/messages";
 
 export type CreateState = { ok?: boolean; error?: string; code?: string };
 
@@ -45,19 +47,22 @@ export async function createCoupon(
   _prev: CreateState,
   formData: FormData,
 ): Promise<CreateState> {
+  const msgs = getMessages(await resolveLocale());
+  const m = msgs.couponForm;
+
   const session = await verifySession(
     (await cookies()).get(COOKIE_NAME)?.value,
   );
-  if (!session) return { error: "Nicht angemeldet." };
+  if (!session) return { error: msgs.common.notLoggedIn };
 
   const codeInput = normalizeCode(String(formData.get("code") ?? ""));
   if (codeInput === null) {
-    return { error: "Ungültiger Code (nur A–Z, 0–9, Bindestrich)." };
+    return { error: m.errInvalidCode };
   }
 
   const recipient = parseEur(String(formData.get("recipient") ?? ""));
   if (recipient === null || recipient <= 0) {
-    return { error: "Einlöser-Betrag muss größer als 0 sein." };
+    return { error: m.errRecipientPositive };
   }
 
   const referrer = parseEur(String(formData.get("referrer") ?? "0")) ?? 0;
@@ -72,25 +77,25 @@ export async function createCoupon(
       .from(users)
       .where(eq(users.email, ownerEmail))
       .limit(1);
-    if (!u) return { error: `Kein Nutzer mit E-Mail ${ownerEmail}.` };
+    if (!u) return { error: m.errNoUser.replace("{email}", ownerEmail) };
     ownerId = u.id;
   }
 
   const maxRaw = String(formData.get("maxRedemptions") ?? "").trim();
   let maxRedemptions: number | null = null;
   if (maxRaw) {
-    const m = Number(maxRaw);
-    if (!Number.isInteger(m) || m <= 0) {
-      return { error: "Max. Einlösungen muss eine positive ganze Zahl sein." };
+    const n = Number(maxRaw);
+    if (!Number.isInteger(n) || n <= 0) {
+      return { error: m.errMaxPositiveInt };
     }
-    maxRedemptions = m;
+    maxRedemptions = n;
   }
 
   const expiresRaw = String(formData.get("expiresAt") ?? "").trim();
   let expiresAt: Date | null = null;
   if (expiresRaw) {
     const d = new Date(expiresRaw);
-    if (Number.isNaN(d.getTime())) return { error: "Ungültiges Ablaufdatum." };
+    if (Number.isNaN(d.getTime())) return { error: m.errInvalidExpiry };
     expiresAt = d;
   }
 
@@ -113,7 +118,7 @@ export async function createCoupon(
     });
   } catch (error) {
     console.error("Failed to create coupon:", error);
-    return { error: "Code bereits vergeben oder Speichern fehlgeschlagen." };
+    return { error: m.errCodeTaken };
   }
 
   revalidatePath("/coupons");

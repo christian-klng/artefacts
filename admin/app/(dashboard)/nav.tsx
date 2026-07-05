@@ -2,18 +2,20 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-
-const links = [
-  { href: "/", label: "Übersicht" },
-  { href: "/users", label: "Nutzer" },
-  { href: "/apps", label: "Apps" },
-  { href: "/coupons", label: "Gutscheine" },
-  { href: "/mail", label: "E-Mails" },
-  { href: "/settings", label: "Einstellungen" },
-];
+import { useMessages } from "@/lib/i18n/provider";
 
 export function Nav() {
   const pathname = usePathname();
+  const m = useMessages();
+
+  const links = [
+    { href: "/", label: m.nav.overview },
+    { href: "/users", label: m.nav.users },
+    { href: "/apps", label: m.nav.apps },
+    { href: "/coupons", label: m.nav.coupons },
+    { href: "/mail", label: m.nav.mail },
+    { href: "/settings", label: m.nav.settings },
+  ];
 
   return (
     <nav className="flex items-center gap-1">

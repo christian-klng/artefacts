@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Check, CloudOff, Copy, Pencil, RefreshCw } from "lucide-react";
+import { useMessages } from "@/lib/i18n/provider";
 
 export type Version = {
   id: string;
@@ -9,14 +10,6 @@ export type Version = {
   label: string | null;
   // Backup kind: 'auto' | 'daily' | 'publish' | 'manual' (see lib/backup.ts).
   kind: string;
-};
-
-// Human labels for the backup kinds shown in the restore dropdown.
-const BACKUP_KIND_LABEL: Record<string, string> = {
-  auto: "Auto",
-  daily: "Täglich",
-  publish: "Veröffentlicht",
-  manual: "Manuell",
 };
 
 export type ViewMode = "preview" | "code" | "files" | "data";
@@ -60,8 +53,15 @@ export function WorkspaceToolbar({
   onUnpublish: () => void;
   onSetSlug: (desired: string) => Promise<string | undefined>;
 }) {
+  const m = useMessages();
   // versions are newest-first; number them oldest=1 for a stable label.
   const total = versions.length;
+  const backupLabel: Record<string, string> = {
+    auto: m.toolbar.backupAuto,
+    daily: m.toolbar.backupDaily,
+    publish: m.toolbar.backupPublish,
+    manual: m.toolbar.backupManual,
+  };
 
   return (
     <div className="flex items-center justify-between gap-2 border-b border-neutral-200 px-3 py-2 dark:border-neutral-800">
@@ -96,21 +96,17 @@ export function WorkspaceToolbar({
                   if (!id) return;
                   // A full-backup restore overwrites live DB + accounts too, so
                   // confirm before replacing everything.
-                  if (
-                    confirm(
-                      "Backup wiederherstellen überschreibt Dateien, Datenbank, Nutzerkonten und Anhänge. Fortfahren?",
-                    )
-                  ) {
+                  if (confirm(m.toolbar.restoreConfirm)) {
                     onRestore(id);
                   }
                 }}
                 className="rounded-md border border-neutral-300 bg-transparent px-2 py-1 text-xs outline-none disabled:opacity-50 dark:border-neutral-700"
-                aria-label="Backup wiederherstellen"
+                aria-label={m.toolbar.restoreAria}
               >
-                <option value="">Backup wiederherstellen…</option>
+                <option value="">{m.toolbar.restorePlaceholder}</option>
                 {versions.map((v) => (
                   <option key={v.id} value={v.id}>
-                    {`${BACKUP_KIND_LABEL[v.kind] ?? v.kind} · ${new Date(
+                    {`${backupLabel[v.kind] ?? v.kind} · ${new Date(
                       v.createdAt,
                     ).toLocaleString()}`}
                   </option>
@@ -138,6 +134,7 @@ function ExportControls({
   siteUrl?: string;
   onDownload: (rawSiteUrl: string) => void | Promise<void>;
 }) {
+  const m = useMessages();
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(siteUrl ?? "");
   const [busy, setBusy] = useState(false);
@@ -176,26 +173,25 @@ function ExportControls({
         aria-haspopup="dialog"
         className="rounded-md bg-neutral-900 px-3 py-1 text-xs font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900"
       >
-        Download
+        {m.toolbar.download}
       </button>
 
       {open && (
         <>
           {/* click-away catcher */}
           <button
-            aria-label="Schließen"
+            aria-label={m.common.close}
             tabIndex={-1}
             onClick={() => setOpen(false)}
             className="fixed inset-0 z-40 cursor-default"
           />
           <div
             role="dialog"
-            aria-label="Export"
+            aria-label={m.toolbar.exportAria}
             className="absolute right-0 top-full z-50 mt-1.5 w-72 rounded-lg border border-neutral-200 bg-white p-3 text-left shadow-lg dark:border-neutral-800 dark:bg-neutral-950"
           >
             <p className="mb-2 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">
-              Ziel-URL der Veröffentlichung — wird in SEO-Angaben (Canonical,
-              Open Graph, Sitemap) eingesetzt. Leer lassen für relative Pfade.
+              {m.toolbar.downloadHint}
             </p>
             <input
               autoFocus
@@ -206,9 +202,9 @@ function ExportControls({
               }}
               disabled={busy}
               spellCheck={false}
-              placeholder="https://meine-domain.de"
+              placeholder={m.toolbar.downloadUrlPlaceholder}
               className="w-full rounded border border-neutral-300 bg-transparent px-2 py-1 text-xs outline-none focus:border-neutral-900 disabled:opacity-50 dark:border-neutral-600 dark:focus:border-white"
-              aria-label="Veröffentlichungs-URL"
+              aria-label={m.toolbar.downloadUrlAria}
             />
             <div className="mt-2.5 flex justify-end gap-2">
               <button
@@ -216,14 +212,14 @@ function ExportControls({
                 disabled={busy}
                 className="rounded px-2 py-1 text-xs text-neutral-500 hover:text-neutral-900 disabled:opacity-50 dark:hover:text-white"
               >
-                Abbrechen
+                {m.common.cancel}
               </button>
               <button
                 onClick={run}
                 disabled={busy}
                 className="rounded bg-neutral-900 px-3 py-1 text-xs font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900"
               >
-                {busy ? "…" : "Herunterladen"}
+                {busy ? "…" : m.toolbar.downloadBtn}
               </button>
             </div>
           </div>
@@ -255,6 +251,7 @@ function PublishControls({
   onUnpublish: () => void;
   onSetSlug: (desired: string) => Promise<string | undefined>;
 }) {
+  const m = useMessages();
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -289,8 +286,8 @@ function PublishControls({
   const domainSuffix = dot === -1 ? "" : host.slice(dot); // includes leading dot
 
   const statusText = publishDirty
-    ? "Es gibt Änderungen, die noch nicht veröffentlicht sind."
-    : "Der veröffentlichte Stand entspricht dem aktuellen Code.";
+    ? m.toolbar.dirtyStatus
+    : m.toolbar.cleanStatus;
 
   // Like the download button: the panel is absolutely positioned beneath the
   // button (out of flow) so the toolbar row never changes height.
@@ -309,8 +306,8 @@ function PublishControls({
           published
             ? statusText
             : canPublish
-              ? "App öffentlich veröffentlichen"
-              : "Noch keine /index.html"
+              ? m.toolbar.publishTitlePublic
+              : m.toolbar.publishTitleNoIndex
         }
         className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1 text-xs font-medium disabled:opacity-50 ${
           published
@@ -325,39 +322,37 @@ function PublishControls({
           />
         )}
         {published
-          ? "Veröffentlicht"
+          ? m.toolbar.published
           : publishing
-            ? "Veröffentlichen…"
-            : "Veröffentlichen"}
+            ? m.toolbar.publishing
+            : m.toolbar.publish}
       </button>
 
       {open && (
         <>
           {/* click-away catcher */}
           <button
-            aria-label="Schließen"
+            aria-label={m.common.close}
             tabIndex={-1}
             onClick={() => setOpen(false)}
             className="fixed inset-0 z-40 cursor-default"
           />
           <div
             role="dialog"
-            aria-label="Veröffentlichen"
+            aria-label={m.toolbar.publishDialogAria}
             className="absolute right-0 top-full z-50 mt-1.5 w-72 rounded-lg border border-neutral-200 bg-white p-3 text-left shadow-lg dark:border-neutral-800 dark:bg-neutral-950"
           >
             {!published ? (
               <>
                 <p className="mb-2 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">
-                  Deine App wird unter einer eigenen öffentlichen Adresse
-                  verfügbar — jeder, der den Link kennt, kann sie öffnen. Du
-                  kannst sie jederzeit wieder offline nehmen.
+                  {m.toolbar.publishIntro}
                 </p>
                 <button
                   onClick={onPublish}
                   disabled={!canPublish || publishing}
                   className="w-full rounded bg-success px-3 py-1.5 text-xs font-medium text-info-deep hover:opacity-90 disabled:opacity-50"
                 >
-                  {publishing ? "Wird veröffentlicht…" : "Veröffentlichen"}
+                  {publishing ? m.toolbar.publishRunning : m.toolbar.publish}
                 </button>
               </>
             ) : editing ? (
@@ -393,15 +388,15 @@ function PublishControls({
                     disabled={!publishDirty || publishing}
                     title={
                       publishDirty
-                        ? "Die aktuellen Änderungen veröffentlichen"
-                        : "Der veröffentlichte Stand ist aktuell"
+                        ? m.toolbar.updateTitleDirty
+                        : m.toolbar.updateTitleClean
                     }
                     className={`${publishMenuRow} ${
                       publishDirty ? "font-medium text-success" : ""
                     }`}
                   >
                     <RefreshCw className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                    {publishing ? "Wird aktualisiert…" : "Aktualisieren"}
+                    {publishing ? m.toolbar.updating : m.toolbar.update}
                   </button>
                   <button onClick={copy} className={publishMenuRow}>
                     {copied ? (
@@ -412,23 +407,23 @@ function PublishControls({
                     ) : (
                       <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden />
                     )}
-                    {copied ? "Link kopiert" : "Link kopieren"}
+                    {copied ? m.toolbar.linkCopied : m.toolbar.copyLink}
                   </button>
                   <button
                     onClick={() => setEditing(true)}
                     className={publishMenuRow}
                   >
                     <Pencil className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                    Adresse ändern
+                    {m.toolbar.changeAddress}
                   </button>
                   <button
                     onClick={onUnpublish}
                     disabled={publishing}
-                    title="Die App ist danach nicht mehr öffentlich erreichbar"
+                    title={m.toolbar.takeOfflineTitle}
                     className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-danger enabled:hover:bg-danger/10 disabled:opacity-50"
                   >
                     <CloudOff className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                    Offline nehmen
+                    {m.toolbar.takeOffline}
                   </button>
                 </div>
               </>
@@ -451,6 +446,7 @@ function SlugEditor({
   onSetSlug: (desired: string) => Promise<string | undefined>;
   onClose: () => void;
 }) {
+  const m = useMessages();
   const [value, setValue] = useState(initialSlug);
   const [error, setError] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
@@ -469,7 +465,7 @@ function SlugEditor({
   return (
     <>
       <p className="mb-2 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">
-        Öffentliche Adresse der App — nur a–z, 0–9 und Bindestriche.
+        {m.toolbar.slugHint}
       </p>
       <input
         autoFocus
@@ -486,7 +482,7 @@ function SlugEditor({
         disabled={saving}
         spellCheck={false}
         className="w-full rounded border border-neutral-300 bg-transparent px-2 py-1 text-xs outline-none focus:border-neutral-900 disabled:opacity-50 dark:border-neutral-600 dark:focus:border-white"
-        aria-label="Öffentliche Adresse"
+        aria-label={m.toolbar.slugAria}
       />
       <p
         className="mt-1.5 truncate text-xs text-neutral-400"
@@ -502,14 +498,14 @@ function SlugEditor({
           disabled={saving}
           className="rounded px-2 py-1 text-xs text-neutral-500 hover:text-neutral-900 disabled:opacity-50 dark:hover:text-white"
         >
-          Abbrechen
+          {m.common.cancel}
         </button>
         <button
           onClick={save}
           disabled={saving}
           className="rounded bg-success px-3 py-1 text-xs font-medium text-info-deep hover:opacity-90 disabled:opacity-50"
         >
-          {saving ? "…" : "Speichern"}
+          {saving ? "…" : m.common.save}
         </button>
       </div>
     </>
@@ -527,6 +523,7 @@ function ViewSwitch({
   hasDatabase: boolean;
   hasFiles: boolean;
 }) {
+  const m = useMessages();
   const base = "rounded px-2.5 py-1 text-xs font-medium transition";
   const activeCls = "bg-white text-neutral-900 shadow-sm dark:bg-neutral-700 dark:text-white";
   const inactiveCls = "text-neutral-500 hover:text-neutral-900 dark:hover:text-white";
@@ -539,7 +536,7 @@ function ViewSwitch({
         className={`${base} ${view === "preview" ? activeCls : inactiveCls}`}
         aria-pressed={view === "preview"}
       >
-        Preview
+        {m.toolbar.preview}
       </button>
       <button
         type="button"
@@ -547,7 +544,7 @@ function ViewSwitch({
         className={`${base} ${view === "code" ? activeCls : inactiveCls}`}
         aria-pressed={view === "code"}
       >
-        Code
+        {m.toolbar.code}
       </button>
       {hasFiles && (
         <button
@@ -556,7 +553,7 @@ function ViewSwitch({
           className={`${base} ${view === "files" ? activeCls : inactiveCls}`}
           aria-pressed={view === "files"}
         >
-          Dateien
+          {m.toolbar.files}
         </button>
       )}
       {hasDatabase && (
@@ -566,7 +563,7 @@ function ViewSwitch({
           className={`${base} ${view === "data" ? activeCls : inactiveCls}`}
           aria-pressed={view === "data"}
         >
-          Daten
+          {m.toolbar.data}
         </button>
       )}
     </div>

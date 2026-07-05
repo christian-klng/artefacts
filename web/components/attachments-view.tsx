@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { FileText } from "lucide-react";
+import { useMessages } from "@/lib/i18n/provider";
 
 export type AttachmentMeta = {
   id: string;
@@ -33,6 +34,7 @@ export function AttachmentsView({
   projectId: string;
   onDeleted: () => void;
 }) {
+  const m = useMessages();
   const [deleting, setDeleting] = useState<string | null>(null);
   // Which file is awaiting delete confirmation (inline, no native dialog).
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -54,11 +56,7 @@ export function AttachmentsView({
   if (attachments.length === 0) {
     return (
       <div className="flex h-full items-center justify-center p-8 text-center text-sm text-neutral-500">
-        <p>
-          Noch keine Dateien. Lade im Chat Design-Konzepte, Texte oder
-          Vorlagen (PDF, DOCX, TXT, MD, HTML/CSS, Bilder …) hoch — der Agent
-          nutzt sie als Referenz.
-        </p>
+        <p>{m.attachments.empty}</p>
       </div>
     );
   }
@@ -95,8 +93,8 @@ export function AttachmentsView({
                   </span>
                 </div>
                 <p className="text-xs text-neutral-500">
-                  {a.kind === "image" ? "Bild" : "Text"} ·{" "}
-                  {new Date(a.createdAt).toLocaleString()}
+                  {a.kind === "image" ? m.attachments.image : m.attachments.text}{" "}
+                  · {new Date(a.createdAt).toLocaleString()}
                 </p>
                 {a.preview ? (
                   <p className="mt-1 line-clamp-2 text-xs text-neutral-500">
@@ -108,22 +106,24 @@ export function AttachmentsView({
                     href={src}
                     className="text-neutral-600 hover:text-neutral-900 hover:underline dark:text-neutral-300 dark:hover:text-white"
                   >
-                    Download
+                    {m.common.download}
                   </a>
                   {confirmingId === a.id ? (
                     <span className="flex items-center gap-2">
-                      <span className="text-neutral-500">Wirklich löschen?</span>
+                      <span className="text-neutral-500">
+                        {m.attachments.confirmDelete}
+                      </span>
                       <button
                         onClick={() => remove(a.id)}
                         className="font-medium text-danger hover:underline"
                       >
-                        Ja
+                        {m.common.yes}
                       </button>
                       <button
                         onClick={() => setConfirmingId(null)}
                         className="text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
                       >
-                        Abbrechen
+                        {m.common.cancel}
                       </button>
                     </span>
                   ) : (
@@ -132,7 +132,7 @@ export function AttachmentsView({
                       disabled={deleting === a.id}
                       className="text-neutral-500 hover:text-danger disabled:opacity-50"
                     >
-                      {deleting === a.id ? "Löschen…" : "Löschen"}
+                      {deleting === a.id ? m.attachments.deleting : m.attachments.delete}
                     </button>
                   )}
                 </div>

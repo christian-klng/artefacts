@@ -28,6 +28,12 @@ export const users = pgTable("user", {
   image: text("image"),
   // Credentials provider: bcrypt hash. Null for OAuth-only users.
   passwordHash: text("passwordHash"),
+  // UI language ('de' | 'en'). NULLABLE and NO default on purpose: NULL means
+  // "never chosen" → keep auto-detecting (cookie/Accept-Language); a value is an
+  // explicit settings choice that then follows the user across devices and is
+  // used to localise their transactional emails. Plain nullable text column →
+  // safe for drizzle-kit push --force in the non-TTY migrate container.
+  locale: text("locale"),
   createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
 });
 

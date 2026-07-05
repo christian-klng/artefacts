@@ -9,10 +9,12 @@ import {
   renameProjectAction,
   deleteProjectAction,
 } from "@/app/actions/projects";
+import { useMessages } from "@/lib/i18n/provider";
 
 type Project = { id: string; name: string };
 
 export function ProjectSwitcher({ projects }: { projects: Project[] }) {
+  const m = useMessages();
   const pathname = usePathname();
   const activeId = pathname?.split("/")[2]; // /app/<id>
   const active = projects.find((p) => p.id === activeId);
@@ -32,7 +34,7 @@ export function ProjectSwitcher({ projects }: { projects: Project[] }) {
         className="flex items-center gap-1 rounded-md border border-neutral-300 px-2 py-1 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
       >
         <span className="max-w-[200px] truncate">
-          {active?.name ?? "Projects"}
+          {active?.name ?? m.projectSwitcher.projects}
         </span>
         <ChevronDown className="h-4 w-4 shrink-0 text-neutral-400" aria-hidden />
       </button>
@@ -70,7 +72,7 @@ export function ProjectSwitcher({ projects }: { projects: Project[] }) {
                   className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800"
                 >
                   <Plus className="h-4 w-4 shrink-0" aria-hidden />
-                  New project
+                  {m.projectSwitcher.newProject}
                 </button>
               </form>
 
@@ -94,7 +96,7 @@ export function ProjectSwitcher({ projects }: { projects: Project[] }) {
                       type="submit"
                       className="rounded bg-neutral-900 px-2 py-1 text-xs text-white dark:bg-white dark:text-neutral-900"
                     >
-                      Save
+                      {m.common.save}
                     </button>
                   </form>
                 ) : (
@@ -103,12 +105,19 @@ export function ProjectSwitcher({ projects }: { projects: Project[] }) {
                       onClick={() => setRenaming(true)}
                       className="flex-1 rounded px-2 py-1.5 text-left text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800"
                     >
-                      Rename
+                      {m.projectSwitcher.rename}
                     </button>
                     <form
                       action={deleteProjectAction}
                       onSubmit={(e) => {
-                        if (!confirm(`Delete "${active.name}"? This cannot be undone.`))
+                        if (
+                          !confirm(
+                            m.projectSwitcher.deleteConfirm.replace(
+                              "{name}",
+                              active.name,
+                            ),
+                          )
+                        )
                           e.preventDefault();
                       }}
                     >
@@ -117,7 +126,7 @@ export function ProjectSwitcher({ projects }: { projects: Project[] }) {
                         type="submit"
                         className="rounded px-2 py-1.5 text-sm text-danger hover:bg-danger/10"
                       >
-                        Delete
+                        {m.projectSwitcher.delete}
                       </button>
                     </form>
                   </div>

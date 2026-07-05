@@ -8,6 +8,8 @@ import {
   checkCredentials,
   createSession,
 } from "@/lib/auth";
+import { resolveLocale } from "@/lib/locale";
+import { getMessages } from "@/lib/i18n/messages";
 
 export type LoginState = { error?: string };
 
@@ -38,7 +40,8 @@ export async function login(
   const password = readField(formData, "password");
 
   if (!checkCredentials(username, password)) {
-    return { error: "Falscher Benutzername oder falsches Passwort." };
+    const m = getMessages(await resolveLocale()).login;
+    return { error: m.wrongCredentials };
   }
 
   const token = await createSession(username);

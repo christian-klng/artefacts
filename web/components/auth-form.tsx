@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import type { AuthState } from "@/app/actions/auth";
+import { useMessages } from "@/lib/i18n/provider";
 
 type Mode = "login" | "signup";
 
@@ -18,6 +19,8 @@ export function AuthForm({
   // login↔signup cross-links so a landing-page prompt survives a form switch.
   next?: string;
 }) {
+  const msgs = useMessages();
+  const t = msgs.auth;
   const [state, formAction, pending] = useActionState<AuthState, FormData>(
     action,
     undefined,
@@ -30,29 +33,27 @@ export function AuthForm({
     <div className="mx-auto flex min-h-screen w-full max-w-sm flex-col justify-center gap-6 px-4">
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">
-          {isSignup ? "Create your account" : "Welcome back"}
+          {isSignup ? t.signupTitle : t.loginTitle}
         </h1>
         <p className="text-sm text-neutral-500">
-          {isSignup
-            ? "Start building apps from a prompt."
-            : "Sign in to your workspace."}
+          {isSignup ? t.signupSubtitle : t.loginSubtitle}
         </p>
       </div>
 
       <form action={formAction} className="space-y-4">
         {next && <input type="hidden" name="redirectTo" value={next} />}
         {isSignup && (
-          <Field label="Name" name="name" type="text" autoComplete="name" />
+          <Field label={t.name} name="name" type="text" autoComplete="name" />
         )}
         <Field
-          label="Email"
+          label={t.email}
           name="email"
           type="email"
           autoComplete="email"
           required
         />
         <Field
-          label="Password"
+          label={t.password}
           name="password"
           type="password"
           autoComplete={isSignup ? "new-password" : "current-password"}
@@ -66,7 +67,7 @@ export function AuthForm({
               href="/forgot-password"
               className="text-neutral-500 underline"
             >
-              Forgot password?
+              {t.forgotLink}
             </Link>
           </p>
         )}
@@ -82,27 +83,23 @@ export function AuthForm({
           disabled={pending}
           className="w-full rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
         >
-          {pending
-            ? "Please wait…"
-            : isSignup
-              ? "Create account"
-              : "Sign in"}
+          {pending ? msgs.common.pleaseWait : isSignup ? t.createAccount : t.signIn}
         </button>
       </form>
 
       <p className="text-center text-sm text-neutral-500">
         {isSignup ? (
           <>
-            Already have an account?{" "}
+            {t.haveAccount}{" "}
             <Link href={`/login${suffix}`} className="underline">
-              Sign in
+              {t.signIn}
             </Link>
           </>
         ) : (
           <>
-            Need an account?{" "}
+            {t.needAccount}{" "}
             <Link href={`/signup${suffix}`} className="underline">
-              Sign up
+              {t.signUp}
             </Link>
           </>
         )}

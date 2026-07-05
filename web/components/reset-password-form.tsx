@@ -3,8 +3,11 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import { resetPassword, type AuthState } from "@/app/actions/auth";
+import { useMessages } from "@/lib/i18n/provider";
 
 export function ResetPasswordForm({ token }: { token: string }) {
+  const msgs = useMessages();
+  const t = msgs.auth;
   const [state, formAction, pending] = useActionState<AuthState, FormData>(
     resetPassword,
     undefined,
@@ -14,17 +17,15 @@ export function ResetPasswordForm({ token }: { token: string }) {
     <div className="mx-auto flex min-h-screen w-full max-w-sm flex-col justify-center gap-6 px-4">
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">
-          Choose a new password
+          {t.resetTitle}
         </h1>
-        <p className="text-sm text-neutral-500">
-          Enter a new password for your account.
-        </p>
+        <p className="text-sm text-neutral-500">{t.resetSubtitle}</p>
       </div>
 
       <form action={formAction} className="space-y-4">
         <input type="hidden" name="token" value={token} />
         <label className="block space-y-1.5">
-          <span className="text-sm font-medium">New password</span>
+          <span className="text-sm font-medium">{t.newPassword}</span>
           <input
             name="password"
             type="password"
@@ -46,13 +47,13 @@ export function ResetPasswordForm({ token }: { token: string }) {
           disabled={pending}
           className="w-full rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
         >
-          {pending ? "Please wait…" : "Reset password"}
+          {pending ? msgs.common.pleaseWait : t.resetSubmit}
         </button>
       </form>
 
       <p className="text-center text-sm text-neutral-500">
         <Link href="/login" className="underline">
-          Back to sign in
+          {t.backToSignIn}
         </Link>
       </p>
     </div>

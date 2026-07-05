@@ -10,8 +10,14 @@ import { db } from "@/lib/db";
 import { passwordResetTokens, users } from "@/lib/db/schema";
 import { appBaseUrl, sendMail } from "@/lib/mail";
 import { resetEmail, welcomeEmail } from "@/lib/mail-templates";
+import { resolveLocale } from "@/lib/locale";
+import { getMessages } from "@/lib/i18n/messages";
+import { isLocale, type Messages } from "@/lib/i18n";
 
 export type AuthState = { error?: string; success?: boolean } | undefined;
+
+// Schemas are built per request so their validation messages are localised.
+type AuthMessages = Messages["auth"];
 
 // Only allow same-origin relative paths as a post-auth destination, so a
 // crafted `redirectTo` form value can't turn into an open redirect. Defaults to
@@ -27,13 +33,12 @@ const sha256 = (value: string) =>
 
 const RESET_TTL_HOURS = Number(process.env.MAIL_RESET_TTL_HOURS || 1);
 
-const signupSchema = z.object({
-  name: z.string().trim().min(1).optional(),
-  email: z.email({ error: "Please enter a valid email." }),
-  password: z
-    .string()
-    .min(8, { error: "Password must be at least 8 characters." }),
-});
+const signupSchema = (t: AuthMessages) =>
+  z.object({
+    name: z.string().trim().min(1).optional(),
+    email: z.email({ error: t.errEmailInvalid }),
+    password: z.string().min(8, { error: t.errPasswordMin }),
+  });
 
 export async function authenticate(
   _prevState: AuthState,
@@ -47,7 +52,8 @@ export async function authenticate(
     });
   } catch (error) {
     if (error instanceof AuthError) {
-      return { error: "Invalid email or password." };
+      const t = getMessages(await resolveLocale()).auth;
+      return { error: t.errInvalidCredentials };
     }
     // Re-throw redirect signals (NEXT_REDIRECT) so navigation works.
     throw error;
@@ -58,13 +64,15 @@ export async function signup(
   _prevState: AuthState,
   formData: FormData,
 ): Promise<AuthState> {
-  const parsed = signupSchema.safeParse({
+  const locale = await resolveLocale();
+  const t = getMessages(locale).auth;
+  const parsed = signupSchema(t).safeParse({
     name: formData.get("name") || undefined,
     email: formData.get("email"),
     password: formData.get("password"),
   });
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { error: parsed.error.issues[0]?.message ?? t.errInvalidInput };
   }
 
   const { name, email, password } = parsed.data;
@@ -73,7 +81,7 @@ export async function signup(
     where: eq(users.email, email),
   });
   if (existing) {
-    return { error: "An account with that email already exists." };
+    return { error: t.errAccountExists };
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
@@ -81,10 +89,13 @@ export async function signup(
 
   // Fire-and-forget: a failed welcome mail must not block signup.
   try {
-    const { subject, html } = await welcomeEmail({
-      name: name || "an Bord",
-      appUrl: `${appBaseUrl()}/app`,
-    });
+    const { subject, html } = await welcomeEmail(
+      {
+        name: name || (locale === "de" ? "an Bord" : "aboard"),
+        appUrl: `${appBaseUrl()}/app`,
+      },
+      locale,
+    );
     await sendMail({ to: email, subject, html });
   } catch (error) {
     console.error("Failed to send welcome email:", error);
@@ -97,18 +108,20 @@ export async function signup(
   });
 }
 
-const forgotSchema = z.object({
-  email: z.email({ error: "Please enter a valid email." }),
-});
+const forgotSchema = (t: AuthMessages) =>
+  z.object({
+    email: z.email({ error: t.errEmailInvalid }),
+  });
 
 // Always returns success — never reveals whether an account exists.
 export async function requestPasswordReset(
   _prevState: AuthState,
   formData: FormData,
 ): Promise<AuthState> {
-  const parsed = forgotSchema.safeParse({ email: formData.get("email") });
+  const t = getMessages(await resolveLocale()).auth;
+  const parsed = forgotSchema(t).safeParse({ email: formData.get("email") });
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { error: parsed.error.issues[0]?.message ?? t.errInvalidInput };
   }
   const { email } = parsed.data;
 
@@ -125,12 +138,18 @@ export async function requestPasswordReset(
       expires,
     });
 
+    // Localise to the user's saved language if they have one, else the language
+    // of the current request (the person filling out the forgot-password form).
+    const emailLocale = isLocale(user.locale)
+      ? user.locale
+      : await resolveLocale();
+
     try {
       const resetUrl = `${appBaseUrl()}/reset-password?token=${token}`;
-      const { subject, html } = await resetEmail({
-        resetUrl,
-        expiresHours: String(RESET_TTL_HOURS),
-      });
+      const { subject, html } = await resetEmail(
+        { resetUrl, expiresHours: String(RESET_TTL_HOURS) },
+        emailLocale,
+      );
       await sendMail({ to: email, subject, html });
     } catch (error) {
       console.error("Failed to send reset email:", error);
@@ -140,23 +159,23 @@ export async function requestPasswordReset(
   return { success: true };
 }
 
-const resetSchema = z.object({
-  token: z.string().min(1),
-  password: z
-    .string()
-    .min(8, { error: "Password must be at least 8 characters." }),
-});
+const resetSchema = (t: AuthMessages) =>
+  z.object({
+    token: z.string().min(1),
+    password: z.string().min(8, { error: t.errPasswordMin }),
+  });
 
 export async function resetPassword(
   _prevState: AuthState,
   formData: FormData,
 ): Promise<AuthState> {
-  const parsed = resetSchema.safeParse({
+  const t = getMessages(await resolveLocale()).auth;
+  const parsed = resetSchema(t).safeParse({
     token: formData.get("token"),
     password: formData.get("password"),
   });
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { error: parsed.error.issues[0]?.message ?? t.errInvalidInput };
   }
   const { token, password } = parsed.data;
 
@@ -169,14 +188,14 @@ export async function resetPassword(
   });
 
   if (!record || record.expires < new Date()) {
-    return { error: "This reset link is invalid or has expired." };
+    return { error: t.errResetInvalid };
   }
 
   const user = await db.query.users.findFirst({
     where: eq(users.id, record.userId),
   });
   if (!user) {
-    return { error: "This reset link is invalid or has expired." };
+    return { error: t.errResetInvalid };
   }
 
   const passwordHash = await bcrypt.hash(password, 10);

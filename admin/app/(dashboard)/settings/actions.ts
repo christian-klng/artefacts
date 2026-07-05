@@ -6,6 +6,8 @@ import { COOKIE_NAME, verifySession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { appSettings } from "@/lib/schema";
 import { SETTING_KEYS } from "./fields";
+import { resolveLocale } from "@/lib/locale";
+import { getMessages } from "@/lib/i18n/messages";
 
 export type SaveState = { ok?: boolean; error?: string };
 
@@ -19,10 +21,12 @@ export async function saveSettings(
   _prev: SaveState,
   formData: FormData,
 ): Promise<SaveState> {
+  const common = getMessages(await resolveLocale()).common;
+
   const session = await verifySession(
     (await cookies()).get(COOKIE_NAME)?.value,
   );
-  if (!session) return { error: "Nicht angemeldet." };
+  if (!session) return { error: common.notLoggedIn };
 
   try {
     const now = new Date();
@@ -38,7 +42,7 @@ export async function saveSettings(
     }
   } catch (error) {
     console.error("Failed to save settings:", error);
-    return { error: "Speichern fehlgeschlagen." };
+    return { error: common.saveFailed };
   }
 
   revalidatePath("/settings");

@@ -1,9 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { Check, Copy, Power, User, X } from "lucide-react";
 import { logout } from "@/app/actions/auth";
+import { setLocale } from "@/app/actions/settings";
 import { emitCreditChanged } from "@/lib/credit-events";
+import { LOCALES, type Locale } from "@/lib/i18n";
+import { useLocale, useMessages } from "@/lib/i18n/provider";
 
 // The right-hand header controls: a user-icon button that opens an account
 // details modal, and a power-off button that signs out after a confirmation.
@@ -12,6 +15,9 @@ import { emitCreditChanged } from "@/lib/credit-events";
 
 const iconButton =
   "inline-flex h-8 w-8 items-center justify-center rounded-md border border-neutral-300 text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-900 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900 dark:hover:text-white";
+
+// Language endonyms — the same in either UI language, so not translated.
+const LANGUAGE_LABEL: Record<Locale, string> = { de: "Deutsch", en: "English" };
 
 function Modal({
   title,
@@ -22,6 +28,7 @@ function Modal({
   onClose: () => void;
   children: React.ReactNode;
 }) {
+  const m = useMessages();
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
@@ -34,7 +41,7 @@ function Modal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* click-away backdrop */}
       <button
-        aria-label="Schließen"
+        aria-label={m.common.close}
         tabIndex={-1}
         onClick={onClose}
         className="absolute inset-0 cursor-default bg-black/30"
@@ -49,7 +56,7 @@ function Modal({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Schließen"
+            aria-label={m.common.close}
             className="text-neutral-400 transition hover:text-neutral-900 dark:hover:text-white"
           >
             <X className="h-4 w-4" aria-hidden />
@@ -93,7 +100,53 @@ function AccountInfo({
   );
 }
 
+function LanguageTab() {
+  const active = useLocale();
+  const m = useMessages();
+  const [pending, startTransition] = useTransition();
+
+  function pick(locale: Locale) {
+    if (locale === active || pending) return;
+    startTransition(async () => {
+      await setLocale(locale);
+      window.location.reload();
+    });
+  }
+
+  return (
+    <div className="space-y-2">
+      <h3 className="text-sm font-medium">{m.account.languageHeading}</h3>
+      <div
+        role="group"
+        aria-label={m.localeToggle.label}
+        className="inline-flex overflow-hidden rounded-md border border-neutral-300 dark:border-neutral-700"
+      >
+        {LOCALES.map((locale) => {
+          const isActive = locale === active;
+          return (
+            <button
+              key={locale}
+              type="button"
+              disabled={pending}
+              aria-pressed={isActive}
+              onClick={() => pick(locale)}
+              className={`px-3 py-1.5 text-sm font-medium transition disabled:opacity-50 ${
+                isActive
+                  ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
+                  : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900"
+              }`}
+            >
+              {LANGUAGE_LABEL[locale]}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function CouponTab() {
+  const m = useMessages();
   const [info, setInfo] = useState<CouponInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [code, setCode] = useState("");
@@ -141,16 +194,16 @@ function CouponTab() {
         }
         setMsg({
           ok: true,
-          text: `${eur(Number(data.creditedEur))} gutgeschrieben.`,
+          text: m.coupon.credited.replace("{amount}", eur(Number(data.creditedEur))),
         });
         setCode("");
         const fresh = await fetchInfo();
         if (fresh) setInfo(fresh);
       } else {
-        setMsg({ ok: false, text: data.message ?? "Einlösen fehlgeschlagen." });
+        setMsg({ ok: false, text: data.message ?? m.coupon.redeemFailed });
       }
     } catch {
-      setMsg({ ok: false, text: "Netzwerkfehler." });
+      setMsg({ ok: false, text: m.coupon.networkError });
     } finally {
       setRedeeming(false);
     }
@@ -181,23 +234,21 @@ function CouponTab() {
   }
 
   if (loading) {
-    return <p className="text-sm text-neutral-500">Lädt …</p>;
+    return <p className="text-sm text-neutral-500">{m.common.loading}</p>;
   }
 
   return (
     <div className="space-y-5">
       <section className="space-y-2">
-        <h3 className="text-sm font-medium">Gutschein einlösen</h3>
+        <h3 className="text-sm font-medium">{m.coupon.redeemHeading}</h3>
         {info?.hasRedeemed ? (
-          <p className="text-sm text-neutral-500">
-            Du hast bereits einen Gutschein eingelöst.
-          </p>
+          <p className="text-sm text-neutral-500">{m.coupon.alreadyRedeemed}</p>
         ) : (
           <form onSubmit={onRedeem} className="flex gap-2">
             <input
               value={code}
               onChange={(e) => setCode(e.target.value)}
-              placeholder="CODE"
+              placeholder={m.coupon.codePlaceholder}
               autoCapitalize="characters"
               autoComplete="off"
               className="min-w-0 flex-1 rounded-md border border-neutral-300 bg-transparent px-3 py-1.5 text-sm uppercase outline-none focus:border-neutral-500 dark:border-neutral-700"
@@ -207,7 +258,7 @@ function CouponTab() {
               disabled={redeeming || !code.trim()}
               className="shrink-0 rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
             >
-              {redeeming ? "…" : "Einlösen"}
+              {redeeming ? "…" : m.coupon.redeem}
             </button>
           </form>
         )}
@@ -223,10 +274,12 @@ function CouponTab() {
       <hr className="border-neutral-200 dark:border-neutral-800" />
 
       <section className="space-y-2">
-        <h3 className="text-sm font-medium">Dein Empfehlungscode</h3>
+        <h3 className="text-sm font-medium">{m.coupon.referralHeading}</h3>
         <p className="text-sm text-neutral-500">
-          Lade Freunde ein — sie erhalten{" "}
-          {eur(info?.recipientAmountEur ?? 10)} Startguthaben.
+          {m.coupon.inviteLine.replace(
+            "{amount}",
+            eur(info?.recipientAmountEur ?? 10),
+          )}
         </p>
         {info?.activated && info.code ? (
           <>
@@ -237,8 +290,8 @@ function CouponTab() {
               <button
                 type="button"
                 onClick={onCopy}
-                aria-label="Code kopieren"
-                title="Kopieren"
+                aria-label={m.coupon.copyCode}
+                title={m.coupon.copy}
                 className={iconButton}
               >
                 {copied ? (
@@ -250,16 +303,18 @@ function CouponTab() {
             </div>
             <p className="text-sm text-neutral-500">
               {info.stats.count === 0
-                ? "Noch nicht eingelöst."
-                : `${info.stats.count}× eingelöst.`}
+                ? m.coupon.notRedeemedYet
+                : m.coupon.redeemedCount.replace("{count}", String(info.stats.count))}
               {info.stats.pendingEur > 0 &&
-                ` · ${eur(info.stats.pendingEur)} Bonus ausstehend`}
+                ` · ${m.coupon.bonusPending.replace("{amount}", eur(info.stats.pendingEur))}`}
               {info.stats.grantedEur > 0 &&
-                ` · ${eur(info.stats.grantedEur)} gutgeschrieben`}
+                ` · ${m.coupon.bonusGranted.replace("{amount}", eur(info.stats.grantedEur))}`}
             </p>
             <p className="text-xs text-neutral-400">
-              Du erhältst {eur(info.referrerAmountEur)} pro Freund, sobald dieser
-              ein Abo abschließt.
+              {m.coupon.referrerReward.replace(
+                "{amount}",
+                eur(info.referrerAmountEur),
+              )}
             </p>
           </>
         ) : (
@@ -269,7 +324,7 @@ function CouponTab() {
             disabled={activating}
             className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-medium transition hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
           >
-            {activating ? "…" : "Code aktivieren"}
+            {activating ? "…" : m.coupon.activateCode}
           </button>
         )}
       </section>
@@ -284,9 +339,10 @@ export function UserMenu({
   name?: string | null;
   email?: string | null;
 }) {
+  const m = useMessages();
   const [details, setDetails] = useState(false);
   const [confirmOut, setConfirmOut] = useState(false);
-  const [tab, setTab] = useState<"account" | "coupon">("account");
+  const [tab, setTab] = useState<"account" | "coupon" | "language">("account");
 
   const closeDetails = () => {
     setDetails(false);
@@ -305,8 +361,8 @@ export function UserMenu({
       <button
         type="button"
         onClick={() => setDetails(true)}
-        aria-label="Konto"
-        title={email ?? "Konto"}
+        aria-label={m.account.openLabel}
+        title={email ?? m.account.openLabel}
         className={iconButton}
       >
         <User className="h-4 w-4" aria-hidden />
@@ -315,59 +371,66 @@ export function UserMenu({
       <button
         type="button"
         onClick={() => setConfirmOut(true)}
-        aria-label="Abmelden"
-        title="Abmelden"
+        aria-label={m.account.logout}
+        title={m.account.logout}
         className={iconButton}
       >
         <Power className="h-4 w-4" aria-hidden />
       </button>
 
       {details && (
-        <Modal title="Konto" onClose={closeDetails}>
+        <Modal title={m.account.title} onClose={closeDetails}>
           <div className="mb-4 flex gap-1 rounded-md bg-neutral-100 p-1 dark:bg-neutral-900">
             <button
               type="button"
               onClick={() => setTab("account")}
               className={tabButton(tab === "account")}
             >
-              Konto
+              {m.account.tabAccount}
             </button>
             <button
               type="button"
               onClick={() => setTab("coupon")}
               className={tabButton(tab === "coupon")}
             >
-              Gutschein
+              {m.account.tabCoupon}
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab("language")}
+              className={tabButton(tab === "language")}
+            >
+              {m.account.tabLanguage}
             </button>
           </div>
 
           {tab === "account" ? (
             <AccountInfo name={name} email={email} />
-          ) : (
+          ) : tab === "coupon" ? (
             <CouponTab />
+          ) : (
+            <LanguageTab />
           )}
         </Modal>
       )}
 
       {confirmOut && (
-        <Modal title="Abmelden?" onClose={() => setConfirmOut(false)}>
-          <p className="text-sm text-neutral-500">
-            Möchtest du dich wirklich abmelden?
-          </p>
+        <Modal title={m.account.logoutTitle} onClose={() => setConfirmOut(false)}>
+          <p className="text-sm text-neutral-500">{m.account.logoutConfirm}</p>
           <div className="mt-5 flex justify-end gap-2">
             <button
               type="button"
               onClick={() => setConfirmOut(false)}
               className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium transition hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
             >
-              Abbrechen
+              {m.common.cancel}
             </button>
             <form action={logout}>
               <button
                 type="submit"
                 className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
               >
-                Abmelden
+                {m.account.logout}
               </button>
             </form>
           </div>

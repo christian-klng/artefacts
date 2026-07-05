@@ -43,6 +43,10 @@ export async function GET(request: NextRequest) {
   const stored = request.cookies.get(COOKIE)?.value ?? "";
   const prompt = fresh || stored;
 
+  // NB: the landing's ?lang=de|en handoff is consumed by proxy.ts (it sets the
+  // locale cookie and strips the param) before this handler runs, so there's no
+  // language handling to do here.
+
   // Not authenticated: hold the prompt and route to signup.
   if (!session?.user) {
     const res = NextResponse.redirect(new URL("/signup?next=/start", url));

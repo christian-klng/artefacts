@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { createCoupon, type CreateState } from "./actions";
+import { useMessages } from "@/lib/i18n/provider";
 
 const initialState: CreateState = {};
 
@@ -9,6 +10,8 @@ const field =
   "w-full rounded-lg border border-black/10 bg-background px-3 py-2 text-sm outline-none focus:border-foreground/40 dark:border-white/15";
 
 export function CouponForm() {
+  const msgs = useMessages();
+  const m = msgs.couponForm;
   const [state, formAction, pending] = useActionState(
     createCoupon,
     initialState,
@@ -22,21 +25,28 @@ export function CouponForm() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div className="space-y-1.5">
           <label htmlFor="code" className="text-sm font-medium">
-            Code <span className="text-foreground/40">(leer = generiert)</span>
+            {m.codeLabel}{" "}
+            <span className="text-foreground/40">{m.codeHint}</span>
           </label>
-          <input id="code" name="code" type="text" placeholder="KUBI-…" className={field} />
+          <input
+            id="code"
+            name="code"
+            type="text"
+            placeholder={m.codePlaceholder}
+            className={field}
+          />
         </div>
 
         <div className="space-y-1.5">
           <label htmlFor="recipient" className="text-sm font-medium">
-            Einlöser-Betrag (€)
+            {m.recipientLabel}
           </label>
           <input
             id="recipient"
             name="recipient"
             type="text"
             inputMode="decimal"
-            placeholder="10"
+            placeholder={m.recipientPlaceholder}
             required
             className={field}
           />
@@ -44,37 +54,37 @@ export function CouponForm() {
 
         <div className="space-y-1.5">
           <label htmlFor="referrer" className="text-sm font-medium">
-            Werber-Betrag (€){" "}
-            <span className="text-foreground/40">optional</span>
+            {m.referrerLabel}{" "}
+            <span className="text-foreground/40">{msgs.common.optional}</span>
           </label>
           <input
             id="referrer"
             name="referrer"
             type="text"
             inputMode="decimal"
-            placeholder="0"
+            placeholder={m.referrerPlaceholder}
             className={field}
           />
         </div>
 
         <div className="space-y-1.5">
           <label htmlFor="ownerEmail" className="text-sm font-medium">
-            Werber (E-Mail){" "}
-            <span className="text-foreground/40">optional</span>
+            {m.ownerEmailLabel}{" "}
+            <span className="text-foreground/40">{msgs.common.optional}</span>
           </label>
           <input
             id="ownerEmail"
             name="ownerEmail"
             type="email"
-            placeholder="nutzer@…"
+            placeholder={m.ownerEmailPlaceholder}
             className={field}
           />
         </div>
 
         <div className="space-y-1.5">
           <label htmlFor="maxRedemptions" className="text-sm font-medium">
-            Max. Einlösungen{" "}
-            <span className="text-foreground/40">(leer = ∞)</span>
+            {m.maxLabel}{" "}
+            <span className="text-foreground/40">{m.maxHint}</span>
           </label>
           <input
             id="maxRedemptions"
@@ -89,8 +99,8 @@ export function CouponForm() {
 
         <div className="space-y-1.5">
           <label htmlFor="expiresAt" className="text-sm font-medium">
-            Ablaufdatum{" "}
-            <span className="text-foreground/40">optional</span>
+            {m.expiryLabel}{" "}
+            <span className="text-foreground/40">{msgs.common.optional}</span>
           </label>
           <input id="expiresAt" name="expiresAt" type="date" className={field} />
         </div>
@@ -103,7 +113,7 @@ export function CouponForm() {
           defaultChecked
           className="h-4 w-4"
         />
-        Aktiv
+        {m.activeLabel}
       </label>
 
       <div className="flex items-center gap-3">
@@ -112,11 +122,12 @@ export function CouponForm() {
           disabled={pending}
           className="rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
         >
-          {pending ? "Anlegen…" : "Code anlegen"}
+          {pending ? m.submitting : m.submit}
         </button>
         {state.ok && (
           <span className="text-sm text-green-600 dark:text-green-400">
-            Angelegt: <code className="font-mono">{state.code}</code>
+            {m.createdPrefix}{" "}
+            <code className="font-mono">{state.code}</code>
           </span>
         )}
         {state.error && (

@@ -15,6 +15,8 @@ import {
 } from "@/lib/projects";
 import { buildAppOrigin } from "@/lib/app-host";
 import { normalizeSiteOrigin } from "@/lib/site-url";
+import { resolveLocale } from "@/lib/locale";
+import { getMessages } from "@/lib/i18n/messages";
 
 async function requireUserId() {
   const session = await auth();
@@ -51,15 +53,16 @@ export async function publishProjectAction(
   projectId: string,
 ): Promise<{ url: string; firstPublish: boolean } | { error: string }> {
   const userId = await requireUserId();
+  const t = getMessages(await resolveLocale()).toolbar;
   const appsDomain = process.env.APPS_DOMAIN;
   if (!appsDomain) {
-    return { error: "Publishing is not configured on this instance." };
+    return { error: t.errPublishNotConfigured };
   }
   try {
     const { slug, firstPublish } = await publishProject(projectId, userId);
     return { url: buildAppOrigin(appsDomain, slug), firstPublish };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : "Publish failed" };
+    return { error: e instanceof Error ? e.message : t.errPublishFailed };
   }
 }
 
@@ -75,9 +78,10 @@ export async function setPublishSlugAction(
   desired: string,
 ): Promise<{ url: string } | { error: string }> {
   const userId = await requireUserId();
+  const t = getMessages(await resolveLocale()).toolbar;
   const appsDomain = process.env.APPS_DOMAIN;
   if (!appsDomain) {
-    return { error: "Publishing is not configured on this instance." };
+    return { error: t.errPublishNotConfigured };
   }
   try {
     const result = await setPublishSlug(projectId, userId, desired);
@@ -85,7 +89,7 @@ export async function setPublishSlugAction(
     return { url: buildAppOrigin(appsDomain, result.slug) };
   } catch {
     // Unique-constraint race: the slug was taken between check and write.
-    return { error: "Diese Adresse ist bereits vergeben." };
+    return { error: t.errSlugTaken };
   }
 }
 
@@ -105,7 +109,10 @@ export async function setSiteUrlAction(
     return { origin: null };
   }
   const origin = normalizeSiteOrigin(trimmed);
-  if (!origin) return { error: "Bitte eine gültige URL eingeben." };
+  if (!origin) {
+    const t = getMessages(await resolveLocale()).toolbar;
+    return { error: t.errInvalidUrl };
+  }
   await setSiteUrl(projectId, userId, origin);
   return { origin };
 }

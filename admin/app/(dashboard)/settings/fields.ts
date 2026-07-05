@@ -1,196 +1,93 @@
-// The editable operational settings, grouped for the admin form. Each `key`
-// mirrors the matching env var name; the builder reads it via web/lib/settings.ts
-// with precedence DB > env > default. `placeholder` shows the built-in default so
-// the admin knows what a blank field falls back to. Only NON-secret values are
-// here — CORTECS_API_KEY and SMTP_PASS stay in the server environment.
+// Language-neutral structure of the editable operational settings, grouped for
+// the admin form. Each `key` mirrors the matching env var name; the builder reads
+// it via web/lib/settings.ts with precedence DB > env > default. `placeholder`
+// shows the built-in default (numbers, URLs, model ids — not translated). All
+// human-readable text (group titles/descriptions, field labels/help, option
+// labels) lives in the i18n dictionaries under `settings.*`, keyed by group id /
+// field key. Only NON-secret values are here — CORTECS_API_KEY and SMTP_PASS stay
+// in the server environment.
 
-export type SettingField = {
+export type SettingType = "text" | "number" | "select";
+
+export type SettingSchemaField = {
   key: string;
-  label: string;
+  type?: SettingType;
   placeholder?: string;
-  type?: "text" | "number" | "select";
-  options?: { value: string; label: string }[];
-  help?: string;
+  /** For selects: the option VALUES; labels come from i18n (`settings.options`) by index. */
+  optionValues?: string[];
 };
 
-export type SettingGroup = {
-  title: string;
-  description?: string;
-  fields: SettingField[];
+export type SettingGroupId =
+  | "cortecs"
+  | "billing"
+  | "referral"
+  | "backups"
+  | "smtp";
+
+export type SettingSchemaGroup = {
+  id: SettingGroupId;
+  fields: SettingSchemaField[];
 };
 
-export const SETTING_GROUPS: SettingGroup[] = [
+export const SETTING_SCHEMA: SettingSchemaGroup[] = [
   {
-    title: "Cortecs (LLM-Router)",
-    description:
-      "Modelle & Endpunkte. WICHTIG: cortecs.ai nutzt eigene Katalog-IDs, die von Anthropics Schreibweise abweichen — Opus 4.8 heißt hier claude-opus4-8 (ohne Bindestrich nach dem Wort opus), NICHT claude-opus-4-8. Verfügbare IDs: https://api.cortecs.ai/v1/models.",
+    id: "cortecs",
     fields: [
-      {
-        key: "CORTECS_BUILD_MODEL",
-        label: "Builder-Modell",
-        placeholder: "claude-opus4-8",
-      },
-      {
-        key: "CORTECS_CLEANUP_MODEL",
-        label: "Cleanup-Modell",
-        placeholder: "claude-haiku-4-5",
-      },
-      {
-        key: "CORTECS_INTERVIEW_MODEL",
-        label: "Interview-Modell",
-        placeholder: "claude-4-6-sonnet",
-        help: "Erzeugt die Konzeptfragen (3 Fragen + Farbpaletten) nach dem ersten Prompt eines Projekts. Läuft über den OpenAI-Pfad.",
-      },
-      {
-        key: "CORTECS_SOVEREIGN_BUILD_MODEL",
-        label: "Sovereign-Builder-Modell",
-        placeholder: "claude-opus4-8",
-      },
-      {
-        key: "CORTECS_ANTHROPIC_BASE_URL",
-        label: "Anthropic Base-URL (Builder)",
-        placeholder: "https://api.cortecs.ai",
-        help: "OHNE /v1 — Claude Code hängt /v1/messages selbst an. Mit /v1 entsteht .../v1/v1/messages (404), und der Builder meldet fälschlich „Modell existiert nicht / kein Zugriff\".",
-      },
-      {
-        key: "CORTECS_OPENAI_BASE_URL",
-        label: "OpenAI Base-URL (Cleanup/Preise)",
-        placeholder: "https://api.cortecs.ai/v1",
-        help: "MIT /v1 (im Gegensatz zur Anthropic-URL oben).",
-      },
-      {
-        key: "CORTECS_PRICE_TTL_MS",
-        label: "Preis-Cache TTL (ms)",
-        placeholder: "3600000",
-        type: "number",
-      },
+      { key: "CORTECS_BUILD_MODEL", placeholder: "claude-opus4-8" },
+      { key: "CORTECS_CLEANUP_MODEL", placeholder: "claude-haiku-4-5" },
+      { key: "CORTECS_INTERVIEW_MODEL", placeholder: "claude-4-6-sonnet" },
+      { key: "CORTECS_SOVEREIGN_BUILD_MODEL", placeholder: "claude-opus4-8" },
+      { key: "CORTECS_ANTHROPIC_BASE_URL", placeholder: "https://api.cortecs.ai" },
+      { key: "CORTECS_OPENAI_BASE_URL", placeholder: "https://api.cortecs.ai/v1" },
+      { key: "CORTECS_PRICE_TTL_MS", placeholder: "3600000", type: "number" },
     ],
   },
   {
-    title: "Billing / Credits",
+    id: "billing",
     fields: [
-      {
-        key: "BILLING_MARGIN",
-        label: "Marge",
-        placeholder: "1.20",
-        type: "number",
-        help: "1.20 = +20 % Aufschlag auf die reinen Cortecs-Kosten.",
-      },
-      {
-        key: "FREE_TIER_GRANT_EUR",
-        label: "Gratis-Guthaben (EUR)",
-        placeholder: "2.00",
-        type: "number",
-        help: "Einmalige Gutschrift bei erster Nutzung.",
-      },
-      {
-        key: "CORTECS_FEE_MULTIPLIER",
-        label: "Fee-Multiplikator",
-        placeholder: "1.0",
-        type: "number",
-        help: "1.05, falls der Katalogpreis netto (ohne Cortecs' 5 %-Fee) ist.",
-      },
-      {
-        key: "CACHE_READ_PRICE_RATIO",
-        label: "Cache-Read-Preisfaktor",
-        placeholder: "0.1",
-        type: "number",
-        help: "Anteil des Inputpreises für Cache-Reads (Anthropic: 0,1×). Greift nur, solange der Cortecs-Katalog keine eigenen Cache-Preise ausweist — Agent-Turns sind zu ~90 % Cache-Reads.",
-      },
-      {
-        key: "CACHE_WRITE_PRICE_RATIO",
-        label: "Cache-Write-Preisfaktor",
-        placeholder: "1.25",
-        type: "number",
-        help: "Anteil des Inputpreises für Cache-Writes (Anthropic: 1,25×). Greift nur, solange der Cortecs-Katalog keine eigenen Cache-Preise ausweist.",
-      },
+      { key: "BILLING_MARGIN", placeholder: "1.20", type: "number" },
+      { key: "FREE_TIER_GRANT_EUR", placeholder: "2.00", type: "number" },
+      { key: "CORTECS_FEE_MULTIPLIER", placeholder: "1.0", type: "number" },
+      { key: "CACHE_READ_PRICE_RATIO", placeholder: "0.1", type: "number" },
+      { key: "CACHE_WRITE_PRICE_RATIO", placeholder: "1.25", type: "number" },
     ],
   },
   {
-    title: "Referral / Gutscheine",
-    description:
-      "Standardwerte für neu aktivierte Referral-Codes. Ändert nur künftige Codes — bereits aktivierte behalten ihre gespeicherten Beträge.",
+    id: "referral",
     fields: [
-      {
-        key: "REFERRAL_RECIPIENT_EUR",
-        label: "Einlöser-Guthaben (EUR)",
-        placeholder: "10.00",
-        type: "number",
-        help: "Der neue Nutzer erhält dies sofort beim Einlösen.",
-      },
-      {
-        key: "REFERRAL_REFERRER_EUR",
-        label: "Werber-Bonus (EUR)",
-        placeholder: "5.00",
-        type: "number",
-        help: "Der Werber erhält dies, sobald der Eingeladene ein Abo abschließt (später via Stripe).",
-      },
-      {
-        key: "REFERRAL_WINDOW_DAYS",
-        label: "Abo-Frist (Tage)",
-        placeholder: "14",
-        type: "number",
-        help: "Zeitfenster, in dem der Eingeladene ein Abo abschließen muss, damit der Werber-Bonus gilt.",
-      },
+      { key: "REFERRAL_RECIPIENT_EUR", placeholder: "10.00", type: "number" },
+      { key: "REFERRAL_REFERRER_EUR", placeholder: "5.00", type: "number" },
+      { key: "REFERRAL_WINDOW_DAYS", placeholder: "14", type: "number" },
     ],
   },
   {
-    title: "Backups",
-    description:
-      "Automatische Voll-Backups veröffentlichter Apps (Dateien + Datenbank + Nutzerkonten + Anhänge). Das Cron-Secret (BACKUP_CRON_SECRET) bleibt aus Sicherheitsgründen in der Server-Umgebung.",
+    id: "backups",
     fields: [
       {
         key: "BACKUP_ENABLED",
-        label: "Automatische Backups",
         type: "select",
-        options: [
-          { value: "", label: "An (Standard)" },
-          { value: "true", label: "An" },
-          { value: "false", label: "Aus" },
-        ],
+        optionValues: ["", "true", "false"],
       },
-      {
-        key: "BACKUP_RETENTION_DAYS",
-        label: "Aufbewahrung (Tage)",
-        placeholder: "7",
-        type: "number",
-        help: "Ältere Auto-/Täglich-Backups werden entfernt; das veröffentlichte und das neueste Backup bleiben immer erhalten.",
-      },
+      { key: "BACKUP_RETENTION_DAYS", placeholder: "7", type: "number" },
     ],
   },
   {
-    title: "E-Mail (SMTP)",
-    description:
-      "Zugangsdaten für den Mailversand. Das Passwort (SMTP_PASS) bleibt aus Sicherheitsgründen in der Server-Umgebung.",
+    id: "smtp",
     fields: [
-      { key: "SMTP_HOST", label: "Host", placeholder: "smtp.ionos.de" },
-      { key: "SMTP_PORT", label: "Port", placeholder: "587", type: "number" },
-      {
-        key: "SMTP_USER",
-        label: "Benutzer",
-        placeholder: "mail@kubikraum.digital",
-      },
+      { key: "SMTP_HOST", placeholder: "smtp.ionos.de" },
+      { key: "SMTP_PORT", placeholder: "587", type: "number" },
+      { key: "SMTP_USER", placeholder: "mail@kubikraum.digital" },
       {
         key: "SMTP_SECURE",
-        label: "TLS-Modus",
         type: "select",
-        options: [
-          { value: "", label: "Standard (587 / STARTTLS)" },
-          { value: "true", label: "secure = true (465 / implizit)" },
-          { value: "false", label: "secure = false" },
-        ],
+        optionValues: ["", "true", "false"],
       },
-      {
-        key: "MAIL_FROM",
-        label: "Absender (From)",
-        placeholder: "Kubikraum <mail@kubikraum.digital>",
-        help: "Leer = es wird der SMTP-Benutzer als Absender verwendet.",
-      },
+      { key: "MAIL_FROM", placeholder: "Kubikraum <mail@kubikraum.digital>" },
     ],
   },
 ];
 
 /** Flat list of every editable key, used by the save action. */
-export const SETTING_KEYS: string[] = SETTING_GROUPS.flatMap((g) =>
+export const SETTING_KEYS: string[] = SETTING_SCHEMA.flatMap((g) =>
   g.fields.map((f) => f.key),
 );

@@ -20,6 +20,7 @@ import {
 import type { AttachmentMeta } from "./attachments-view";
 import { InterviewCard } from "./interview-card";
 import type { InterviewSubmission } from "@/lib/interview";
+import { useMessages } from "@/lib/i18n/provider";
 
 export type ChatMessage = {
   id: string;
@@ -72,6 +73,7 @@ export function ChatPanel({
   /** Spendable EUR credit, shown above the composer; null while loading. */
   balanceEur?: number | null;
 }) {
+  const m = useMessages();
   const [input, setInput] = useState("");
   // Files attached to the current draft (already uploaded; shown as chips).
   const [pending, setPending] = useState<AttachmentMeta[]>([]);
@@ -103,7 +105,10 @@ export function ChatPanel({
           const data = (await res.json().catch(() => null)) as {
             error?: string;
           } | null;
-          setUploadError(data?.error ?? `Upload fehlgeschlagen (${res.status})`);
+          setUploadError(
+            data?.error ??
+              m.chat.uploadFailedStatus.replace("{status}", String(res.status)),
+          );
           continue;
         }
         const { attachment } = (await res.json()) as {
@@ -112,7 +117,7 @@ export function ChatPanel({
         setPending((prev) => [...prev, attachment]);
         onAttachmentsChanged();
       } catch {
-        setUploadError("Upload fehlgeschlagen");
+        setUploadError(m.chat.uploadFailed);
       } finally {
         setUploading((n) => n - 1);
       }
@@ -133,8 +138,7 @@ export function ChatPanel({
     if (streaming || uploading > 0) return;
     if (!text && pending.length === 0) return;
     // Allow attachment-only turns by supplying a default instruction.
-    const message =
-      text || "Bitte berücksichtige die hochgeladenen Dateien.";
+    const message = text || m.chat.attachmentOnlyMessage;
     onSend(
       message,
       pending.map((a) => a.id),
@@ -149,9 +153,7 @@ export function ChatPanel({
     <div className="flex h-full min-h-0 flex-col border-r border-neutral-200 dark:border-neutral-800">
       <div className="flex-1 space-y-3 overflow-y-auto p-4">
         {messages.length === 0 && (
-          <p className="text-sm text-neutral-500">
-            Describe the app you want to build.
-          </p>
+          <p className="text-sm text-neutral-500">{m.chat.empty}</p>
         )}
         {messages.map((m) => (
           <MessageRow
@@ -163,7 +165,7 @@ export function ChatPanel({
         ))}
         {streaming && (
           <p className="animate-pulse pl-1 text-xs tabular-nums text-neutral-500">
-            arbeitet… <WorkingTimer />
+            {m.chat.working} <WorkingTimer />
           </p>
         )}
         <div ref={endRef} />
@@ -199,7 +201,7 @@ export function ChatPanel({
                 <button
                   onClick={() => removePending(a.id)}
                   className="text-neutral-400 hover:text-danger"
-                  aria-label={`${a.filename} entfernen`}
+                  aria-label={m.chat.removeAttachment.replace("{name}", a.filename)}
                 >
                   <X className="h-3.5 w-3.5" aria-hidden />
                 </button>
@@ -207,7 +209,7 @@ export function ChatPanel({
             ))}
             {uploading > 0 && (
               <span className="inline-flex items-center rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-500 dark:bg-neutral-800">
-                lädt hoch…
+                {m.chat.uploading}
               </span>
             )}
             {uploadError && (
@@ -251,7 +253,7 @@ export function ChatPanel({
               }
             }}
             rows={2}
-            placeholder="Build a pomodoro timer…"
+            placeholder={m.chat.placeholder}
             className="w-full resize-none bg-transparent px-2 py-1.5 text-sm outline-none"
           />
           <div className="flex items-center justify-between px-1 pt-1">
@@ -260,18 +262,21 @@ export function ChatPanel({
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading > 0}
-                title="Datei anhängen"
-                aria-label="Datei anhängen"
+                title={m.chat.attachFile}
+                aria-label={m.chat.attachFile}
                 className="inline-flex items-center justify-center rounded-md px-2 py-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 disabled:opacity-50 dark:hover:bg-neutral-800 dark:hover:text-white"
               >
                 <Paperclip className="h-4 w-4" aria-hidden />
               </button>
               {balanceEur != null && (
                 <span
-                  title="Verfügbares Guthaben"
+                  title={m.chat.balanceTitle}
                   className="text-xs tabular-nums text-neutral-500 dark:text-neutral-400"
                 >
-                  Guthaben: €{balanceEur.toFixed(balanceEur < 0.01 ? 4 : 2)}
+                  {m.chat.balance.replace(
+                    "{amount}",
+                    `€${balanceEur.toFixed(balanceEur < 0.01 ? 4 : 2)}`,
+                  )}
                 </span>
               )}
             </div>
@@ -284,7 +289,7 @@ export function ChatPanel({
               }
               className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
             >
-              {streaming ? "…" : "Send"}
+              {streaming ? "…" : m.chat.send}
             </button>
           </div>
         </div>

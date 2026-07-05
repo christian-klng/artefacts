@@ -1,25 +1,19 @@
 import { auth } from "@/auth";
-import { redeemCoupon, type RedeemError } from "@/lib/coupons";
+import { redeemCoupon } from "@/lib/coupons";
+import { resolveLocale } from "@/lib/locale";
+import { getMessages } from "@/lib/i18n/messages";
 
 // Redeem a coupon code for the signed-in user. Grants the recipient credit
 // immediately; records the referrer reward as pending. Node runtime (Postgres).
 export const runtime = "nodejs";
-
-const MESSAGES: Record<RedeemError, string> = {
-  invalid: "Dieser Code ist ungültig.",
-  inactive: "Dieser Code ist nicht mehr aktiv.",
-  expired: "Dieser Code ist abgelaufen.",
-  exhausted: "Dieser Code wurde bereits vollständig eingelöst.",
-  self: "Du kannst deinen eigenen Code nicht einlösen.",
-  already_redeemed: "Du hast diesen Code bereits eingelöst.",
-  already_referral: "Du hast bereits einen Gutschein eingelöst.",
-};
 
 export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user) {
     return new Response("Unauthorized", { status: 401 });
   }
+
+  const messages = getMessages(await resolveLocale()).coupon.errors;
 
   let code = "";
   try {
@@ -32,7 +26,7 @@ export async function POST(request: Request) {
   const result = await redeemCoupon(session.user.id, code);
   if (!result.ok) {
     return Response.json(
-      { error: result.error, message: MESSAGES[result.error] },
+      { error: result.error, message: messages[result.error] },
       { status: 400 },
     );
   }

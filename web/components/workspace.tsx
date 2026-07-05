@@ -24,6 +24,7 @@ import {
 import { substituteSiteUrl, normalizeSiteOrigin } from "@/lib/site-url";
 import { CREDIT_CHANGED_EVENT } from "@/lib/credit-events";
 import { formatEur } from "@/lib/eur";
+import { useMessages } from "@/lib/i18n/provider";
 import {
   parseInterviewState,
   type InterviewSpec,
@@ -145,6 +146,7 @@ export function Workspace({
   // as the first agent message, then cleared.
   initialPrompt?: string;
 }) {
+  const m = useMessages();
   const router = useRouter();
   const [files, setFiles] = useState<Record<string, string>>(initialFiles);
   const [assets, setAssets] =
@@ -336,8 +338,8 @@ export function Workspace({
           appendMessage(
             "tool",
             event.tables.length > 0
-              ? `Datenbank aktualisiert: ${event.tables.join(", ")}`
-              : "Datenbank eingerichtet",
+              ? m.workspace.dbUpdated.replace("{tables}", event.tables.join(", "))
+              : m.workspace.dbCreated,
             { tool: "database" },
           );
           break;
@@ -364,7 +366,7 @@ export function Workspace({
           break;
       }
     },
-    [appendMessage, refreshAttachments],
+    [appendMessage, refreshAttachments, m],
   );
 
   // Hydrate the credit balance on mount (also lazily grants the free tier).
@@ -439,15 +441,13 @@ export function Workspace({
         if (!res.ok) throw new Error(`Export failed (${res.status})`);
         const blob = await res.blob();
         saveBlob(blob, "app.zip");
-      } catch (error) {
-        appendMessage(
-          "assistant",
-          error instanceof Error ? error.message : "Download failed",
-          { kind: "error" },
-        );
+      } catch {
+        appendMessage("assistant", m.workspace.downloadFailed, {
+          kind: "error",
+        });
       }
     },
-    [files, assets, projectId, appendMessage],
+    [files, assets, projectId, appendMessage, m],
   );
 
   const onRestore = useCallback(
@@ -474,17 +474,15 @@ export function Workspace({
         setHasDatabase(data.databaseEnabled);
         setDbRefreshKey((k) => k + 1);
         refreshAttachments();
-      } catch (error) {
-        appendMessage(
-          "assistant",
-          error instanceof Error ? error.message : "Restore failed",
-          { kind: "error" },
-        );
+      } catch {
+        appendMessage("assistant", m.workspace.restoreFailed, {
+          kind: "error",
+        });
       } finally {
         setRestoring(false);
       }
     },
-    [projectId, appendMessage, refreshAttachments],
+    [projectId, appendMessage, refreshAttachments, m],
   );
 
   const onPublish = useCallback(async () => {
@@ -546,11 +544,9 @@ export function Workspace({
             balanceEur?: number;
           } | null;
           if (typeof data?.balanceEur === "number") setBalanceEur(data.balanceEur);
-          appendMessage(
-            "assistant",
-            "Dein Guthaben ist aufgebraucht. Bitte lade Credits auf, um fortzufahren.",
-            { kind: "error" },
-          );
+          appendMessage("assistant", m.workspace.creditExhausted, {
+            kind: "error",
+          });
           return;
         }
         if (!res.ok || !res.body) {
@@ -577,13 +573,13 @@ export function Workspace({
       } catch (error) {
         handleEvent({
           type: "error",
-          message: error instanceof Error ? error.message : "Agent error",
+          message: error instanceof Error ? error.message : m.workspace.agentError,
         });
       } finally {
         setStreaming(false);
       }
     },
-    [projectId, appendMessage, handleEvent],
+    [projectId, appendMessage, handleEvent, m],
   );
 
   const onSend = useCallback(

@@ -2,10 +2,12 @@
 
 import { useActionState } from "react";
 import { login, type LoginState } from "./actions";
+import { useMessages } from "@/lib/i18n/provider";
 
 const initialState: LoginState = {};
 
 export function LoginForm() {
+  const m = useMessages().login;
   const [state, formAction, pending] = useActionState(login, initialState);
 
   return (
@@ -15,7 +17,7 @@ export function LoginForm() {
     >
       <div className="space-y-1.5">
         <label htmlFor="username" className="text-sm font-medium">
-          Benutzername
+          {m.username}
         </label>
         <input
           id="username"
@@ -30,7 +32,7 @@ export function LoginForm() {
 
       <div className="space-y-1.5">
         <label htmlFor="password" className="text-sm font-medium">
-          Passwort
+          {m.password}
         </label>
         <input
           id="password"
@@ -51,7 +53,7 @@ export function LoginForm() {
         disabled={pending}
         className="w-full rounded-lg bg-foreground px-3 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
       >
-        {pending ? "Anmelden…" : "Anmelden"}
+        {pending ? m.signingIn : m.signIn}
       </button>
     </form>
   );

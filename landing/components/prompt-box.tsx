@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ArrowRight } from "lucide-react";
+import { useLocale, useMessages } from "@/lib/i18n/provider";
 
 // Where the prompt is handed off. Baked in at build time (it's public).
 const BUILDER_URL =
@@ -9,13 +10,9 @@ const BUILDER_URL =
 
 const MAX_PROMPT = 1500;
 
-const EXAMPLES = [
-  "Eine Landingpage für mein Café mit Speisekarte und Öffnungszeiten",
-  "Ein Pomodoro-Timer mit Aufgabenliste",
-  "Ein persönliches Portfolio mit Projekt-Galerie",
-];
-
 export function PromptBox() {
+  const m = useMessages();
+  const locale = useLocale();
   const [value, setValue] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -23,10 +20,11 @@ export function PromptBox() {
     const text = value.trim().slice(0, MAX_PROMPT);
     setSubmitting(true);
     // The builder's /start route stashes the prompt in a cookie, then routes the
-    // visitor through signup/login and into a fresh, auto-building app.
+    // visitor through signup/login and into a fresh, auto-building app. `lang`
+    // carries the chosen landing language over so the builder can seed it.
     window.location.href = text
-      ? `${BUILDER_URL}/start?prompt=${encodeURIComponent(text)}`
-      : `${BUILDER_URL}/signup`;
+      ? `${BUILDER_URL}/start?prompt=${encodeURIComponent(text)}&lang=${locale}`
+      : `${BUILDER_URL}/signup?lang=${locale}`;
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -45,27 +43,25 @@ export function PromptBox() {
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Beschreibe die Web-App, die du bauen willst…"
+          placeholder={m.promptBox.placeholder}
           className="w-full resize-none bg-transparent px-2 py-1.5 text-sm outline-none"
         />
         <div className="flex items-center justify-between px-1 pt-1">
-          <span className="text-xs text-neutral-500">
-            Enter zum Senden · Shift+Enter für neue Zeile
-          </span>
+          <span className="text-xs text-neutral-500">{m.promptBox.hint}</span>
           <button
             type="button"
             onClick={submit}
             disabled={submitting}
             className="inline-flex items-center gap-1.5 rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
           >
-            {submitting ? "Moment…" : "App bauen"}
+            {submitting ? m.promptBox.submitting : m.promptBox.build}
             {!submitting && <ArrowRight className="h-4 w-4" aria-hidden />}
           </button>
         </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {EXAMPLES.map((ex) => (
+        {m.promptBox.examples.map((ex) => (
           <button
             key={ex}
             type="button"

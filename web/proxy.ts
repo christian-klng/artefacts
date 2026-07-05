@@ -2,6 +2,9 @@ import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
 import { authConfig } from "./auth.config";
 import { isAppHost } from "./lib/app-host";
+import { isLocale, LOCALE_COOKIE } from "./lib/i18n";
+
+const LOCALE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 // Next.js 16 renamed Middleware to Proxy; it now runs in the Node.js runtime.
 // Two responsibilities:
@@ -48,6 +51,24 @@ export default auth((req) => {
   }
 
   // Builder / main domain.
+  // Language handoff: the landing site appends ?lang=de|en so a language chosen
+  // there carries over. Persist it as the locale cookie (read by lib/locale.ts)
+  // and redirect to the same URL without the param, so the (redirected) request
+  // renders in the chosen language immediately and the URL stays clean. Only on
+  // the main domain, never the *.apps zone handled above.
+  const lang = req.nextUrl.searchParams.get("lang");
+  if (isLocale(lang)) {
+    const url = req.nextUrl.clone();
+    url.searchParams.delete("lang");
+    const res = NextResponse.redirect(url);
+    res.cookies.set(LOCALE_COOKIE, lang, {
+      path: "/",
+      maxAge: LOCALE_COOKIE_MAX_AGE,
+      sameSite: "lax",
+    });
+    return res;
+  }
+
   if (req.nextUrl.pathname.startsWith("/app") && !req.auth) {
     return NextResponse.redirect(new URL("/login", req.nextUrl));
   }

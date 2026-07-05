@@ -1,24 +1,34 @@
 import { listCoupons, listRedemptions } from "@/lib/queries";
 import { formatDate, formatEur } from "@/lib/format";
+import { resolveLocale } from "@/lib/locale";
+import { getMessages } from "@/lib/i18n/messages";
+import type { Locale } from "@/lib/i18n";
 import { CouponForm } from "./coupon-form";
 
 export const dynamic = "force-dynamic";
 
-function rewardBadge(status: string) {
+type RewardLabels = {
+  pending: string;
+  granted: string;
+  expired: string;
+  none: string;
+};
+
+function rewardBadge(status: string, labels: RewardLabels) {
   const map: Record<string, { label: string; cls: string }> = {
     pending: {
-      label: "ausstehend",
+      label: labels.pending,
       cls: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
     },
     granted: {
-      label: "gutgeschrieben",
+      label: labels.granted,
       cls: "bg-green-500/10 text-green-700 dark:text-green-400",
     },
     expired: {
-      label: "verfallen",
+      label: labels.expired,
       cls: "bg-foreground/5 text-foreground/50",
     },
-    none: { label: "—", cls: "bg-foreground/5 text-foreground/50" },
+    none: { label: labels.none, cls: "bg-foreground/5 text-foreground/50" },
   };
   const b = map[status] ?? map.none;
   return (
@@ -31,6 +41,15 @@ function rewardBadge(status: string) {
 }
 
 export default async function CouponsPage() {
+  const locale: Locale = await resolveLocale();
+  const m = getMessages(locale).coupons;
+  const rewardLabels: RewardLabels = {
+    pending: m.rewardPending,
+    granted: m.rewardGranted,
+    expired: m.rewardExpired,
+    none: m.rewardNone,
+  };
+
   const [coupons, redemptions] = await Promise.all([
     listCoupons(),
     listRedemptions(),
@@ -39,34 +58,44 @@ export default async function CouponsPage() {
   return (
     <div className="space-y-8">
       <div className="flex items-baseline justify-between">
-        <h1 className="text-xl font-semibold tracking-tight">Gutscheine</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{m.title}</h1>
         <span className="text-sm text-foreground/60">
-          {coupons.length} Codes · {redemptions.length} Einlösungen
+          {m.summary
+            .replace("{codes}", String(coupons.length))
+            .replace("{redemptions}", String(redemptions.length))}
         </span>
       </div>
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-foreground/70">
-          Neuer Code
+          {m.newCode}
         </h2>
         <CouponForm />
       </section>
 
       {/* All coupons */}
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-foreground/70">Alle Codes</h2>
+        <h2 className="text-sm font-semibold text-foreground/70">
+          {m.allCodes}
+        </h2>
         <div className="overflow-x-auto rounded-xl border border-black/10 bg-white dark:border-white/10 dark:bg-white/[0.03]">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-black/10 text-left text-foreground/60 dark:border-white/10">
-                <th className="px-4 py-3 font-medium">Code</th>
-                <th className="px-4 py-3 font-medium">Typ</th>
-                <th className="px-4 py-3 font-medium">Besitzer</th>
-                <th className="px-4 py-3 text-right font-medium">Einlöser</th>
-                <th className="px-4 py-3 text-right font-medium">Werber</th>
-                <th className="px-4 py-3 text-right font-medium">Einlösungen</th>
-                <th className="px-4 py-3 font-medium">Ablauf</th>
-                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">{m.colCode}</th>
+                <th className="px-4 py-3 font-medium">{m.colType}</th>
+                <th className="px-4 py-3 font-medium">{m.colOwner}</th>
+                <th className="px-4 py-3 text-right font-medium">
+                  {m.colRecipient}
+                </th>
+                <th className="px-4 py-3 text-right font-medium">
+                  {m.colReferrer}
+                </th>
+                <th className="px-4 py-3 text-right font-medium">
+                  {m.colRedemptions}
+                </th>
+                <th className="px-4 py-3 font-medium">{m.colExpiry}</th>
+                <th className="px-4 py-3 font-medium">{m.colStatus}</th>
               </tr>
             </thead>
             <tbody>
@@ -79,17 +108,17 @@ export default async function CouponsPage() {
                   >
                     <td className="px-4 py-3 font-mono">{c.code}</td>
                     <td className="px-4 py-3 text-foreground/70">
-                      {c.kind === "referral" ? "Referral" : "Admin"}
+                      {c.kind === "referral" ? m.typeReferral : m.typeAdmin}
                     </td>
                     <td className="px-4 py-3 text-foreground/70">
                       {c.ownerEmail ?? "—"}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">
-                      {formatEur(c.recipientAmountEur)}
+                      {formatEur(c.recipientAmountEur, locale)}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">
                       {c.referrerAmountEur > 0
-                        ? formatEur(c.referrerAmountEur)
+                        ? formatEur(c.referrerAmountEur, locale)
                         : "—"}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">
@@ -97,20 +126,20 @@ export default async function CouponsPage() {
                       {c.maxRedemptions != null ? ` / ${c.maxRedemptions}` : ""}
                     </td>
                     <td className="px-4 py-3 text-foreground/70">
-                      {c.expiresAt ? formatDate(c.expiresAt) : "—"}
+                      {c.expiresAt ? formatDate(c.expiresAt, locale) : "—"}
                     </td>
                     <td className="px-4 py-3">
                       {!c.active ? (
                         <span className="inline-flex items-center rounded-full bg-foreground/5 px-2 py-0.5 text-xs font-medium text-foreground/50">
-                          inaktiv
+                          {m.statusInactive}
                         </span>
                       ) : expired ? (
                         <span className="inline-flex items-center rounded-full bg-foreground/5 px-2 py-0.5 text-xs font-medium text-foreground/50">
-                          abgelaufen
+                          {m.statusExpired}
                         </span>
                       ) : (
                         <span className="inline-flex items-center rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">
-                          aktiv
+                          {m.statusActive}
                         </span>
                       )}
                     </td>
@@ -123,7 +152,7 @@ export default async function CouponsPage() {
                     colSpan={8}
                     className="px-4 py-10 text-center text-foreground/50"
                   >
-                    Noch keine Codes.
+                    {m.emptyCodes}
                   </td>
                 </tr>
               )}
@@ -135,21 +164,23 @@ export default async function CouponsPage() {
       {/* Redemptions */}
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-foreground/70">
-          Einlösungen
+          {m.redemptionsHeading}
         </h2>
         <div className="overflow-x-auto rounded-xl border border-black/10 bg-white dark:border-white/10 dark:bg-white/[0.03]">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-black/10 text-left text-foreground/60 dark:border-white/10">
-                <th className="px-4 py-3 font-medium">Code</th>
-                <th className="px-4 py-3 font-medium">Einlöser</th>
-                <th className="px-4 py-3 font-medium">Werber</th>
-                <th className="px-4 py-3 text-right font-medium">Gutschrift</th>
+                <th className="px-4 py-3 font-medium">{m.colCode}</th>
+                <th className="px-4 py-3 font-medium">{m.redColRedeemer}</th>
+                <th className="px-4 py-3 font-medium">{m.redColReferrer}</th>
                 <th className="px-4 py-3 text-right font-medium">
-                  Werber-Bonus
+                  {m.redColCredit}
                 </th>
-                <th className="px-4 py-3 font-medium">Bonus-Status</th>
-                <th className="px-4 py-3 font-medium">Wann</th>
+                <th className="px-4 py-3 text-right font-medium">
+                  {m.redColReferrerBonus}
+                </th>
+                <th className="px-4 py-3 font-medium">{m.redColBonusStatus}</th>
+                <th className="px-4 py-3 font-medium">{m.redColWhen}</th>
               </tr>
             </thead>
             <tbody>
@@ -166,18 +197,18 @@ export default async function CouponsPage() {
                     {r.ownerEmail ?? "—"}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">
-                    {formatEur(r.recipientCreditedEur)}
+                    {formatEur(r.recipientCreditedEur, locale)}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">
                     {r.referrerRewardEur > 0
-                      ? formatEur(r.referrerRewardEur)
+                      ? formatEur(r.referrerRewardEur, locale)
                       : "—"}
                   </td>
                   <td className="px-4 py-3">
-                    {rewardBadge(r.referrerRewardStatus)}
+                    {rewardBadge(r.referrerRewardStatus, rewardLabels)}
                   </td>
                   <td className="px-4 py-3 text-foreground/70">
-                    {formatDate(r.redeemedAt)}
+                    {formatDate(r.redeemedAt, locale)}
                   </td>
                 </tr>
               ))}
@@ -187,7 +218,7 @@ export default async function CouponsPage() {
                     colSpan={7}
                     className="px-4 py-10 text-center text-foreground/50"
                   >
-                    Noch keine Einlösungen.
+                    {m.emptyRedemptions}
                   </td>
                 </tr>
               )}

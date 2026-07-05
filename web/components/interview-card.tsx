@@ -10,6 +10,7 @@ import {
   type StyleDirection,
 } from "@/lib/interview";
 import fontCatalog from "@/lib/agent/font-catalog.json";
+import { useMessages } from "@/lib/i18n/provider";
 
 /**
  * The first-prompt concept interview card: 3 single-select questions as pill
@@ -34,6 +35,7 @@ export function InterviewCard({
   streaming: boolean;
   onSubmit: (messageId: string, submission: InterviewSubmission) => void;
 }) {
+  const t = useMessages().interview;
   const state = useMemo(() => parseInterviewState(content), [content]);
   const [selections, setSelections] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
@@ -41,17 +43,13 @@ export function InterviewCard({
   if (!state) {
     // Malformed row (shouldn't happen) — never break the chat over it.
     return (
-      <p className="pl-1 text-xs text-neutral-500">
-        Konzeptfragen konnten nicht angezeigt werden.
-      </p>
+      <p className="pl-1 text-xs text-neutral-500">{t.parseError}</p>
     );
   }
   const { spec } = state;
 
   if (state.status === "skipped") {
-    return (
-      <p className="pl-1 text-xs text-neutral-500">Konzeptfragen übersprungen</p>
-    );
+    return <p className="pl-1 text-xs text-neutral-500">{t.skipped}</p>;
   }
 
   if (state.status === "answered") {
@@ -60,7 +58,7 @@ export function InterviewCard({
     return (
       <div className="max-w-[95%] space-y-1.5 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 text-sm dark:border-neutral-800 dark:bg-neutral-900">
         <p className="text-xs font-medium uppercase tracking-wide text-neutral-400">
-          Konzept
+          {t.conceptLabel}
         </p>
         {resolved.pairs.map((p) => (
           <p key={p.question} className="text-neutral-700 dark:text-neutral-300">
@@ -158,7 +156,7 @@ export function InterviewCard({
         }}
         className="text-xs text-neutral-400 underline-offset-2 transition hover:text-neutral-900 hover:underline disabled:opacity-50 dark:hover:text-white"
       >
-        Fragen überspringen und direkt bauen
+        {t.skipAndBuild}
       </button>
     </div>
   );
@@ -177,13 +175,12 @@ function PaletteChoice({
   locked: boolean;
   onPick: (paletteId: string) => void;
 }) {
+  const t = useMessages().interview;
   return (
     <div className="space-y-1.5">
       <p className="font-medium">{spec.paletteQuestion}</p>
       <p className="text-xs text-neutral-500">
-        {allAnswered
-          ? "Klick auf eine Palette bestätigt deine Auswahl und startet den Bau."
-          : "Beantworte zuerst die drei Fragen, dann wähle hier dein Farbschema."}
+        {allAnswered ? t.paletteConfirmHint : t.paletteAnswerFirst}
       </p>
       <div className="grid grid-cols-2 gap-2">
         {spec.palettes.map((p) => (
@@ -239,6 +236,7 @@ function StyleChoice({
   locked: boolean;
   onPick: (styleId: string) => void;
 }) {
+  const t = useMessages().interview;
   // Real specimens: one @font-face per distinct heading font, served by the
   // public catalog route. ~15 KB each, cached immutable; the catalog fallback
   // stack shows until (or if never) loaded.
@@ -263,9 +261,7 @@ function StyleChoice({
       {faces && <style>{faces}</style>}
       <p className="font-medium">{spec.styleQuestion}</p>
       <p className="text-xs text-neutral-500">
-        {allAnswered
-          ? "Klick auf eine Stilrichtung bestätigt deine Auswahl und startet den Bau."
-          : "Beantworte zuerst die drei Fragen, dann wähle hier deine Stilrichtung."}
+        {allAnswered ? t.styleConfirmHint : t.styleAnswerFirst}
       </p>
       <div className="grid gap-2 sm:grid-cols-3">
         {spec.styles.map((s) => (

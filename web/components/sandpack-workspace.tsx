@@ -9,6 +9,7 @@ import {
 } from "@codesandbox/sandpack-react";
 import type { ViewMode } from "./workspace-toolbar";
 import { injectBadge } from "@/lib/badge";
+import { useMessages } from "@/lib/i18n/provider";
 
 export type AssetMeta = { mimeType: string | null; size: number; hash: string };
 
@@ -54,6 +55,7 @@ export function SandpackWorkspace({
   // below, which never hits the server.
   showBadge?: boolean;
 }) {
+  const m = useMessages();
   const indexHtml = files["/index.html"];
   // The project is multi-file when it has more than just /index.html or any
   // binary asset — then the srcDoc fallback must inline assets server-side.
@@ -101,7 +103,7 @@ export function SandpackWorkspace({
       const sep = previewUrl.includes("?") ? "&" : "?";
       return (
         <iframe
-          title="App preview"
+          title={m.sandpack.appPreview}
           src={`${previewUrl}${sep}v=${hashContent(indexHtml)}`}
           // The app runs on its own origin (a different origin than the builder),
           // so allow-same-origin is safe here — it cannot reach the builder —
@@ -170,6 +172,7 @@ function SrcDocPreview({
   showBadge: boolean;
   style: React.CSSProperties;
 }) {
+  const m = useMessages();
   // Keyed by content hash so a stale render from older HTML is ignored.
   const [rendered, setRendered] = useState<{ key: number; html: string } | null>(
     null,
@@ -211,7 +214,7 @@ function SrcDocPreview({
   const src = multiFile ? (renderedHtml ?? indexHtml) : indexHtml;
   return (
     <iframe
-      title="App preview"
+      title={m.sandpack.appPreview}
       srcDoc={showBadge ? injectBadge(src) : src}
       // No allow-same-origin: the preview cannot reach our app's origin,
       // cookies, or storage. Scripts/forms run for the demo app.

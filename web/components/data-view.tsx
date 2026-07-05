@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useMessages } from "@/lib/i18n/provider";
 
 type TableMeta = { name: string; ownerScoped: boolean };
 type Page = { columns: string[]; rows: Record<string, unknown>[]; total: number };
@@ -15,6 +16,7 @@ export function DataView({
   projectId: string;
   refreshKey?: number;
 }) {
+  const m = useMessages();
   const [tables, setTables] = useState<TableMeta[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [page, setPage] = useState<Page | null>(null);
@@ -38,11 +40,11 @@ export function DataView({
             : (list[0]?.name ?? null),
         );
       })
-      .catch(() => !cancelled && setError("Tabellen konnten nicht geladen werden."));
+      .catch(() => !cancelled && setError(m.data.errLoadTables));
     return () => {
       cancelled = true;
     };
-  }, [projectId, refreshKey]);
+  }, [projectId, refreshKey, m]);
 
   const loadPage = useCallback(
     (table: string, off: number) => {
@@ -65,9 +67,9 @@ export function DataView({
             setPage(data as Page);
           }
         })
-        .catch(() => setError("Daten konnten nicht geladen werden."));
+        .catch(() => setError(m.data.errLoadData));
     },
-    [projectId],
+    [projectId, m],
   );
 
   // Load the visible page whenever the table, page, or schema changes. All
@@ -87,15 +89,10 @@ export function DataView({
   }
 
   if (tables === null && !error) {
-    return <Centered>Lade Datenbank …</Centered>;
+    return <Centered>{m.data.loadingDb}</Centered>;
   }
   if (tables !== null && tables.length === 0) {
-    return (
-      <Centered>
-        Diese App hat noch keine Tabellen. Sobald der Agent ein Schema anlegt,
-        erscheinen sie hier.
-      </Centered>
-    );
+    return <Centered>{m.data.noTables}</Centered>;
   }
 
   return (
@@ -103,7 +100,7 @@ export function DataView({
       {/* Table list */}
       <aside className="w-48 shrink-0 overflow-y-auto border-r border-neutral-200 p-2 dark:border-neutral-800">
         <div className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-neutral-400">
-          Tabellen
+          {m.data.tablesHeading}
         </div>
         <ul className="space-y-0.5">
           {tables?.map((t) => (
@@ -116,11 +113,7 @@ export function DataView({
                     ? "bg-neutral-100 font-medium text-neutral-900 dark:bg-neutral-800 dark:text-white"
                     : "text-neutral-600 hover:bg-neutral-50 dark:text-neutral-300 dark:hover:bg-neutral-900"
                 }`}
-                title={
-                  t.ownerScoped
-                    ? "Privat pro Nutzer (Row-Level-Security)"
-                    : "Geteilte Daten"
-                }
+                title={t.ownerScoped ? m.data.privatePerUser : m.data.sharedData}
               >
                 <span className="truncate">{t.name}</span>
                 {t.ownerScoped && (
@@ -179,7 +172,7 @@ export function DataView({
                         colSpan={page.columns.length}
                         className="px-3 py-6 text-center text-neutral-400"
                       >
-                        Keine Zeilen.
+                        {m.data.noRows}
                       </td>
                     </tr>
                   )}
@@ -189,27 +182,33 @@ export function DataView({
             <div className="flex items-center justify-between border-t border-neutral-200 px-3 py-2 text-xs text-neutral-500 dark:border-neutral-800">
               <span>
                 {page.total === 0
-                  ? "0 Zeilen"
-                  : `${offset + 1}–${Math.min(offset + PAGE_SIZE, page.total)} von ${page.total}`}
+                  ? m.data.zeroRows
+                  : m.data.rangeOf
+                      .replace("{from}", String(offset + 1))
+                      .replace(
+                        "{to}",
+                        String(Math.min(offset + PAGE_SIZE, page.total)),
+                      )
+                      .replace("{total}", String(page.total))}
               </span>
               <span className="inline-flex gap-1">
                 <PagerButton
                   disabled={offset === 0}
                   onClick={() => goto(Math.max(0, offset - PAGE_SIZE))}
                 >
-                  ← Zurück
+                  {m.data.prev}
                 </PagerButton>
                 <PagerButton
                   disabled={offset + PAGE_SIZE >= page.total}
                   onClick={() => goto(offset + PAGE_SIZE)}
                 >
-                  Weiter →
+                  {m.data.next}
                 </PagerButton>
               </span>
             </div>
           </>
         ) : (
-          <Centered>Lade …</Centered>
+          <Centered>{m.data.loading}</Centered>
         )}
       </div>
     </div>
