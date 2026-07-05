@@ -3,9 +3,11 @@
 // content choices, explicit wishes & no-gos) and /DESIGN.md (the binding
 // design DNA: epoch, typography, color philosophy, grid/shape/motion rules,
 // forbidden patterns — pre-filled by the concept interview or written by the
-// agent itself). They are real VFS files the agent reads/writes with its
-// normal tools, but they are INTERNAL: never served on the app's origin,
-// never in the download/export, and never part of the publish signature.
+// agent itself). They are real VFS files the agent reads/writes with its normal
+// tools. They ARE shown READ-ONLY in the workspace code tree (via getClientFiles'
+// separate `internal` channel) so the user can read the concept/design, but they
+// are INTERNAL to the shipped app: never served on the app's origin, never in the
+// download/export, and never part of the publish signature.
 //
 // Kept import-free so any layer (server routes, data layer) can use it without
 // risking an import cycle.

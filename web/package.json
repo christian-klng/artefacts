@@ -13,6 +13,7 @@
     "db:studio": "drizzle-kit studio",
     "spike": "node scripts/run-spike-embedded.mjs",
     "check:fonts": "node scripts/check-fonts.mjs",
+    "check:badge": "node scripts/check-badge.mjs",
     "canary:thinking": "node scripts/cortecs-thinking-canary.mjs",
     "canary:partial": "node scripts/partial-stream-canary.mjs"
   },

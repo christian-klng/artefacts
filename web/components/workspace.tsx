@@ -69,6 +69,8 @@ type AgentEvent =
       type: "files";
       files: Record<string, string>;
       assets: Record<string, AssetMeta>;
+      // Agent-memory files (/CONCEPT.md, /DESIGN.md) — read-only in the code tree.
+      internal: Record<string, string>;
     }
   | { type: "version"; id: string; label: string | null; createdAt: string }
   // The first-prompt concept interview card (3 questions + style choice).
@@ -103,12 +105,14 @@ export function Workspace({
   initialVersions,
   initialAttachments = [],
   initialAssets = {},
+  initialInternal = {},
   previewUrl,
   publishEnabled = false,
   initialPublishUrl,
   initialPublishedSignature,
   initialSiteUrl,
   initialDatabaseEnabled = false,
+  showBadge = true,
   initialPrompt,
 }: {
   projectId: string;
@@ -117,6 +121,8 @@ export function Workspace({
   initialVersions: Version[];
   initialAttachments?: AttachmentMeta[];
   initialAssets?: Record<string, AssetMeta>;
+  // Agent-memory files (/CONCEPT.md, /DESIGN.md), shown read-only in the code tree.
+  initialInternal?: Record<string, string>;
   previewUrl?: string;
   publishEnabled?: boolean;
   initialPublishUrl?: string;
@@ -125,6 +131,10 @@ export function Workspace({
   initialSiteUrl?: string;
   // Whether the project already has a provisioned database (shows the Daten tab).
   initialDatabaseEnabled?: boolean;
+  // Whether the "Erstellt mit Kubikraum" badge shows in the preview. Only affects
+  // the srcDoc fallback (no APPS_DOMAIN); with a real preview origin the serve
+  // route injects it. Default true.
+  showBadge?: boolean;
   // Prompt carried over from the landing page (via /start). Fired once on mount
   // as the first agent message, then cleared.
   initialPrompt?: string;
@@ -133,6 +143,10 @@ export function Workspace({
   const [files, setFiles] = useState<Record<string, string>>(initialFiles);
   const [assets, setAssets] =
     useState<Record<string, AssetMeta>>(initialAssets);
+  // Agent-memory files (/CONCEPT.md, /DESIGN.md): a separate channel so they show
+  // read-only in the code tree without touching the preview or publish signature.
+  const [internal, setInternal] =
+    useState<Record<string, string>>(initialInternal);
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [versions, setVersions] = useState<Version[]>(initialVersions);
   const [attachments, setAttachments] =
@@ -279,6 +293,7 @@ export function Workspace({
         case "files":
           setFiles(event.files);
           setAssets(event.assets);
+          setInternal(event.internal);
           break;
         case "version":
           setVersions((prev) => [
@@ -437,9 +452,11 @@ export function Workspace({
         const data = (await res.json()) as {
           files: Record<string, string>;
           assets: Record<string, AssetMeta>;
+          internal: Record<string, string>;
         };
         setFiles(data.files);
         setAssets(data.assets);
+        setInternal(data.internal);
       } catch (error) {
         appendMessage(
           "assistant",
@@ -657,9 +674,11 @@ export function Workspace({
             <SandpackWorkspace
               files={files}
               assets={assets}
+              internal={internal}
               view={effectiveView}
               projectId={projectId}
               previewUrl={previewUrl}
+              showBadge={showBadge}
             />
           )}
         </div>

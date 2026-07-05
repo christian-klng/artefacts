@@ -42,7 +42,7 @@ export default async function ProjectPage({
       listProjectUsage(project.id),
     ]);
 
-  const { files, assets } = clientFiles;
+  const { files, assets, internal } = clientFiles;
   // Costs live only in the usage_event ledger (never as message rows) — merge
   // them into the transcript by timestamp so reloads keep the per-turn
   // "Kosten: …" lines the live stream showed. A turn's usage is recorded
@@ -126,6 +126,7 @@ export default async function ProjectPage({
         projectId={project.id}
         initialFiles={files}
         initialAssets={assets}
+        initialInternal={internal}
         initialMessages={messages}
         initialVersions={versions}
         initialAttachments={attachments}
@@ -135,6 +136,7 @@ export default async function ProjectPage({
         initialPublishedSignature={publishedSignature}
         initialSiteUrl={project.siteUrl ?? undefined}
         initialDatabaseEnabled={project.databaseEnabled}
+        showBadge={!project.badgeHidden}
         initialPrompt={initialPrompt}
       />
     </div>

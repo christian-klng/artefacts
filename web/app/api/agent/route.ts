@@ -325,7 +325,12 @@ export async function POST(request: Request) {
           await addMessage(project.id, tm.role, tm.content, tm.tool);
         }
         const client = await getClientFiles(project.id);
-        send({ type: "files", files: client.files, assets: client.assets });
+        send({
+          type: "files",
+          files: client.files,
+          assets: client.assets,
+          internal: client.internal,
+        });
         // Snapshot the result so the user can restore it later.
         if (filesChanged) {
           const version = await createVersion(project.id);

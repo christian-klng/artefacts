@@ -8,6 +8,7 @@ import {
   SandpackCodeEditor,
 } from "@codesandbox/sandpack-react";
 import type { ViewMode } from "./workspace-toolbar";
+import { injectBadge } from "@/lib/badge";
 
 export type AssetMeta = { mimeType: string | null; size: number; hash: string };
 
@@ -31,17 +32,27 @@ function formatSize(bytes: number): string {
 export function SandpackWorkspace({
   files,
   assets,
+  internal = {},
   view,
   projectId,
   previewUrl,
+  showBadge = true,
 }: {
   files: Record<string, string>;
   assets: Record<string, AssetMeta>;
+  // Agent-memory files (/CONCEPT.md, /DESIGN.md): merged into the read-only code
+  // tree only — deliberately NOT into `indexHtml`/`multiFile`/preview below, so
+  // the user can read them without them counting toward the shipped app.
+  internal?: Record<string, string>;
   view: ViewMode;
   projectId: string;
   // When set, the preview is served from the project's own origin instead of
   // an inline srcDoc (enables real DB/auth). Undefined → srcDoc fallback.
   previewUrl?: string;
+  // "Erstellt mit Kubikraum" badge. With previewUrl the serve/render routes
+  // inject it server-side; this flag only drives the single-file srcDoc path
+  // below, which never hits the server.
+  showBadge?: boolean;
 }) {
   const indexHtml = files["/index.html"];
   // The project is multi-file when it has more than just /index.html or any
@@ -60,8 +71,13 @@ export function SandpackWorkspace({
         `(${meta.mimeType ?? "unbekannt"}, ${formatSize(meta.size)}).\n` +
         `Im Download/ZIP und auf der veröffentlichten Seite enthalten.`;
     }
+    // Agent-memory files last: readable in the tree, but internal — the agent's
+    // concept/design notes, not part of the exported or published app.
+    for (const [path, content] of Object.entries(internal)) {
+      map[path] = content;
+    }
     return map;
-  }, [files, assets]);
+  }, [files, assets, internal]);
 
   if (view === "preview") {
     if (!indexHtml) {
@@ -100,6 +116,7 @@ export function SandpackWorkspace({
         indexHtml={indexHtml}
         multiFile={multiFile}
         projectId={projectId}
+        showBadge={showBadge}
         style={iframeStyle}
       />
     );
@@ -144,11 +161,13 @@ function SrcDocPreview({
   indexHtml,
   multiFile,
   projectId,
+  showBadge,
   style,
 }: {
   indexHtml: string;
   multiFile: boolean;
   projectId: string;
+  showBadge: boolean;
   style: React.CSSProperties;
 }) {
   // Keyed by content hash so a stale render from older HTML is ignored.
@@ -186,10 +205,14 @@ function SrcDocPreview({
     );
   }
 
+  // multiFile HTML comes from /api/projects/render, which already injected the
+  // badge — injectBadge is idempotent, so wrapping is a no-op there and only
+  // adds it to the single-file / render-failure path.
+  const src = multiFile ? (renderedHtml ?? indexHtml) : indexHtml;
   return (
     <iframe
       title="App preview"
-      srcDoc={multiFile ? (renderedHtml ?? indexHtml) : indexHtml}
+      srcDoc={showBadge ? injectBadge(src) : src}
       // No allow-same-origin: the preview cannot reach our app's origin,
       // cookies, or storage. Scripts/forms run for the demo app.
       sandbox="allow-scripts allow-forms allow-modals allow-popups allow-pointer-lock"

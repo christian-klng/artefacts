@@ -1,9 +1,10 @@
 import {
   readFileRaw,
   readPublishedFile,
-  getProjectDbEnabled,
+  getProjectServeMeta,
 } from "@/lib/projects";
 import { isInternalVfsPath } from "@/lib/concept";
+import { injectBadge } from "@/lib/badge";
 import { substituteSiteUrl, originFromHost } from "@/lib/site-url";
 import { contentTypeFor } from "@/lib/vfs";
 import { verifyPreviewToken } from "@/lib/preview-token";
@@ -83,6 +84,7 @@ function fileResponse(
   projectId: string,
   origin: string,
   dbEnabled: boolean,
+  showBadge: boolean,
 ): Response {
   const contentType = contentTypeFor(path, file.mimeType);
   const isHtml = contentType.startsWith("text/html");
@@ -96,7 +98,13 @@ function fileResponse(
   // Text: resolve the __SITE_URL__ placeholder to this real origin (so SEO files
   // ship absolute URLs), then inject the bootstrap into the HTML entry document.
   let body = substituteSiteUrl(file.content, origin);
-  if (isHtml) body = injectBootstrap(body, projectId, dbEnabled);
+  if (isHtml) {
+    body = injectBootstrap(body, projectId, dbEnabled);
+    // "Erstellt mit Kubikraum" — injected here (not in the VFS) so it shows on
+    // the published app + preview but is absent from the exported ZIP. Skipped
+    // per project via badgeHidden.
+    if (showBadge) body = injectBadge(body);
+  }
   return new Response(body, {
     headers: { "content-type": contentType, "cache-control": "no-store" },
   });
@@ -136,13 +144,14 @@ export async function GET(request: Request) {
     }
     const file = await readFileRaw(projectId, path);
     if (!file) return new Response("Not found", { status: 404 });
-    const dbEnabled = await getProjectDbEnabled(projectId);
+    const { dbEnabled, badgeHidden } = await getProjectServeMeta(projectId);
     const res = fileResponse(
       file,
       path,
       projectId,
       originFromHost(host ?? ""),
       dbEnabled,
+      !badgeHidden,
     );
     // The preview origin is an ephemeral, gated view of the live VFS — never the
     // canonical address — so keep it out of search/answer-engine indexes.
@@ -162,13 +171,13 @@ export async function GET(request: Request) {
   if (slug) {
     const file = await readPublishedFile(slug, path);
     if (file) {
-      const dbEnabled = await getProjectDbEnabled(file.projectId);
       return fileResponse(
         file,
         path,
         file.projectId,
         originFromHost(host ?? ""),
-        dbEnabled,
+        file.dbEnabled,
+        !file.badgeHidden,
       );
     }
   }

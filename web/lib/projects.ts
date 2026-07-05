@@ -21,10 +21,15 @@ function contentHash(content: string): string {
 }
 
 // What the client needs to render the workspace: text files in full, binary
-// assets as metadata only (never ship base64 to the browser).
+// assets as metadata only (never ship base64 to the browser). `internal` carries
+// the agent-memory files (/CONCEPT.md, /DESIGN.md) on a SEPARATE channel: shown
+// read-only in the code tree so the user can read the concept/design, but kept
+// out of `files`/`assets` so they never affect the preview's single-vs-multi-file
+// detection or the publish-dirty signature (and never reach serve/export/publish).
 export type ClientFiles = {
   files: Record<string, string>;
   assets: Record<string, { mimeType: string | null; size: number; hash: string }>;
+  internal: Record<string, string>;
 };
 
 // Service layer for per-user projects and their virtual filesystem. Every read
@@ -112,13 +117,22 @@ export async function getOwnedProject(projectId: string, userId: string) {
   return project;
 }
 
-/** Whether the project has an isolated database provisioned (drives SDK injection). */
-export async function getProjectDbEnabled(projectId: string): Promise<boolean> {
+/**
+ * Flags the serve route needs to render a project's HTML: whether the DB SDK is
+ * injected (`dbEnabled`) and whether the "Erstellt mit Kubikraum" badge is
+ * suppressed (`badgeHidden`). One PK lookup for both.
+ */
+export async function getProjectServeMeta(
+  projectId: string,
+): Promise<{ dbEnabled: boolean; badgeHidden: boolean }> {
   const row = await db.query.projects.findFirst({
     where: eq(projects.id, projectId),
-    columns: { databaseEnabled: true },
+    columns: { databaseEnabled: true, badgeHidden: true },
   });
-  return row?.databaseEnabled ?? false;
+  return {
+    dbEnabled: row?.databaseEnabled ?? false,
+    badgeHidden: row?.badgeHidden ?? false,
+  };
 }
 
 export async function listFiles(projectId: string): Promise<ProjectFile[]> {
@@ -138,11 +152,16 @@ export async function listFiles(projectId: string): Promise<ProjectFile[]> {
 /** The client-facing split: text files in full, binary assets as metadata only. */
 export async function getClientFiles(projectId: string): Promise<ClientFiles> {
   const all = await listFiles(projectId);
-  const result: ClientFiles = { files: {}, assets: {} };
+  const result: ClientFiles = { files: {}, assets: {}, internal: {} };
   for (const f of all) {
-    // Agent-internal files (e.g. CONCEPT.md) never reach the client: not in the
-    // file tree, the files snapshot, or the client-side publish-dirty signature.
-    if (isInternalVfsPath(f.path)) continue;
+    // Agent-internal files (/CONCEPT.md, /DESIGN.md) ride a separate channel so
+    // the user can READ them in the code tree while they stay out of the
+    // shipped app: excluded from the preview, publish signature, serve, and
+    // export. They are always utf8 text.
+    if (isInternalVfsPath(f.path)) {
+      result.internal[f.path] = f.content;
+      continue;
+    }
     if (f.encoding === "base64") {
       result.assets[f.path] = {
         mimeType: f.mimeType,
@@ -522,6 +541,8 @@ export async function readPublishedFile(
   content: string;
   encoding: FileEncoding;
   mimeType: string | null;
+  dbEnabled: boolean;
+  badgeHidden: boolean;
 } | null> {
   const project = await db.query.projects.findFirst({
     where: and(eq(projects.publishSlug, slug), eq(projects.published, true)),
@@ -539,13 +560,23 @@ export async function readPublishedFile(
   const snapshot = JSON.parse(version.snapshot) as Record<string, SnapshotEntry>;
   const entry = snapshot[path === "/" ? "/index.html" : path];
   if (entry == null) return null;
+  const { databaseEnabled: dbEnabled, badgeHidden } = project;
   return typeof entry === "string"
-    ? { projectId: project.id, content: entry, encoding: "utf8", mimeType: null }
+    ? {
+        projectId: project.id,
+        content: entry,
+        encoding: "utf8",
+        mimeType: null,
+        dbEnabled,
+        badgeHidden,
+      }
     : {
         projectId: project.id,
         content: entry.content,
         encoding: entry.encoding,
         mimeType: entry.mimeType ?? null,
+        dbEnabled,
+        badgeHidden,
       };
 }
 

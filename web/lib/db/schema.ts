@@ -131,6 +131,12 @@ export const projects = pgTable(
     // When the schema/role were actually created (null = never). Provisioning is
     // idempotent; this is just an audit timestamp.
     dbProvisionedAt: timestamp("db_provisioned_at", { mode: "date" }),
+    // --- "Erstellt mit Kubikraum" attribution badge ---
+    // When true, the serve/preview routes skip injecting the badge (see
+    // lib/badge.ts). Default false = badge shown on all published apps + previews.
+    // Plain default column (no unique) → safe for the non-TTY migrate push.
+    // Prepared for a future paid-plan toggle; no UI flips it yet.
+    badgeHidden: boolean("badge_hidden").notNull().default(false),
     createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
   },
