@@ -15,6 +15,7 @@ export function WorkspaceToolbar({
   view,
   onViewChange,
   hasDatabase,
+  hasFiles,
   canDownload,
   onDownload,
   siteUrl,
@@ -33,6 +34,7 @@ export function WorkspaceToolbar({
   view: ViewMode;
   onViewChange: (view: ViewMode) => void;
   hasDatabase: boolean;
+  hasFiles: boolean;
   canDownload: boolean;
   onDownload: (rawSiteUrl: string) => void | Promise<void>;
   siteUrl?: string;
@@ -57,6 +59,7 @@ export function WorkspaceToolbar({
         view={view}
         onViewChange={onViewChange}
         hasDatabase={hasDatabase}
+        hasFiles={hasFiles}
       />
 
       <div className="flex items-center gap-2">
@@ -495,10 +498,12 @@ function ViewSwitch({
   view,
   onViewChange,
   hasDatabase,
+  hasFiles,
 }: {
   view: ViewMode;
   onViewChange: (view: ViewMode) => void;
   hasDatabase: boolean;
+  hasFiles: boolean;
 }) {
   const base = "rounded px-2.5 py-1 text-xs font-medium transition";
   const activeCls = "bg-white text-neutral-900 shadow-sm dark:bg-neutral-700 dark:text-white";
@@ -522,14 +527,16 @@ function ViewSwitch({
       >
         Code
       </button>
-      <button
-        type="button"
-        onClick={() => onViewChange("files")}
-        className={`${base} ${view === "files" ? activeCls : inactiveCls}`}
-        aria-pressed={view === "files"}
-      >
-        Dateien
-      </button>
+      {hasFiles && (
+        <button
+          type="button"
+          onClick={() => onViewChange("files")}
+          className={`${base} ${view === "files" ? activeCls : inactiveCls}`}
+          aria-pressed={view === "files"}
+        >
+          Dateien
+        </button>
+      )}
       {hasDatabase && (
         <button
           type="button"

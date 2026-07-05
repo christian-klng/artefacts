@@ -166,6 +166,12 @@ export function Workspace({
     [files, assets],
   );
   const publishDirty = !!publishUrl && publishedSignature !== currentSignature;
+  // The "Dateien" tab is only shown while attachments exist. If the last one is
+  // deleted while that tab is active, render the preview instead so the user
+  // isn't stranded on a now-hidden, empty view. Derived (not stored) so it can't
+  // go stale — re-uploading a file restores the still-remembered "files" view.
+  const effectiveView =
+    view === "files" && attachments.length === 0 ? "preview" : view;
 
   const appendMessage = useCallback(
     (
@@ -619,9 +625,10 @@ export function Workspace({
       />
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
         <WorkspaceToolbar
-          view={view}
+          view={effectiveView}
           onViewChange={setView}
           hasDatabase={hasDatabase}
+          hasFiles={attachments.length > 0}
           canDownload={!!files["/index.html"]}
           onDownload={onDownload}
           siteUrl={siteUrl}
@@ -638,19 +645,19 @@ export function Workspace({
           onSetSlug={onSetSlug}
         />
         <div className="min-h-0 flex-1">
-          {view === "files" ? (
+          {effectiveView === "files" ? (
             <AttachmentsView
               attachments={attachments}
               projectId={projectId}
               onDeleted={refreshAttachments}
             />
-          ) : view === "data" ? (
+          ) : effectiveView === "data" ? (
             <DataView projectId={projectId} refreshKey={dbRefreshKey} />
           ) : (
             <SandpackWorkspace
               files={files}
               assets={assets}
-              view={view}
+              view={effectiveView}
               projectId={projectId}
               previewUrl={previewUrl}
             />
