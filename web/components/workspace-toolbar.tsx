@@ -7,6 +7,16 @@ export type Version = {
   id: string;
   createdAt: string;
   label: string | null;
+  // Backup kind: 'auto' | 'daily' | 'publish' | 'manual' (see lib/backup.ts).
+  kind: string;
+};
+
+// Human labels for the backup kinds shown in the restore dropdown.
+const BACKUP_KIND_LABEL: Record<string, string> = {
+  auto: "Auto",
+  daily: "Täglich",
+  publish: "Veröffentlicht",
+  manual: "Manuell",
 };
 
 export type ViewMode = "preview" | "code" | "files" | "data";
@@ -82,15 +92,27 @@ export function WorkspaceToolbar({
                 value=""
                 disabled={busy}
                 onChange={(e) => {
-                  if (e.target.value) onRestore(e.target.value);
+                  const id = e.target.value;
+                  if (!id) return;
+                  // A full-backup restore overwrites live DB + accounts too, so
+                  // confirm before replacing everything.
+                  if (
+                    confirm(
+                      "Backup wiederherstellen überschreibt Dateien, Datenbank, Nutzerkonten und Anhänge. Fortfahren?",
+                    )
+                  ) {
+                    onRestore(id);
+                  }
                 }}
                 className="rounded-md border border-neutral-300 bg-transparent px-2 py-1 text-xs outline-none disabled:opacity-50 dark:border-neutral-700"
-                aria-label="Restore a previous version"
+                aria-label="Backup wiederherstellen"
               >
-                <option value="">Restore version…</option>
-                {versions.map((v, i) => (
+                <option value="">Backup wiederherstellen…</option>
+                {versions.map((v) => (
                   <option key={v.id} value={v.id}>
-                    {`v${total - i} · ${new Date(v.createdAt).toLocaleString()}`}
+                    {`${BACKUP_KIND_LABEL[v.kind] ?? v.kind} · ${new Date(
+                      v.createdAt,
+                    ).toLocaleString()}`}
                   </option>
                 ))}
               </select>

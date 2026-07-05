@@ -5,11 +5,11 @@ import {
   addMessage,
   getMessages,
   getClientFiles,
-  createVersion,
   readFile,
   writeFile,
   updateMessageContent,
 } from "@/lib/projects";
+import { createBackup } from "@/lib/backup";
 import { CONCEPT_PATH, DESIGN_PATH, isInternalVfsPath } from "@/lib/concept";
 import { getWorld, sampleWorldCandidates } from "@/lib/design-worlds";
 import { composeDesignMd, composeFallbackDesignMd } from "@/lib/agent/design";
@@ -331,14 +331,15 @@ export async function POST(request: Request) {
           assets: client.assets,
           internal: client.internal,
         });
-        // Snapshot the result so the user can restore it later.
+        // Snapshot the whole app so the user can restore it later.
         if (filesChanged) {
-          const version = await createVersion(project.id);
+          const backup = await createBackup(project.id, "auto");
           send({
             type: "version",
-            id: version.id,
-            label: version.label,
-            createdAt: version.createdAt,
+            id: backup.id,
+            kind: backup.kind,
+            label: backup.label,
+            createdAt: backup.createdAt,
           });
         }
 

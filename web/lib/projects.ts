@@ -2,16 +2,27 @@ import "server-only";
 import { createHash, randomInt } from "node:crypto";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { projects, files, messages, artifactVersions } from "@/lib/db/schema";
+import {
+  projects,
+  files,
+  messages,
+  artifactVersions,
+  projectBackups,
+} from "@/lib/db/schema";
 import { publishSlugFromLabel } from "@/lib/app-host";
 import { canonicalSignatureMap, filesSignature } from "@/lib/files-signature";
 import { isInternalVfsPath } from "@/lib/concept";
+// NOTE: lib/backup.ts imports helpers from this module; the cycle is safe
+// because neither side calls the other at module top level.
+import { createBackup } from "@/lib/backup";
 
 export type FileEncoding = "utf8" | "base64";
 
 // A snapshot entry: a plain string is legacy/text (utf8); an object carries a
 // binary asset (base64 + mimeType). Lets restore/publish stay backward-compatible.
-type SnapshotEntry =
+// The canonical files-section format shared by version snapshots, full backups
+// (lib/backup.ts) and the published-file reads.
+export type SnapshotEntry =
   | string
   | { content: string; encoding: FileEncoding; mimeType: string | null };
 
@@ -311,58 +322,37 @@ export async function getMessages(projectId: string) {
     .orderBy(asc(messages.createdAt));
 }
 
-// --- Artifact versions: snapshots of the whole virtual filesystem ---------
+// --- Files snapshot helpers (shared by full backups in lib/backup.ts) ------
 
-/** Snapshots the project's current files as a new restorable version. */
-export async function createVersion(projectId: string, label?: string) {
-  const all = await listFiles(projectId);
-  const snapshot = JSON.stringify(
-    Object.fromEntries(
-      all.map((f): [string, SnapshotEntry] => [
-        f.path,
-        f.encoding === "base64"
-          ? { content: f.content, encoding: f.encoding, mimeType: f.mimeType }
-          : f.content,
-      ]),
-    ),
-  );
-  const [row] = await db
-    .insert(artifactVersions)
-    .values({ projectId, label: label ?? null, snapshot })
-    .returning({
-      id: artifactVersions.id,
-      label: artifactVersions.label,
-      createdAt: artifactVersions.createdAt,
-    });
-  return row;
-}
-
-export async function listVersions(projectId: string) {
-  return db
-    .select({
-      id: artifactVersions.id,
-      label: artifactVersions.label,
-      createdAt: artifactVersions.createdAt,
-    })
-    .from(artifactVersions)
-    .where(eq(artifactVersions.projectId, projectId))
-    .orderBy(desc(artifactVersions.createdAt));
-}
-
-/** Replaces the project's files with a stored version's snapshot. */
-export async function restoreVersion(
+/**
+ * The project's current files as a snapshot map { path: string | {content,
+ * encoding, mimeType} } — the canonical files-section format. ONE definition,
+ * reused by full backups and the published-file reads, so publish signatures
+ * never drift from what a backup stores.
+ */
+export async function snapshotFilesMap(
   projectId: string,
-  versionId: string,
-): Promise<ClientFiles> {
-  const version = await db.query.artifactVersions.findFirst({
-    where: and(
-      eq(artifactVersions.id, versionId),
-      eq(artifactVersions.projectId, projectId),
-    ),
-  });
-  if (!version) throw new Error("Version not found");
+): Promise<Record<string, SnapshotEntry>> {
+  const all = await listFiles(projectId);
+  return Object.fromEntries(
+    all.map((f): [string, SnapshotEntry] => [
+      f.path,
+      f.encoding === "base64"
+        ? { content: f.content, encoding: f.encoding, mimeType: f.mimeType }
+        : f.content,
+    ]),
+  );
+}
 
-  const snapshot = JSON.parse(version.snapshot) as Record<string, SnapshotEntry>;
+/**
+ * Replaces ALL of a project's files with those in a snapshot map (delete-all +
+ * re-insert, one transaction). Shared by full-backup restore. Does NOT bump
+ * updatedAt — callers touchProject afterwards.
+ */
+export async function restoreFilesFromMap(
+  projectId: string,
+  snapshot: Record<string, SnapshotEntry>,
+): Promise<void> {
   await db.transaction(async (tx) => {
     await tx.delete(files).where(eq(files.projectId, projectId));
     const rows = Object.entries(snapshot).map(([path, v]) =>
@@ -378,8 +368,6 @@ export async function restoreVersion(
     );
     if (rows.length > 0) await tx.insert(files).values(rows);
   });
-  await touchProject(projectId);
-  return getClientFiles(projectId);
 }
 
 // --- Publishing: serve a frozen snapshot publicly at <slug>.apps.<domain> ---
@@ -462,9 +450,11 @@ export async function publishProject(
   if ((await readFile(projectId, "/index.html")) == null) {
     throw new Error("Nothing to publish: no /index.html yet");
   }
-  const firstPublish = project.publishedVersionId == null;
+  const firstPublish =
+    project.publishedBackupId == null && project.publishedVersionId == null;
 
-  const version = await createVersion(projectId, "Published");
+  // Freeze the whole app as a backup; the public app serves this snapshot.
+  const backup = await createBackup(projectId, "publish", "Veröffentlicht");
   const slug =
     project.publishSlug ?? (await uniqueSlug(slugify(project.name), projectId));
 
@@ -473,7 +463,7 @@ export async function publishProject(
     .set({
       published: true,
       publishSlug: slug,
-      publishedVersionId: version.id,
+      publishedBackupId: backup.id,
       updatedAt: new Date(),
     })
     .where(and(eq(projects.id, projectId), eq(projects.userId, userId)));
@@ -492,22 +482,52 @@ export async function getPublishedSignature(
   const project = await db.query.projects.findFirst({
     where: eq(projects.id, projectId),
   });
-  if (!project?.publishedVersionId) return null;
-
-  const version = await db.query.artifactVersions.findFirst({
-    where: and(
-      eq(artifactVersions.id, project.publishedVersionId),
-      eq(artifactVersions.projectId, projectId),
-    ),
-  });
-  if (!version) return null;
-
-  return snapshotSignature(version.snapshot);
+  if (!project) return null;
+  const filesMap = await loadPublishedFilesMap(project);
+  if (!filesMap) return null;
+  return filesMapSignature(filesMap);
 }
 
-/** Signature over a snapshot, treating binary entries as `binary:<hash>`. */
-function snapshotSignature(snapshotJson: string): string {
-  const snapshot = JSON.parse(snapshotJson) as Record<string, SnapshotEntry>;
+/**
+ * The frozen published files map, resolved from the full backup
+ * (publishedBackupId) or, for apps published before the backup rework, the
+ * legacy artifact_version (publishedVersionId). Null if not published / missing.
+ */
+async function loadPublishedFilesMap(project: {
+  id: string;
+  publishedBackupId: string | null;
+  publishedVersionId: string | null;
+}): Promise<Record<string, SnapshotEntry> | null> {
+  if (project.publishedBackupId) {
+    const backup = await db.query.projectBackups.findFirst({
+      where: and(
+        eq(projectBackups.id, project.publishedBackupId),
+        eq(projectBackups.projectId, project.id),
+      ),
+    });
+    if (backup) {
+      const blob = JSON.parse(backup.data) as {
+        files: Record<string, SnapshotEntry>;
+      };
+      return blob.files;
+    }
+  }
+  if (project.publishedVersionId) {
+    const version = await db.query.artifactVersions.findFirst({
+      where: and(
+        eq(artifactVersions.id, project.publishedVersionId),
+        eq(artifactVersions.projectId, project.id),
+      ),
+    });
+    if (version) {
+      return JSON.parse(version.snapshot) as Record<string, SnapshotEntry>;
+    }
+  }
+  return null;
+}
+
+/** Signature over a files map, treating binary entries as `binary:<hash>`. */
+function filesMapSignature(snapshot: Record<string, SnapshotEntry>): string {
   const textFiles: Record<string, string> = {};
   const assets: Record<string, { hash: string }> = {};
   for (const [path, v] of Object.entries(snapshot)) {
@@ -547,17 +567,11 @@ export async function readPublishedFile(
   const project = await db.query.projects.findFirst({
     where: and(eq(projects.publishSlug, slug), eq(projects.published, true)),
   });
-  if (!project?.publishedVersionId) return null;
+  if (!project) return null;
 
-  const version = await db.query.artifactVersions.findFirst({
-    where: and(
-      eq(artifactVersions.id, project.publishedVersionId),
-      eq(artifactVersions.projectId, project.id),
-    ),
-  });
-  if (!version) return null;
+  const snapshot = await loadPublishedFilesMap(project);
+  if (!snapshot) return null;
 
-  const snapshot = JSON.parse(version.snapshot) as Record<string, SnapshotEntry>;
   const entry = snapshot[path === "/" ? "/index.html" : path];
   if (entry == null) return null;
   const { databaseEnabled: dbEnabled, badgeHidden } = project;

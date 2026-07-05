@@ -240,3 +240,62 @@ export async function dumpTenantData(projectId: string): Promise<TableDump[]> {
   }
   return out;
 }
+
+/**
+ * Drops a project's tenant schema and everything in it. Runs as the connecting
+ * (admin) user because the SCHEMA is owned by that user, not the tenant role —
+ * a `SET LOCAL ROLE` drop would fail. The cluster-global role survives (only
+ * removed by nothing here); `ensureProvisioned` re-grants it on the recreated
+ * schema. Used by the full-backup restore to reset the DB before replaying a
+ * backup's DDL + data. Idempotent.
+ */
+export async function dropTenantSchema(projectId: string): Promise<void> {
+  const { schema } = tenantNames(projectId);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`DROP SCHEMA IF EXISTS ${ident(schema)} CASCADE`);
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Replays a serialized data dump (serializeTenantDump output) into a freshly
+ * re-provisioned tenant schema. Runs as the admin connection with:
+ *   - row_security = off        → cross-owner rows insert despite per-owner RLS;
+ *   - session_replication_role = replica → skips FK-ordering + suppresses the
+ *     owner_id-stamping trigger path, so the EXPLICIT owner_id in each dumped
+ *     row is preserved verbatim (the column DEFAULT never fires);
+ *   - search_path pinned to the schema → the dump's UNQUALIFIED
+ *     `INSERT INTO "table"` statements land in this project's schema.
+ * Must run AFTER applyTenantDdl (tables exist) and BEFORE applyOwnerSecurity.
+ * Requires a superuser DATABASE_URL (as our deploys use). No-op for empty SQL.
+ * NOTE: does not reset SERIAL/IDENTITY sequences to max(id); generated apps use
+ * uuid PKs in practice — a setval pass is a documented follow-up.
+ */
+export async function restoreTenantData(
+  projectId: string,
+  dataSql: string,
+): Promise<void> {
+  if (!dataSql.trim()) return;
+  const { schema } = tenantNames(projectId);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SET LOCAL row_security = off");
+    await client.query("SET LOCAL session_replication_role = replica");
+    await client.query(`SET LOCAL search_path TO ${ident(schema)}`);
+    await client.query(dataSql);
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}

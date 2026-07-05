@@ -117,7 +117,14 @@ export const projects = pgTable(
     // The frozen artifact_version served publicly. Plain id (no FK) to avoid a
     // circular projects<->artifact_version constraint; versions are only ever
     // removed by project cascade, so it can't dangle in practice.
+    // LEGACY: superseded by publishedBackupId below; read only as a fallback for
+    // apps published before the full-backup rework (see lib/projects.ts).
     publishedVersionId: uuid("published_version_id"),
+    // The frozen project_backup served publicly (full-backup rework). Replaces
+    // publishedVersionId; both are kept during the transition so already-
+    // published apps keep serving via the legacy pointer. Plain id (no FK) —
+    // same rationale as publishedVersionId above.
+    publishedBackupId: uuid("published_backup_id"),
     // The public URL the user intends to deploy the EXPORT under. Used only to
     // substitute the __SITE_URL__ placeholder in exported SEO files (canonical/
     // og/sitemap). Publishing doesn't need it — the serve route knows its own
@@ -336,6 +343,41 @@ export const artifactVersions = pgTable(
     createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
   },
   (version) => [index("artifact_version_project_idx").on(version.projectId)],
+);
+
+// A full-app backup: the whole project state (VFS files + per-project DB schema
+// & data + app_user accounts + attachments + settings) captured as one self-
+// contained JSON blob. Replaces artifact_version as the single snapshot/restore
+// mechanism (see lib/backup.ts). Created per file-changing agent turn ('auto'),
+// on publish ('publish'), and once a day for published apps ('daily'); retained
+// ~7 days by lib/backup.ts pruneBackups.
+export const projectBackups = pgTable(
+  "project_backup",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("projectId")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    // 'auto' | 'daily' | 'publish' | 'manual'.
+    kind: text("kind").notNull(),
+    label: text("label"),
+    // Self-contained JSON blob (BackupBlob in lib/backup.ts). Plain text (NOT
+    // jsonb) so the files section round-trips byte-identically to the old
+    // artifact_version snapshot — publish signatures depend on that.
+    data: text("data").notNull(),
+    createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+  },
+  // Plain indexes only (never .unique()) so the non-TTY migrate push can't hit
+  // the populated-table truncate prompt. The second index serves retention +
+  // "latest per kind" lookups in lib/backup.ts.
+  (b) => [
+    index("project_backup_project_idx").on(b.projectId),
+    index("project_backup_project_kind_created_idx").on(
+      b.projectId,
+      b.kind,
+      b.createdAt,
+    ),
+  ],
 );
 
 // ---------------------------------------------------------------------------

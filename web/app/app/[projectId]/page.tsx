@@ -5,9 +5,9 @@ import {
   getOwnedProject,
   getClientFiles,
   getMessages,
-  listVersions,
   getPublishedSignature,
 } from "@/lib/projects";
+import { listBackups } from "@/lib/backup";
 import { listAttachments } from "@/lib/attachments";
 import { listProjectUsage } from "@/lib/cortecs/billing";
 import { formatEur } from "@/lib/eur";
@@ -37,7 +37,7 @@ export default async function ProjectPage({
     await Promise.all([
       getClientFiles(project.id),
       getMessages(project.id),
-      listVersions(project.id),
+      listBackups(project.id),
       listAttachments(project.id),
       listProjectUsage(project.id),
     ]);
@@ -75,6 +75,7 @@ export default async function ProjectPage({
   while (u < usageRows.length) pushUsage();
   const versions = versionRows.map((v) => ({
     id: v.id,
+    kind: v.kind,
     label: v.label,
     createdAt: v.createdAt.toISOString(),
   }));

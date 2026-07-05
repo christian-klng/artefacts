@@ -110,6 +110,31 @@ async function cleanup(su) {
   }
 }
 
+// Inline mirror of lib/appdb/dump.ts serializeTenantDump (the spike stays a
+// single standalone file; dump.ts can't be imported under `node` type-stripping
+// because its extensionless "./sql" import doesn't resolve). Turns dumped rows
+// into INSERT statements with the same value handling.
+function sqlLiteral(v) {
+  if (v === null || v === undefined) return "NULL";
+  if (typeof v === "number") return Number.isFinite(v) ? String(v) : "NULL";
+  if (typeof v === "bigint") return v.toString();
+  if (typeof v === "boolean") return (v ? "TRUE" : "FALSE");
+  if (v instanceof Date) return `'${v.toISOString()}'`;
+  if (typeof v === "object") return `'${JSON.stringify(v).replace(/'/g, "''")}'`;
+  return `'${String(v).replace(/'/g, "''")}'`;
+}
+function serializeDump(table, columns, rows) {
+  const cols = columns.map(ident).join(", ");
+  return rows
+    .map(
+      (r) =>
+        `INSERT INTO ${ident(table)} (${cols}) VALUES (${columns
+          .map((c) => sqlLiteral(r[c]))
+          .join(", ")});`,
+    )
+    .join("\n");
+}
+
 async function main() {
   const su = new Pool({ connectionString: SUPER_URL, connectionTimeoutMillis: 4000 });
 
@@ -223,6 +248,92 @@ async function main() {
     const stillThere = await asTenant(app, { schema: SCHEMA_A, role: ROLE_A, endUserId: U1 }, sel.text, sel.values);
     ok("todos table still exists after injection attempt", stillThere.length >= 1);
   }
+
+  console.log("\n# Full-backup DB restore roundtrip (RLS + owner_id survive)");
+  // Mirrors lib/backup.ts restore of the tenant DB: dump (admin, RLS off) ->
+  // DROP SCHEMA -> re-provision -> re-apply DDL -> restore rows (admin, RLS off,
+  // replica, EXPLICIT owner_id via serializeTenantDump) -> re-apply owner
+  // security. Proves per-owner isolation + auto-stamp survive a full restore.
+
+  // 1. Dump project A as admin with row_security OFF (all owners' rows).
+  let dumpSql, preTotal, preU1, preU2;
+  {
+    const c = await su.connect();
+    try {
+      await c.query("BEGIN");
+      await c.query("SET LOCAL row_security = off");
+      const res = await c.query(`SELECT * FROM ${ident(SCHEMA_A)}.todos`);
+      await c.query("COMMIT");
+      const columns = res.fields.map((f) => f.name);
+      dumpSql = serializeDump("todos", columns, res.rows);
+      preTotal = res.rows.length;
+      preU1 = res.rows.filter((r) => r.owner_id === U1).length;
+      preU2 = res.rows.filter((r) => r.owner_id === U2).length;
+    } finally {
+      c.release();
+    }
+  }
+
+  // 2. Reset: DROP SCHEMA (admin) -> re-provision -> re-apply DDL (tenant role).
+  await su.query(`DROP SCHEMA IF EXISTS ${ident(SCHEMA_A)} CASCADE`);
+  for (const stmt of provisionStatements(SCHEMA_A, ROLE_A)) await su.query(stmt);
+  await su.query(`GRANT ${ident(ROLE_A)} TO ${ident(APP_ROLE)}`);
+  await asTenant(
+    app,
+    { schema: SCHEMA_A, role: ROLE_A },
+    `CREATE TABLE todos (id uuid primary key default gen_random_uuid(), owner_id uuid, title text)`,
+  );
+
+  // 3. Restore rows as admin: row_security off + replica + explicit owner_id.
+  {
+    const c = await su.connect();
+    try {
+      await c.query("BEGIN");
+      await c.query("SET LOCAL row_security = off");
+      await c.query("SET LOCAL session_replication_role = replica");
+      await c.query(`SET LOCAL search_path TO ${ident(SCHEMA_A)}`);
+      await c.query(dumpSql);
+      await c.query("COMMIT");
+    } catch (e) {
+      await c.query("ROLLBACK").catch(() => {});
+      throw e;
+    } finally {
+      c.release();
+    }
+  }
+
+  // 4. Re-assert owner security (tenant role).
+  await asTenant(app, { schema: SCHEMA_A, role: ROLE_A }, ownerColumnDefaultStatement(SCHEMA_A, "todos"));
+  for (const stmt of ownerRlsStatements(SCHEMA_A, "todos")) {
+    await asTenant(app, { schema: SCHEMA_A, role: ROLE_A }, stmt);
+  }
+
+  // 5. Assertions: data + per-owner isolation + auto-stamp all survive.
+  const totalAfter = (
+    await su.query(`SELECT count(*)::int n FROM ${ident(SCHEMA_A)}.todos`)
+  ).rows[0].n;
+  ok("all rows restored (admin count)", totalAfter === preTotal);
+  const u1Restored = await asTenant(app, { schema: SCHEMA_A, role: ROLE_A, endUserId: U1 }, sel.text, sel.values);
+  const u2Restored = await asTenant(app, { schema: SCHEMA_A, role: ROLE_A, endUserId: U2 }, sel.text, sel.values);
+  ok(
+    "RLS intact: U1 sees exactly its restored rows",
+    u1Restored.length === preU1 && u1Restored.every((r) => r.owner_id === U1),
+  );
+  ok(
+    "RLS intact: U2 sees exactly its restored rows",
+    u2Restored.length === preU2 && u2Restored.every((r) => r.owner_id === U2),
+  );
+  // owner_id DEFAULT still auto-stamps a fresh insert after restore.
+  const insPost = buildInsert({ table: "todos", values: { title: "post-restore auto" } });
+  await asTenant(app, { schema: SCHEMA_A, role: ROLE_A, endUserId: U1 }, insPost.text, insPost.values);
+  const u1Post = await asTenant(app, { schema: SCHEMA_A, role: ROLE_A, endUserId: U1 }, sel.text, sel.values);
+  const stamped = u1Post.find((r) => r.title === "post-restore auto");
+  ok("owner_id DEFAULT still stamps after restore", !!stamped && stamped.owner_id === U1);
+  // Cross-owner write still rejected by WITH CHECK after restore.
+  const insForge = buildInsert({ table: "todos", values: { owner_id: U2, title: "forged" } });
+  await denied("U1 cannot forge a U2-owned row after restore", () =>
+    asTenant(app, { schema: SCHEMA_A, role: ROLE_A, endUserId: U1 }, insForge.text, insForge.values),
+  );
 
   console.log("\n# Cleanup");
   await app.end();

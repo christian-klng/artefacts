@@ -72,7 +72,13 @@ type AgentEvent =
       // Agent-memory files (/CONCEPT.md, /DESIGN.md) — read-only in the code tree.
       internal: Record<string, string>;
     }
-  | { type: "version"; id: string; label: string | null; createdAt: string }
+  | {
+      type: "version";
+      id: string;
+      kind: string;
+      label: string | null;
+      createdAt: string;
+    }
   // The first-prompt concept interview card (3 questions + style choice).
   | { type: "interview"; id: string; spec: InterviewSpec }
   | { type: "attachments_changed" }
@@ -297,7 +303,12 @@ export function Workspace({
           break;
         case "version":
           setVersions((prev) => [
-            { id: event.id, label: event.label, createdAt: event.createdAt },
+            {
+              id: event.id,
+              kind: event.kind,
+              label: event.label,
+              createdAt: event.createdAt,
+            },
             ...prev,
           ]);
           break;
@@ -440,23 +451,29 @@ export function Workspace({
   );
 
   const onRestore = useCallback(
-    async (versionId: string) => {
+    async (backupId: string) => {
       setRestoring(true);
       try {
         const res = await fetch("/api/projects/restore", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ projectId, versionId }),
+          body: JSON.stringify({ projectId, backupId }),
         });
         if (!res.ok) throw new Error(`Restore failed (${res.status})`);
         const data = (await res.json()) as {
           files: Record<string, string>;
           assets: Record<string, AssetMeta>;
           internal: Record<string, string>;
+          databaseEnabled: boolean;
         };
         setFiles(data.files);
         setAssets(data.assets);
         setInternal(data.internal);
+        // A full-backup restore can also change the database + attachments, so
+        // refresh the Daten/Dateien tabs to reflect the restored state.
+        setHasDatabase(data.databaseEnabled);
+        setDbRefreshKey((k) => k + 1);
+        refreshAttachments();
       } catch (error) {
         appendMessage(
           "assistant",
@@ -467,7 +484,7 @@ export function Workspace({
         setRestoring(false);
       }
     },
-    [projectId, appendMessage],
+    [projectId, appendMessage, refreshAttachments],
   );
 
   const onPublish = useCallback(async () => {

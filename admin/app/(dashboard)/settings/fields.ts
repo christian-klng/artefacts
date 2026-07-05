@@ -135,6 +135,30 @@ export const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
   {
+    title: "Backups",
+    description:
+      "Automatische Voll-Backups veröffentlichter Apps (Dateien + Datenbank + Nutzerkonten + Anhänge). Das Cron-Secret (BACKUP_CRON_SECRET) bleibt aus Sicherheitsgründen in der Server-Umgebung.",
+    fields: [
+      {
+        key: "BACKUP_ENABLED",
+        label: "Automatische Backups",
+        type: "select",
+        options: [
+          { value: "", label: "An (Standard)" },
+          { value: "true", label: "An" },
+          { value: "false", label: "Aus" },
+        ],
+      },
+      {
+        key: "BACKUP_RETENTION_DAYS",
+        label: "Aufbewahrung (Tage)",
+        placeholder: "7",
+        type: "number",
+        help: "Ältere Auto-/Täglich-Backups werden entfernt; das veröffentlichte und das neueste Backup bleiben immer erhalten.",
+      },
+    ],
+  },
+  {
     title: "E-Mail (SMTP)",
     description:
       "Zugangsdaten für den Mailversand. Das Passwort (SMTP_PASS) bleibt aus Sicherheitsgründen in der Server-Umgebung.",
