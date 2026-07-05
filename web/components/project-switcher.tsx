@@ -77,7 +77,10 @@ export function ProjectSwitcher({ projects }: { projects: Project[] }) {
               {active &&
                 (renaming ? (
                   <form
-                    action={renameProjectAction}
+                    action={async (formData) => {
+                      await renameProjectAction(formData);
+                      close();
+                    }}
                     className="flex items-center gap-1 px-1 py-1"
                   >
                     <input type="hidden" name="projectId" value={active.id} />

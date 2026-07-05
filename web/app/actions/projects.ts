@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import {
   createProject,
@@ -33,8 +34,12 @@ export async function renameProjectAction(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   if (projectId && name) {
     await renameProject(projectId, userId, name);
+    // The project title is rendered in the shared `/app` layout
+    // (ProjectSwitcher). We stay on the same URL, so without invalidating that
+    // layout the header keeps the old name from the client Router Cache — the
+    // rename looks like it did nothing. Refresh the layout for all `/app/*`.
+    revalidatePath("/app", "layout");
   }
-  redirect(projectId ? `/app/${projectId}` : "/app");
 }
 
 /**
