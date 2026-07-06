@@ -160,7 +160,7 @@ export function SandpackWorkspace({
         </div>
         <SandpackCodeEditor
           readOnly
-          showTabs
+          showTabs={false}
           showLineNumbers
           style={{ height: "100%", flex: 1 }}
         />
