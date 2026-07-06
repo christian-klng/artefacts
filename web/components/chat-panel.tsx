@@ -8,9 +8,11 @@ import {
   FileText,
   FolderOpen,
   Image as ImageIcon,
+  Loader2,
   Paperclip,
   Pencil,
   Receipt,
+  Send,
   TriangleAlert,
   Trash2,
   Wrench,
@@ -287,9 +289,19 @@ export function ChatPanel({
                 uploading > 0 ||
                 (input.trim() === "" && pending.length === 0)
               }
-              className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+              title={streaming ? m.chat.working : m.chat.send}
+              aria-label={streaming ? m.chat.working : m.chat.send}
+              // While streaming the button is disabled but its spinner must stay
+              // bright — so only dim it for the empty-input disabled state.
+              className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-neutral-900 text-white transition hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200 ${
+                streaming ? "" : "disabled:opacity-50"
+              }`}
             >
-              {streaming ? "…" : m.chat.send}
+              {streaming ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <Send className="h-4 w-4" aria-hidden />
+              )}
             </button>
           </div>
         </div>

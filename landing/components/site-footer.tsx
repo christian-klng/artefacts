@@ -16,16 +16,22 @@ export async function SiteFooter() {
         </p>
         <nav className="flex items-center gap-5">
           <Link
-            href="/impressum"
+            href="/agb"
             className="transition-colors hover:text-neutral-900 dark:hover:text-neutral-100"
           >
-            {m.footer.imprint}
+            {m.footer.terms}
           </Link>
           <Link
             href="/datenschutz"
             className="transition-colors hover:text-neutral-900 dark:hover:text-neutral-100"
           >
             {m.footer.privacy}
+          </Link>
+          <Link
+            href="/impressum"
+            className="transition-colors hover:text-neutral-900 dark:hover:text-neutral-100"
+          >
+            {m.footer.imprint}
           </Link>
         </nav>
       </div>
