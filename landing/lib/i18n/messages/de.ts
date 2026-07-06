@@ -88,7 +88,8 @@ const de = {
   },
   footer: {
     text: "Kubikraum · self-hosted App-Builder",
-    contact: "Kontakt",
+    imprint: "Impressum",
+    privacy: "Datenschutz",
   },
   themeToggle: {
     label: "Theme umschalten",

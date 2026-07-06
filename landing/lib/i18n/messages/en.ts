@@ -87,7 +87,8 @@ const en: Messages = {
   },
   footer: {
     text: "Kubikraum · self-hosted app builder",
-    contact: "Contact",
+    imprint: "Imprint",
+    privacy: "Privacy",
   },
   themeToggle: {
     label: "Toggle theme",
