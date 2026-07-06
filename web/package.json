@@ -12,6 +12,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "spike": "node scripts/run-spike-embedded.mjs",
+    "e2e:publish-db": "node scripts/run-publish-db-e2e.mjs",
     "check:fonts": "node scripts/check-fonts.mjs",
     "check:badge": "node scripts/check-badge.mjs",
     "canary:thinking": "node scripts/cortecs-thinking-canary.mjs",
