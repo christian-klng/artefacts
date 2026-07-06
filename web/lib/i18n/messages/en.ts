@@ -220,6 +220,20 @@ const en: Messages = {
     prev: "← Back",
     next: "Next →",
     loading: "Loading …",
+    actions: "Actions",
+    edit: "Edit",
+    del: "Delete",
+    save: "Save",
+    saving: "Saving …",
+    cancel: "Cancel",
+    confirmDelete: "Delete?",
+    confirmYes: "Yes",
+    confirmNo: "No",
+    editRow: "Edit row",
+    pkBadge: "Key",
+    nullLabel: "NULL",
+    errSave: "Couldn’t save.",
+    errDelete: "Couldn’t delete.",
   },
   attachments: {
     empty:
@@ -234,6 +248,10 @@ const en: Messages = {
   },
   sandpack: {
     appPreview: "App preview",
+  },
+  fileTree: {
+    internal: "internal",
+    binary: "binary",
   },
   workspace: {
     dbUpdated: "Database updated: {tables}",

@@ -227,6 +227,20 @@ const de = {
     prev: "← Zurück",
     next: "Weiter →",
     loading: "Lade …",
+    actions: "Aktionen",
+    edit: "Bearbeiten",
+    del: "Löschen",
+    save: "Speichern",
+    saving: "Speichere …",
+    cancel: "Abbrechen",
+    confirmDelete: "Löschen?",
+    confirmYes: "Ja",
+    confirmNo: "Nein",
+    editRow: "Zeile bearbeiten",
+    pkBadge: "Schlüssel",
+    nullLabel: "NULL",
+    errSave: "Speichern fehlgeschlagen.",
+    errDelete: "Löschen fehlgeschlagen.",
   },
   attachments: {
     empty:
@@ -241,6 +255,10 @@ const de = {
   },
   sandpack: {
     appPreview: "App-Vorschau",
+  },
+  fileTree: {
+    internal: "intern",
+    binary: "binär",
   },
   workspace: {
     dbUpdated: "Datenbank aktualisiert: {tables}",

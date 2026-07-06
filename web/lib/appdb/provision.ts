@@ -9,6 +9,10 @@ import {
   schemaForProject,
   roleForProject,
   ident,
+  buildUpdate,
+  buildDelete,
+  type Built,
+  type Filter,
 } from "./sql";
 import { applyTenantDdl } from "./exec";
 import type { TableDump } from "./dump";
@@ -115,10 +119,18 @@ export async function readTablePage(
   table: string,
   limit = 50,
   offset = 0,
-): Promise<{ columns: string[]; rows: Record<string, unknown>[]; total: number }> {
+): Promise<{
+  columns: string[];
+  rows: Record<string, unknown>[];
+  total: number;
+  primaryKey: string[];
+}> {
   const { schema } = tenantNames(projectId);
   const tables = await listTenantTables(projectId);
   if (!tables.includes(table)) throw new Error(`Unknown table: ${table}`);
+  // The PK identifies a row for the owner's edit/delete actions; empty when the
+  // table has none (→ the viewer keeps that table read-only).
+  const primaryKey = await pkColumns(schema, table);
   const t = `${ident(schema)}.${ident(table)}`;
   const lim = Math.max(1, Math.min(200, Math.floor(limit)));
   const off = Math.max(0, Math.floor(offset));
@@ -137,6 +149,7 @@ export async function readTablePage(
       columns: res.fields.map((f: { name: string }) => f.name),
       rows: res.rows as Record<string, unknown>[],
       total,
+      primaryKey,
     };
   } catch (e) {
     await client.query("ROLLBACK").catch(() => {});
@@ -144,6 +157,119 @@ export async function readTablePage(
   } finally {
     client.release();
   }
+}
+
+// --- Owner row editing (Way 3 Phase 4) --------------------------------------
+// The app owner's read/write data management, distinct from the end-user runtime
+// path (exec.ts, project role + RLS). Everything here runs as the ADMIN
+// connection with row_security OFF and the search_path pinned — the same trust
+// level as readTablePage — so the owner can edit/delete ANY end-user's row from
+// the "Daten" tab. Table names are validated against the real inventory and all
+// identifiers/values still go through the injection-safe builders in sql.ts.
+
+/** Primary-key column names of a tenant table, in key order (empty if none). */
+async function pkColumns(schema: string, table: string): Promise<string[]> {
+  const rel = `${ident(schema)}.${ident(table)}`;
+  const res = await pool.query(
+    `SELECT a.attname AS col
+       FROM pg_index i
+       JOIN pg_attribute a
+         ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey::int2[])
+      WHERE i.indrelid = to_regclass($1) AND i.indisprimary
+      ORDER BY array_position(i.indkey::int2[], a.attnum)`,
+    [rel],
+  );
+  return res.rows.map((r: { col: string }) => r.col);
+}
+
+/** Public PK lookup: validates the table against the inventory first. */
+export async function tablePrimaryKey(
+  projectId: string,
+  table: string,
+): Promise<string[]> {
+  const { schema } = tenantNames(projectId);
+  const tables = await listTenantTables(projectId);
+  if (!tables.includes(table)) throw new Error(`Unknown table: ${table}`);
+  return pkColumns(schema, table);
+}
+
+/**
+ * WHERE filters that target exactly one row by its primary key. Requires the
+ * table to HAVE a primary key and the caller to supply every PK column — this is
+ * what guarantees an UPDATE/DELETE can never accidentally run without a WHERE
+ * (which would hit every row) or match more than one row.
+ */
+async function pkFilters(
+  projectId: string,
+  table: string,
+  pk: Record<string, unknown>,
+): Promise<Filter[]> {
+  const cols = await tablePrimaryKey(projectId, table);
+  if (cols.length === 0) {
+    throw new Error(
+      "Diese Tabelle hat keinen Primärschlüssel und kann nicht zeilenweise bearbeitet werden.",
+    );
+  }
+  return cols.map((column) => {
+    if (pk == null || !(column in pk)) {
+      throw new Error("Zeilen-Schlüssel unvollständig.");
+    }
+    return { column, op: "eq" as const, value: pk[column] };
+  });
+}
+
+/** Runs a built UPDATE/DELETE as admin (row_security off), search_path pinned. */
+async function runOwnerWrite(
+  projectId: string,
+  built: Built,
+): Promise<Record<string, unknown>[]> {
+  const { schema } = tenantNames(projectId);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SET LOCAL row_security = off");
+    await client.query(`SET LOCAL search_path TO ${ident(schema)}`);
+    const res = await client.query(built.text, built.values);
+    await client.query("COMMIT");
+    return res.rows as Record<string, unknown>[];
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Updates a single row (identified by its full primary key) as the app owner.
+ * Identity (PK) columns are never changed — they only target the row. Returns
+ * the updated row, or null if the PK matched nothing.
+ */
+export async function updateTableRow(
+  projectId: string,
+  table: string,
+  pk: Record<string, unknown>,
+  values: Record<string, unknown>,
+): Promise<Record<string, unknown> | null> {
+  const where = await pkFilters(projectId, table, pk);
+  const editable = { ...values };
+  for (const f of where) delete editable[f.column];
+  if (Object.keys(editable).length === 0) throw new Error("Keine Änderungen.");
+  const built = buildUpdate({ table, values: editable, where });
+  const rows = await runOwnerWrite(projectId, built);
+  return rows[0] ?? null;
+}
+
+/** Deletes a single row by its full primary key. Returns the number removed. */
+export async function deleteTableRow(
+  projectId: string,
+  table: string,
+  pk: Record<string, unknown>,
+): Promise<number> {
+  const where = await pkFilters(projectId, table, pk);
+  const built = buildDelete({ table, where });
+  const rows = await runOwnerWrite(projectId, built);
+  return rows.length;
 }
 
 /** Tables in the schema that carry an `owner_id` column (→ per-user RLS). */

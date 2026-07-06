@@ -19,7 +19,13 @@
 import { eq } from "drizzle-orm";
 import { db, pool } from "../lib/db/index.ts";
 import { users, projects, files } from "../lib/db/schema.ts";
-import { applyProjectSchema } from "../lib/appdb/provision.ts";
+import {
+  applyProjectSchema,
+  readTablePage,
+  tablePrimaryKey,
+  updateTableRow,
+  deleteTableRow,
+} from "../lib/appdb/provision.ts";
 import { publishProject } from "../lib/projects.ts";
 import { POST as appauthPOST, GET as appauthGET } from "../app/api/appauth/route.ts";
 import { POST as appdbPOST } from "../app/api/appdb/route.ts";
@@ -274,6 +280,44 @@ async function main() {
     req("/api/appdb", { host: HOST, cookie: cookie2, body: { table: "todos", op: "select" } }),
   );
   ok("U2's row survived U1's delete", sel2Survive.body.rows?.length === 1);
+
+  console.log("\n# Owner data management via the 'Daten' viewer (admin, row_security off)");
+  {
+    // The owner sees ALL end-users' rows (RLS off) — here U2's surviving row.
+    const before = await readTablePage(proj.id, "todos", 50, 0);
+    ok("owner viewer sees all rows across end-users", before.total === 1);
+    ok(
+      "viewer reports the primary key",
+      (await tablePrimaryKey(proj.id, "todos")).join() === "id",
+    );
+    const target = before.rows[0];
+    ok("target row is U2-owned", target.owner_id === u2Id);
+
+    // Owner edits a row it does NOT own (only possible with row_security off).
+    const updated = await updateTableRow(
+      proj.id,
+      "todos",
+      { id: target.id },
+      { title: "Edited by owner" },
+    );
+    ok("owner update changed the title", updated?.title === "Edited by owner");
+    ok("owner update preserved owner_id", updated?.owner_id === u2Id);
+
+    // A missing primary key is rejected — no accidental all-rows write.
+    let guarded = false;
+    try {
+      await updateTableRow(proj.id, "todos", {}, { title: "x" });
+    } catch {
+      guarded = true;
+    }
+    ok("update without the primary key is rejected", guarded);
+
+    // Owner deletes the row by its primary key.
+    const removed = await deleteTableRow(proj.id, "todos", { id: target.id });
+    ok("owner delete removed exactly one row", removed === 1);
+    const after = await readTablePage(proj.id, "todos", 50, 0);
+    ok("table is empty after owner delete", after.total === 0);
+  }
 
   console.log("\n# Serve route injects the window.artefacts SDK on the published app");
   {

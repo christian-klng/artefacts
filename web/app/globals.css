@@ -33,3 +33,35 @@ body {
   background: var(--background);
   color: var(--foreground);
 }
+
+/* Live-build activity in the code tree (see components/file-tree.tsx): a file
+   currently being written stays tinted yellow (bg-warning/…) with a pulsing dot;
+   when its write commits, a one-shot green wash flashes over the row. The green
+   is --color-success (#06d6a0). Motion is gated on prefers-reduced-motion — with
+   reduced motion the yellow tint alone conveys state and nothing animates. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes fileFlashDone {
+    from {
+      background-color: rgba(6, 214, 160, 0.55);
+    }
+    to {
+      background-color: rgba(6, 214, 160, 0);
+    }
+  }
+  .file-flash-done {
+    animation: fileFlashDone 1100ms ease-out forwards;
+  }
+
+  @keyframes fileEditingPulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.4;
+    }
+  }
+  .file-editing-dot {
+    animation: fileEditingPulse 1200ms ease-in-out infinite;
+  }
+}

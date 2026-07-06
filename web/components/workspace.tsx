@@ -164,6 +164,18 @@ export function Workspace({
   // Spendable EUR credit. Hydrated on mount and updated after every billed turn.
   const [balanceEur, setBalanceEur] = useState<number | null>(null);
   const [view, setView] = useState<ViewMode>("preview");
+  // Live-build highlights for the code tree. `activePath` = the file the agent is
+  // currently writing (yellow); `doneTicks` bumps per path on each committed write
+  // to replay the green "done" flash (see file-tree.tsx).
+  const [activePath, setActivePath] = useState<string | null>(null);
+  const [doneTicks, setDoneTicks] = useState<Record<string, number>>({});
+  // Auto-view-switch bookkeeping (maybeAutoSwitchToCode / …ReturnToPreview below).
+  // `viewRef`/`hasIndexRef` mirror state so the SSE handler reads fresh values
+  // without adding churny deps; the two flags are reset at the start of each turn.
+  const manualViewRef = useRef(false); // user picked a view during this turn
+  const didAutoSwitchRef = useRef(false); // we switched preview→code this turn
+  const viewRef = useRef<ViewMode>(view);
+  const hasIndexRef = useRef(!!initialFiles["/index.html"]);
   // Whether the Daten tab is shown; flips true when the agent provisions a DB.
   const [hasDatabase, setHasDatabase] = useState(initialDatabaseEnabled);
   // Bumped on each schema change so an open data viewer refetches.
@@ -195,6 +207,15 @@ export function Workspace({
   const effectiveView =
     view === "files" && attachments.length === 0 ? "preview" : view;
 
+  // Mirror view + index.html presence into refs so the SSE handler's auto-switch
+  // logic reads the current value without re-creating the handler on every change.
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
+  useEffect(() => {
+    hasIndexRef.current = !!files["/index.html"];
+  }, [files]);
+
   const appendMessage = useCallback(
     (
       role: ChatMessage["role"],
@@ -220,6 +241,37 @@ export function Workspace({
       // Non-fatal: the list just won't refresh.
     }
   }, [projectId]);
+
+  // Switch to the code view the first time a turn touches a file, so the user
+  // watches files light up as they're written. Only from "preview" (don't yank
+  // the user off Daten/Dateien) and never if they've manually picked a view.
+  const maybeAutoSwitchToCode = useCallback(() => {
+    if (manualViewRef.current || didAutoSwitchRef.current) return;
+    if (viewRef.current === "preview") {
+      didAutoSwitchRef.current = true;
+      setView("code");
+    }
+  }, []);
+
+  // When the turn ends, return to the preview so the finished app is shown — but
+  // only if WE auto-switched to code and the user hasn't overridden the view since.
+  const maybeAutoReturnToPreview = useCallback(() => {
+    if (!didAutoSwitchRef.current || manualViewRef.current) return;
+    if (hasIndexRef.current && viewRef.current === "code") setView("preview");
+  }, []);
+
+  // A file write committed: replay its green flash and clear its editing state.
+  const markFileDone = useCallback((path: string) => {
+    setDoneTicks((prev) => ({ ...prev, [path]: (prev[path] ?? 0) + 1 }));
+    setActivePath((cur) => (cur === path ? null : cur));
+  }, []);
+
+  // Marks the user as having chosen the view, which stops auto-switching for the
+  // rest of the turn. Passed to the toolbar in place of the raw setView.
+  const handleUserViewChange = useCallback((next: ViewMode) => {
+    manualViewRef.current = true;
+    setView(next);
+  }, []);
 
   const handleEvent = useCallback(
     (event: AgentEvent) => {
@@ -258,6 +310,15 @@ export function Workspace({
             }
             return prev;
           });
+          // Earliest reliable signal of which file is being written (big writes
+          // stream for minutes) — light it up yellow and jump to the code view.
+          if (
+            event.path &&
+            (event.tool === "write_file" || event.tool === "edit_file")
+          ) {
+            setActivePath(event.path);
+            maybeAutoSwitchToCode();
+          }
           break;
         }
         case "tool_use": {
@@ -282,9 +343,13 @@ export function Workspace({
         }
         case "file_changed":
           setFiles((prev) => ({ ...prev, [event.path]: event.content }));
+          markFileDone(event.path);
+          maybeAutoSwitchToCode();
           break;
         case "asset_changed":
           setAssets((prev) => ({ ...prev, [event.path]: event.asset }));
+          markFileDone(event.path);
+          maybeAutoSwitchToCode();
           break;
         case "file_deleted":
           setFiles((prev) => {
@@ -297,6 +362,13 @@ export function Workspace({
             delete next[event.path];
             return next;
           });
+          setActivePath((cur) => (cur === event.path ? null : cur));
+          setDoneTicks((prev) => {
+            const next = { ...prev };
+            delete next[event.path];
+            return next;
+          });
+          maybeAutoSwitchToCode();
           break;
         case "files":
           setFiles(event.files);
@@ -356,6 +428,9 @@ export function Workspace({
             prev.map((m) => (m.pending ? { ...m, pending: false } : m)),
           );
           appendMessage("assistant", event.message, { kind: "error" });
+          // Stop any lingering yellow highlight; leave the user in the code view
+          // so they can see how far the build got.
+          setActivePath(null);
           break;
         case "done":
           // A block that streamed but never committed (aborted run) must not
@@ -363,10 +438,19 @@ export function Workspace({
           setMessages((prev) =>
             prev.map((m) => (m.pending ? { ...m, pending: false } : m)),
           );
+          setActivePath(null);
+          maybeAutoReturnToPreview();
           break;
       }
     },
-    [appendMessage, refreshAttachments, m],
+    [
+      appendMessage,
+      refreshAttachments,
+      m,
+      maybeAutoSwitchToCode,
+      maybeAutoReturnToPreview,
+      markFileDone,
+    ],
   );
 
   // Hydrate the credit balance on mount (also lazily grants the free tier).
@@ -509,6 +593,9 @@ export function Workspace({
         setFiles(data.files);
         setAssets(data.assets);
         setInternal(data.internal);
+        // The restored file set is a clean slate — drop any live-build highlights.
+        setActivePath(null);
+        setDoneTicks({});
         // A full-backup restore can also change the database + attachments, so
         // refresh the Daten/Dateien tabs to reflect the restored state.
         setHasDatabase(data.databaseEnabled);
@@ -572,6 +659,10 @@ export function Workspace({
   const streamAgentRequest = useCallback(
     async (payload: Record<string, unknown>) => {
       setStreaming(true);
+      // Fresh turn: re-arm the auto-view-switch and drop any stale highlight.
+      manualViewRef.current = false;
+      didAutoSwitchRef.current = false;
+      setActivePath(null);
 
       try {
         const res = await fetch("/api/agent", {
@@ -696,7 +787,7 @@ export function Workspace({
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
         <WorkspaceToolbar
           view={effectiveView}
-          onViewChange={setView}
+          onViewChange={handleUserViewChange}
           hasDatabase={hasDatabase}
           hasFiles={attachments.length > 0}
           canDownload={!!files["/index.html"]}
@@ -732,6 +823,8 @@ export function Workspace({
               projectId={projectId}
               previewUrl={previewUrl}
               showBadge={showBadge}
+              activePath={activePath}
+              doneTicks={doneTicks}
             />
           )}
         </div>

@@ -4,10 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import {
   SandpackProvider,
   SandpackLayout,
-  SandpackFileExplorer,
   SandpackCodeEditor,
 } from "@codesandbox/sandpack-react";
 import type { ViewMode } from "./workspace-toolbar";
+import { FileTree } from "./file-tree";
 import { injectBadge } from "@/lib/badge";
 import { useMessages } from "@/lib/i18n/provider";
 
@@ -38,6 +38,8 @@ export function SandpackWorkspace({
   projectId,
   previewUrl,
   showBadge = true,
+  activePath = null,
+  doneTicks = {},
 }: {
   files: Record<string, string>;
   assets: Record<string, AssetMeta>;
@@ -47,6 +49,10 @@ export function SandpackWorkspace({
   internal?: Record<string, string>;
   view: ViewMode;
   projectId: string;
+  // Live-build highlights for the code tree: the file currently being written
+  // (yellow) and a per-path completion counter (green flash). See file-tree.tsx.
+  activePath?: string | null;
+  doneTicks?: Record<string, number>;
   // When set, the preview is served from the project's own origin instead of
   // an inline srcDoc (enables real DB/auth). Undefined → srcDoc fallback.
   previewUrl?: string;
@@ -143,12 +149,20 @@ export function SandpackWorkspace({
       <SandpackLayout
         style={{ height: "100%", border: "none", borderRadius: 0 }}
       >
-        <SandpackFileExplorer style={{ height: "100%" }} />
+        <div className="h-full w-56 shrink-0 overflow-hidden border-r border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+          <FileTree
+            files={files}
+            assets={assets}
+            internal={internal}
+            activePath={activePath}
+            doneTicks={doneTicks}
+          />
+        </div>
         <SandpackCodeEditor
           readOnly
           showTabs
           showLineNumbers
-          style={{ height: "100%" }}
+          style={{ height: "100%", flex: 1 }}
         />
       </SandpackLayout>
     </SandpackProvider>
