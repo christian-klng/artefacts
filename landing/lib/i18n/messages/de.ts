@@ -5,7 +5,7 @@ const de = {
   meta: {
     tagline: "Aus einem Satz wird deine Web-App.",
     description:
-      "Beschreibe eine Web-App in einem Satz — ein KI-Agent baut sie live in deinem Browser, Datei für Datei, und du veröffentlichst sie mit einem Klick. Self-hosted.",
+      "Beschreibe eine Web-App in einem Satz — ein KI-Agent baut sie live in deinem Browser und veröffentlicht sie per Klick. Datenschutzkonform, Hosting in Deutschland.",
     ogLocale: "de_DE",
   },
   nav: {
@@ -31,8 +31,64 @@ const de = {
       "Ein persönliches Portfolio mit Projekt-Galerie",
     ],
   },
+  features: {
+    // Order matters — the grid pairs each item with an icon by position.
+    items: [
+      {
+        title: "Viel Raum für deine Kreativität",
+        description: "Erhalte Design-Konzepte für deine neue App.",
+      },
+      {
+        title: "Datenschutz-konform",
+        description: "Das Hosting findet komplett in Deutschland statt.",
+      },
+      {
+        title: "Profi-Werkzeuge",
+        description: "Icons, Bilder und Schriftarten direkt in deiner App.",
+      },
+      {
+        title: "Stelle es direkt online",
+        description: "Mit nur einem Klick ist deine App öffentlich.",
+      },
+      {
+        title: "Du hast schon einen Server?",
+        description: "Dann exportiere deine App-Dateien und veröffentliche selbst.",
+      },
+      {
+        title: "Faires Preismodell",
+        description:
+          "Bezahle per Guthaben-Aufladung nur für die erstellten Leistungen.",
+      },
+    ],
+  },
+  faq: {
+    heading: "Häufige Fragen",
+    items: [
+      {
+        question: "Werden meine Daten zum Training der KI verwendet?",
+        answer:
+          "Nein. Deine Inhalte und Projektdaten werden nicht zum Training von KI-Modellen verwendet. Das gesamte Hosting läuft in Deutschland, und deine Daten gehören dir.",
+      },
+      {
+        question: "Welche Vorkenntnisse brauche ich?",
+        answer:
+          "Keine. Du beschreibst deine App in normaler Sprache — die KI übernimmt Design und Code. Programmierkenntnisse sind nicht nötig.",
+      },
+      {
+        question: "Kann ich kostenlos testen?",
+        answer:
+          "Ja. Neue Konten erhalten ein kostenloses Start-Guthaben, mit dem du den Builder ausprobieren kannst. Erst wenn es aufgebraucht ist, lädst du Guthaben nach Bedarf auf.",
+      },
+      {
+        question: "Gibt es einen Support?",
+        answer:
+          "Ja. Bei Fragen erreichst du uns direkt per E-Mail unter christian@kubikraum.digital — wir helfen dir persönlich weiter.",
+      },
+    ],
+  },
   footer: {
     text: "Kubikraum · self-hosted App-Builder",
+    contact: "Kontakt",
   },
   themeToggle: {
     label: "Theme umschalten",

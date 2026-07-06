@@ -6,7 +6,7 @@ const en: Messages = {
   meta: {
     tagline: "Turn a sentence into your web app.",
     description:
-      "Describe a web app in one sentence — an AI agent builds it live in your browser, file by file, and you publish it with one click. Self-hosted.",
+      "Describe a web app in one sentence — an AI agent builds it live in your browser and publishes it with one click. Privacy-compliant, hosted in Germany.",
     ogLocale: "en_US",
   },
   nav: {
@@ -32,8 +32,62 @@ const en: Messages = {
       "A personal portfolio with a project gallery",
     ],
   },
+  features: {
+    items: [
+      {
+        title: "Room for your creativity",
+        description: "Get design concepts for your new app.",
+      },
+      {
+        title: "GDPR-compliant",
+        description: "Hosting takes place entirely in Germany.",
+      },
+      {
+        title: "Pro tools",
+        description: "Icons, images, and fonts right inside your app.",
+      },
+      {
+        title: "Publish in one click",
+        description: "Your app goes public with a single click.",
+      },
+      {
+        title: "Already have a server?",
+        description: "Then export your app files and host it yourself.",
+      },
+      {
+        title: "Fair pricing",
+        description: "Top up credit and pay only for what you build.",
+      },
+    ],
+  },
+  faq: {
+    heading: "Frequently asked questions",
+    items: [
+      {
+        question: "Is my data used to train the AI?",
+        answer:
+          "No. Your content and project data are not used to train AI models. All hosting runs in Germany, and your data stays yours.",
+      },
+      {
+        question: "What prior knowledge do I need?",
+        answer:
+          "None. You describe your app in plain language — the AI handles the design and the code. No coding required.",
+      },
+      {
+        question: "Can I try it for free?",
+        answer:
+          "Yes. New accounts get free starter credit to try out the builder. You only top up once it's used up.",
+      },
+      {
+        question: "Is there support?",
+        answer:
+          "Yes. Reach us directly by email at christian@kubikraum.digital — we'll help you personally.",
+      },
+    ],
+  },
   footer: {
     text: "Kubikraum · self-hosted app builder",
+    contact: "Contact",
   },
   themeToggle: {
     label: "Toggle theme",

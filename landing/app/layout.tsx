@@ -5,6 +5,7 @@ import { SITE_NAME, SITE_URL } from "@/lib/site";
 import { resolveLocale } from "@/lib/locale";
 import { getMessages } from "@/lib/i18n/messages";
 import { MessagesProvider } from "@/lib/i18n/provider";
+import type { Messages } from "@/lib/i18n/messages/de";
 import type { Locale } from "@/lib/i18n";
 
 const geistSans = Geist({
@@ -79,9 +80,12 @@ export const viewport: Viewport = {
   ],
 };
 
+const SUPPORT_EMAIL = "christian@kubikraum.digital";
+
 // Structured data (GEO/SEO): lets search and AI answer engines understand the
-// product, the brand, and the site as connected entities.
-function buildJsonLd(locale: Locale, description: string) {
+// product, the brand, and the site as connected entities. Built from the active
+// locale's messages so the FAQ/feature copy stays the single source of truth.
+function buildJsonLd(locale: Locale, m: Messages) {
   return {
     "@context": "https://schema.org",
     "@graph": [
@@ -91,6 +95,15 @@ function buildJsonLd(locale: Locale, description: string) {
         name: SITE_NAME,
         url: SITE_URL,
         logo: `${SITE_URL}/icon.svg`,
+        email: SUPPORT_EMAIL,
+        // Leans into the German data-protection / hosting USP as a trust signal.
+        areaServed: "DE",
+        contactPoint: {
+          "@type": "ContactPoint",
+          contactType: "customer support",
+          email: SUPPORT_EMAIL,
+          availableLanguage: ["de", "en"],
+        },
       },
       {
         "@type": "WebSite",
@@ -106,8 +119,29 @@ function buildJsonLd(locale: Locale, description: string) {
         applicationCategory: "DeveloperApplication",
         operatingSystem: "Web",
         url: SITE_URL,
-        description,
+        description: m.meta.description,
+        inLanguage: locale,
+        featureList: m.features.items.map((f) => f.title),
+        offers: {
+          "@type": "Offer",
+          price: "0",
+          priceCurrency: "EUR",
+          description:
+            locale === "de"
+              ? "Kostenloses Start-Guthaben, danach Aufladung nach Verbrauch."
+              : "Free starter credit, then pay-as-you-go top-ups.",
+        },
         publisher: { "@id": `${SITE_URL}/#organization` },
+      },
+      {
+        "@type": "FAQPage",
+        "@id": `${SITE_URL}/#faq`,
+        inLanguage: locale,
+        mainEntity: m.faq.items.map((item) => ({
+          "@type": "Question",
+          name: item.question,
+          acceptedAnswer: { "@type": "Answer", text: item.answer },
+        })),
       },
     ],
   };
@@ -120,7 +154,7 @@ export default async function RootLayout({
 }>) {
   const locale = await resolveLocale();
   const messages = getMessages(locale);
-  const jsonLd = buildJsonLd(locale, messages.meta.description);
+  const jsonLd = buildJsonLd(locale, messages);
 
   return (
     <html
