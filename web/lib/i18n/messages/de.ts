@@ -141,6 +141,9 @@ const de = {
     code: "Code",
     files: "Dateien",
     data: "Daten",
+    deviceDesktop: "Desktop",
+    deviceTablet: "Tablet",
+    deviceMobile: "Handy",
     download: "Download",
     downloadHint:
       "Ziel-URL der Veröffentlichung — wird in SEO-Angaben (Canonical, Open Graph, Sitemap) eingesetzt. Leer lassen für relative Pfade.",

@@ -12,6 +12,7 @@ import type { AssetMeta } from "./sandpack-workspace";
 import { canonicalSignatureMap, filesSignature } from "@/lib/files-signature";
 import {
   WorkspaceToolbar,
+  type DeviceMode,
   type Version,
   type ViewMode,
 } from "./workspace-toolbar";
@@ -164,6 +165,9 @@ export function Workspace({
   // Spendable EUR credit. Hydrated on mount and updated after every billed turn.
   const [balanceEur, setBalanceEur] = useState<number | null>(null);
   const [view, setView] = useState<ViewMode>("preview");
+  // Preview viewport size (desktop/tablet/mobile) for the responsiveness switcher
+  // in the toolbar. Only affects the preview iframe's dimensions.
+  const [device, setDevice] = useState<DeviceMode>("desktop");
   // Live-build highlights for the code tree. `activePath` = the file the agent is
   // currently writing (yellow); `doneTicks` bumps per path on each committed write
   // to replay the green "done" flash (see file-tree.tsx).
@@ -824,6 +828,8 @@ export function Workspace({
         <WorkspaceToolbar
           view={effectiveView}
           onViewChange={handleUserViewChange}
+          device={device}
+          onDeviceChange={setDevice}
           hasDatabase={hasDatabase}
           hasFiles={attachments.length > 0}
           canDownload={!!files["/index.html"]}
@@ -856,6 +862,7 @@ export function Workspace({
               assets={assets}
               internal={internal}
               view={effectiveView}
+              device={device}
               projectId={projectId}
               previewUrl={preview}
               showBadge={showBadge}

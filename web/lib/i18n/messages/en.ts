@@ -135,6 +135,9 @@ const en: Messages = {
     code: "Code",
     files: "Files",
     data: "Data",
+    deviceDesktop: "Desktop",
+    deviceTablet: "Tablet",
+    deviceMobile: "Mobile",
     download: "Download",
     downloadHint:
       "Target URL of the publication — used in SEO fields (canonical, Open Graph, sitemap). Leave blank for relative paths.",

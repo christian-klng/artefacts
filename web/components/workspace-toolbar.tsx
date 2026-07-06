@@ -1,7 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, CloudOff, Copy, Pencil, RefreshCw } from "lucide-react";
+import {
+  Check,
+  CloudOff,
+  Copy,
+  Monitor,
+  Pencil,
+  RefreshCw,
+  Smartphone,
+  Tablet,
+} from "lucide-react";
 import { useMessages } from "@/lib/i18n/provider";
 
 export type Version = {
@@ -14,9 +23,15 @@ export type Version = {
 
 export type ViewMode = "preview" | "code" | "files" | "data";
 
+// Preview viewport size, for testing an app's responsiveness (see DeviceStage in
+// sandpack-workspace.tsx). "desktop" = full bleed; tablet/mobile constrain width.
+export type DeviceMode = "desktop" | "tablet" | "mobile";
+
 export function WorkspaceToolbar({
   view,
   onViewChange,
+  device,
+  onDeviceChange,
   hasDatabase,
   hasFiles,
   canDownload,
@@ -36,6 +51,8 @@ export function WorkspaceToolbar({
 }: {
   view: ViewMode;
   onViewChange: (view: ViewMode) => void;
+  device: DeviceMode;
+  onDeviceChange: (device: DeviceMode) => void;
   hasDatabase: boolean;
   hasFiles: boolean;
   canDownload: boolean;
@@ -64,13 +81,22 @@ export function WorkspaceToolbar({
   };
 
   return (
-    <div className="flex items-center justify-between gap-2 border-b border-neutral-200 px-3 py-2 dark:border-neutral-800">
+    <div className="relative flex items-center justify-between gap-2 border-b border-neutral-200 px-3 py-2 dark:border-neutral-800">
       <ViewSwitch
         view={view}
         onViewChange={onViewChange}
         hasDatabase={hasDatabase}
         hasFiles={hasFiles}
       />
+
+      {/* Device switcher — absolutely centered so it stays mid-toolbar
+          regardless of the side controls' widths. Only meaningful with a live
+          preview, so gate on the preview tab + an existing /index.html. */}
+      {view === "preview" && canDownload && (
+        <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+          <DeviceSwitch device={device} onDeviceChange={onDeviceChange} />
+        </div>
+      )}
 
       <div className="flex items-center gap-2">
         {/* Preview tab: publishing. Code tab: version history + download. */}
@@ -509,6 +535,49 @@ function SlugEditor({
         </button>
       </div>
     </>
+  );
+}
+
+// Desktop / Tablet / Mobile toggle for the preview viewport. Purely a preview
+// affordance — it resizes the iframe (DeviceStage) so the user can eyeball the
+// app's responsiveness without leaving the builder.
+function DeviceSwitch({
+  device,
+  onDeviceChange,
+}: {
+  device: DeviceMode;
+  onDeviceChange: (device: DeviceMode) => void;
+}) {
+  const m = useMessages();
+  const options: Array<{
+    key: DeviceMode;
+    Icon: typeof Monitor;
+    label: string;
+  }> = [
+    { key: "desktop", Icon: Monitor, label: m.toolbar.deviceDesktop },
+    { key: "tablet", Icon: Tablet, label: m.toolbar.deviceTablet },
+    { key: "mobile", Icon: Smartphone, label: m.toolbar.deviceMobile },
+  ];
+  return (
+    <div className="pointer-events-auto inline-flex rounded-md bg-neutral-100 p-0.5 dark:bg-neutral-800">
+      {options.map(({ key, Icon, label }) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onDeviceChange(key)}
+          className={`rounded p-1.5 transition ${
+            device === key
+              ? "bg-white text-neutral-900 shadow-sm dark:bg-neutral-700 dark:text-white"
+              : "text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
+          }`}
+          aria-pressed={device === key}
+          aria-label={label}
+          title={label}
+        >
+          <Icon className="h-4 w-4" aria-hidden />
+        </button>
+      ))}
+    </div>
   );
 }
 

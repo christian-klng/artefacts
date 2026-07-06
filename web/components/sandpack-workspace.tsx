@@ -6,12 +6,24 @@ import {
   SandpackLayout,
   SandpackCodeEditor,
 } from "@codesandbox/sandpack-react";
-import type { ViewMode } from "./workspace-toolbar";
+import type { DeviceMode, ViewMode } from "./workspace-toolbar";
 import { FileTree } from "./file-tree";
 import { injectBadge } from "@/lib/badge";
 import { useMessages } from "@/lib/i18n/provider";
 
 export type AssetMeta = { mimeType: string | null; size: number; hash: string };
+
+// CSS pixel dimensions per preview device. `desktop` is full-bleed (no frame);
+// tablet/mobile constrain the iframe to a realistic viewport so the app's own
+// responsive CSS kicks in. Width is what drives media queries — height only caps
+// the framed device so it never overflows the stage.
+const DEVICE_SIZES: Record<
+  Exclude<DeviceMode, "desktop">,
+  { width: number; height: number }
+> = {
+  tablet: { width: 768, height: 1024 },
+  mobile: { width: 390, height: 844 },
+};
 
 // Renders the project's virtual filesystem either as a live preview (sandboxed
 // iframe) or as a code view (Sandpack file tree + read-only editor). We never use
@@ -35,6 +47,7 @@ export function SandpackWorkspace({
   assets,
   internal = {},
   view,
+  device = "desktop",
   projectId,
   previewUrl,
   showBadge = true,
@@ -48,6 +61,9 @@ export function SandpackWorkspace({
   // the user can read them without them counting toward the shipped app.
   internal?: Record<string, string>;
   view: ViewMode;
+  // Preview viewport size (device switcher in the toolbar). Only affects the
+  // preview branch below; ignored by the code view.
+  device?: DeviceMode;
   projectId: string;
   // Live-build highlights for the code tree: the file currently being written
   // (yellow) and a per-path completion counter (green flash). See file-tree.tsx.
@@ -105,28 +121,32 @@ export function SandpackWorkspace({
       border: "none",
       background: "white",
     } as const;
-    if (previewUrl) {
-      const sep = previewUrl.includes("?") ? "&" : "?";
-      return (
-        <iframe
-          title={m.sandpack.appPreview}
-          src={`${previewUrl}${sep}v=${hashContent(indexHtml)}`}
-          // The app runs on its own origin (a different origin than the builder),
-          // so allow-same-origin is safe here — it cannot reach the builder —
-          // and is needed for the app's own cookies/storage/auth later.
-          sandbox="allow-scripts allow-forms allow-modals allow-popups allow-pointer-lock allow-same-origin"
-          style={iframeStyle}
-        />
-      );
-    }
+    // A single DeviceStage wraps BOTH preview paths. `device` only toggles the
+    // stage's classes/size — the iframe element and its src stay identical, so
+    // switching device resizes the app in place without reloading it (no lost
+    // scroll/auth/state); the `previewUrl` branch is stable across device changes.
     return (
-      <SrcDocPreview
-        indexHtml={indexHtml}
-        multiFile={multiFile}
-        projectId={projectId}
-        showBadge={showBadge}
-        style={iframeStyle}
-      />
+      <DeviceStage device={device}>
+        {previewUrl ? (
+          <iframe
+            title={m.sandpack.appPreview}
+            src={`${previewUrl}${previewUrl.includes("?") ? "&" : "?"}v=${hashContent(indexHtml)}`}
+            // The app runs on its own origin (a different origin than the builder),
+            // so allow-same-origin is safe here — it cannot reach the builder —
+            // and is needed for the app's own cookies/storage/auth later.
+            sandbox="allow-scripts allow-forms allow-modals allow-popups allow-pointer-lock allow-same-origin"
+            style={iframeStyle}
+          />
+        ) : (
+          <SrcDocPreview
+            indexHtml={indexHtml}
+            multiFile={multiFile}
+            projectId={projectId}
+            showBadge={showBadge}
+            style={iframeStyle}
+          />
+        )}
+      </DeviceStage>
     );
   }
 
@@ -235,6 +255,49 @@ function SrcDocPreview({
       sandbox="allow-scripts allow-forms allow-modals allow-popups allow-pointer-lock"
       style={style}
     />
+  );
+}
+
+// Centers + frames the preview iframe at a chosen device size. Structure is
+// CONSTANT across devices (stage > frame > children) — only classes/inline size
+// change — so the iframe never remounts (and the app never reloads) on a switch.
+function DeviceStage({
+  device,
+  children,
+}: {
+  device: DeviceMode;
+  children: React.ReactNode;
+}) {
+  const framed = device !== "desktop";
+  const size = framed ? DEVICE_SIZES[device] : null;
+  return (
+    <div
+      className={
+        framed
+          ? "flex h-full w-full items-center justify-center overflow-auto bg-neutral-100 p-4 dark:bg-neutral-950"
+          : "h-full w-full"
+      }
+    >
+      <div
+        className={
+          framed
+            ? "overflow-hidden rounded-2xl border border-neutral-300 bg-white shadow-xl dark:border-neutral-700"
+            : "h-full w-full"
+        }
+        style={
+          size
+            ? {
+                width: size.width,
+                height: size.height,
+                maxWidth: "100%",
+                maxHeight: "100%",
+              }
+            : undefined
+        }
+      >
+        {children}
+      </div>
+    </div>
   );
 }
 
