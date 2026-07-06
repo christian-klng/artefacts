@@ -27,6 +27,13 @@ async function requireUserId() {
 export async function createProjectAction() {
   const userId = await requireUserId();
   const project = await createProject(userId);
+  // The new project must appear in the shared `/app` layout (ProjectSwitcher).
+  // The redirect below is a soft client navigation that reuses the cached
+  // layout, so without invalidating it the switcher never lists the new
+  // project — its `active` lookup fails and the rename/delete controls (and the
+  // header name) don't render until a hard refresh. Same reason as the rename
+  // action revalidates below.
+  revalidatePath("/app", "layout");
   redirect(`/app/${project.id}`);
 }
 
@@ -123,6 +130,10 @@ export async function deleteProjectAction(formData: FormData) {
   if (projectId) {
     await deleteProject(projectId, userId);
   }
+  // The deleted project must disappear from the shared `/app` layout
+  // (ProjectSwitcher); the redirect is a soft navigation that would otherwise
+  // reuse the cached layout and keep listing it. Invalidate as create/rename do.
+  revalidatePath("/app", "layout");
   // Go to the most recent remaining project, or /app (which creates a default).
   const remaining = await listProjects(userId);
   redirect(

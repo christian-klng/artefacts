@@ -180,6 +180,12 @@ export function Workspace({
   const [hasDatabase, setHasDatabase] = useState(initialDatabaseEnabled);
   // Bumped on each schema change so an open data viewer refetches.
   const [dbRefreshKey, setDbRefreshKey] = useState(0);
+  // Preview origin + signed token for the subdomain iframe. Seeded from the
+  // server render but refreshed client-side (below): the server-baked token has
+  // a 1h TTL yet the page render is cacheable (prefetch + soft navigations keep
+  // it in the client Router Cache), so a long-lived tab could otherwise end up
+  // with an expired token and the preview 403s ("Forbidden") until a hard reload.
+  const [preview, setPreview] = useState<string | undefined>(previewUrl);
   const [publishUrl, setPublishUrl] = useState<string | undefined>(
     initialPublishUrl,
   );
@@ -452,6 +458,36 @@ export function Workspace({
       markFileDone,
     ],
   );
+
+  // Keep the preview token fresh. The initial token comes from the (cacheable)
+  // server render, so it may already be near/after its 1h TTL when a soft
+  // navigation restores a stale page from the Router Cache — re-mint on mount
+  // and periodically so the iframe always carries a valid token. Skipped without
+  // an apps sub-zone (previewUrl undefined → srcDoc fallback, no token).
+  useEffect(() => {
+    if (!previewUrl) return;
+    let cancelled = false;
+    const refresh = () => {
+      fetch(
+        `/api/projects/preview-token?projectId=${encodeURIComponent(projectId)}`,
+      )
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data: { url?: string | null } | null) => {
+          if (!cancelled && data && typeof data.url === "string") {
+            setPreview(data.url);
+          }
+        })
+        .catch(() => {
+          // Non-fatal: keep the current token; the next tick retries.
+        });
+    };
+    refresh();
+    const id = setInterval(refresh, 30 * 60 * 1000); // well under the 1h TTL
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [projectId, previewUrl]);
 
   // Hydrate the credit balance on mount (also lazily grants the free tier).
   useEffect(() => {
@@ -821,7 +857,7 @@ export function Workspace({
               internal={internal}
               view={effectiveView}
               projectId={projectId}
-              previewUrl={previewUrl}
+              previewUrl={preview}
               showBadge={showBadge}
               activePath={activePath}
               doneTicks={doneTicks}
