@@ -1,7 +1,8 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
+import { createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
+import { timedTool as tool } from "./timed-tool";
 import {
   listAttachments,
   getAttachmentText,

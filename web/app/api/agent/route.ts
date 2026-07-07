@@ -168,6 +168,10 @@ export async function POST(request: Request) {
         sniff: string;
         lastSentChars: number;
         lastSentAt: number;
+        // When the model STARTED emitting this tool call — used to log the
+        // "input" window (how long the model spent generating the arguments),
+        // the dominant cost behind a slow-looking tool row.
+        startedAt: number;
       } | null = null;
       try {
         // First user prompt: ask the concept interview instead of building.
@@ -231,12 +235,14 @@ export async function POST(request: Request) {
             } else if (ev.type === "content_block_start") {
               if (ev.content_block.type === "tool_use") {
                 const tool = ev.content_block.name.replace(/^mcp__[a-z]+__/, "");
+                const startedAt = Date.now();
                 liveTool = {
                   name: tool,
                   chars: 0,
                   sniff: "",
                   lastSentChars: 0,
-                  lastSentAt: Date.now(),
+                  lastSentAt: startedAt,
+                  startedAt,
                 };
                 send({ type: "tool_start", tool });
               }
@@ -278,6 +284,19 @@ export async function POST(request: Request) {
                 }
               }
             } else if (ev.type === "content_block_stop") {
+              if (liveTool) {
+                // Time the model spent generating this tool's arguments — the
+                // "input" window. Pairs with the tool's own "exec" line (see
+                // timed-tool.ts): input ≫ exec means the model, not the tool,
+                // is the bottleneck (typically true for get_icons/write_file).
+                console.log(
+                  `[agent] tool ${liveTool.name} input ${
+                    Date.now() - liveTool.startedAt
+                  }ms, ${liveTool.chars} chars${
+                    liveTool.path ? ` (${liveTool.path})` : ""
+                  }`,
+                );
+              }
               liveTool = null;
             }
           } else if (msg.type === "assistant") {
