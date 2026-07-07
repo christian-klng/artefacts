@@ -67,7 +67,7 @@ const de = {
       {
         question: "Werden meine Daten zum Training der KI verwendet?",
         answer:
-          "Nein. Deine Inhalte und Projektdaten werden nicht zum Training von KI-Modellen verwendet. Das gesamte Hosting läuft in Deutschland, und deine Daten gehören dir.",
+          "Nein. Deine Inhalte und Projektdaten werden nicht zum Training von KI-Modellen verwendet. App- und Datenbank-Hosting laufen in Deutschland, die KI-Verarbeitung ausschließlich innerhalb der EU – und deine Daten gehören dir.",
       },
       {
         question: "Welche Vorkenntnisse brauche ich?",
@@ -88,6 +88,8 @@ const de = {
   },
   footer: {
     text: "Kubikraum · self-hosted App-Builder",
+    badgeEu: "DSGVO-konform und in der EU gehostet",
+    badgeDe: "Entwickelt in Deutschland",
     terms: "AGB",
     privacy: "Datenschutz",
     imprint: "Impressum",

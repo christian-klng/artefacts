@@ -66,7 +66,7 @@ const en: Messages = {
       {
         question: "Is my data used to train the AI?",
         answer:
-          "No. Your content and project data are not used to train AI models. All hosting runs in Germany, and your data stays yours.",
+          "No. Your content and project data are not used to train AI models. App and database hosting run in Germany, AI processing exclusively within the EU – and your data stays yours.",
       },
       {
         question: "What prior knowledge do I need?",
@@ -87,6 +87,8 @@ const en: Messages = {
   },
   footer: {
     text: "Kubikraum · self-hosted app builder",
+    badgeEu: "GDPR-compliant and hosted in the EU",
+    badgeDe: "Developed in Germany",
     terms: "Terms",
     privacy: "Privacy",
     imprint: "Imprint",

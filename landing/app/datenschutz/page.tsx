@@ -143,24 +143,13 @@ export default function DatenschutzPage() {
             </h2>
             <p>
               Zur Generierung deiner Apps werden deine Eingaben (Prompts) und der
-              zugehörige Projektkontext an unseren KI-Dienstleister übermittelt
-              und dort verarbeitet: cortecs.ai (
-              <Placeholder>
-                [Anbieter/Firmierung, Anschrift, Serverstandort]
-              </Placeholder>
-              ) als Auftragsverarbeiter nach Art. 28 DSGVO. Rechtsgrundlage:
-              Art. 6 Abs. 1 lit. b DSGVO.{" "}
-              <Placeholder>
-                [AVV-Status, Serverstandort, Sub-Auftragsverarbeiter und ob eine
-                Drittlandübermittlung nach Art. 44 ff. DSGVO stattfindet, bitte
-                ergänzen]
-              </Placeholder>
-              . Nach unserem Kenntnisstand werden deine Inhalte nicht zum Training
-              von KI-Modellen verwendet –{" "}
-              <Placeholder>
-                [bitte anhand des Vertrags/DPA des Anbieters bestätigen]
-              </Placeholder>
-              .
+              zugehörige Projektkontext an unseren KI-Dienstleister cortecs.ai (
+              <Placeholder>[Firmierung, Anschrift]</Placeholder>) übermittelt und
+              dort verarbeitet, als Auftragsverarbeiter nach Art. 28 DSGVO. Die
+              Verarbeitung findet ausschließlich innerhalb der Europäischen Union
+              statt; eine Übermittlung in ein Drittland nach Art. 44 ff. DSGVO
+              findet nicht statt. Deine Inhalte werden nicht zum Training von
+              KI-Modellen verwendet. Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO.
             </p>
           </section>
 
