@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
 import { authConfig } from "./auth.config";
 import { isAppHost } from "./lib/app-host";
+import { publicOrigin } from "./lib/base-url";
 import { isLocale, LOCALE_COOKIE } from "./lib/i18n";
 
 const LOCALE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
@@ -58,8 +59,17 @@ export default auth((req) => {
   // the main domain, never the *.apps zone handled above.
   const lang = req.nextUrl.searchParams.get("lang");
   if (isLocale(lang)) {
-    const url = req.nextUrl.clone();
-    url.searchParams.delete("lang");
+    // Rebuild on the canonical public origin — req.nextUrl carries the internal
+    // 0.0.0.0 host in the deployed container, which would otherwise become the
+    // redirect target (see lib/base-url.ts). This is the landing page's
+    // ?lang=de|en handoff, so it's the first redirect a landing visitor hits.
+    const search = new URLSearchParams(req.nextUrl.searchParams);
+    search.delete("lang");
+    const qs = search.toString();
+    const url = new URL(
+      `${req.nextUrl.pathname}${qs ? `?${qs}` : ""}`,
+      publicOrigin(req.nextUrl.origin),
+    );
     const res = NextResponse.redirect(url);
     res.cookies.set(LOCALE_COOKIE, lang, {
       path: "/",
@@ -70,7 +80,9 @@ export default auth((req) => {
   }
 
   if (req.nextUrl.pathname.startsWith("/app") && !req.auth) {
-    return NextResponse.redirect(new URL("/login", req.nextUrl));
+    return NextResponse.redirect(
+      new URL("/login", publicOrigin(req.nextUrl.origin)),
+    );
   }
   return NextResponse.next();
 });
