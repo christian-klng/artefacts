@@ -81,6 +81,9 @@ type AgentEvent =
       label: string | null;
       createdAt: string;
     }
+  // Sent while the first-prompt interview is being generated (one LLM call) so
+  // the chat can show a "generating design suggestions" indicator.
+  | { type: "interview_generating" }
   // The first-prompt concept interview card (3 questions + style choice).
   | { type: "interview"; id: string; spec: InterviewSpec }
   | { type: "attachments_changed" }
@@ -161,6 +164,9 @@ export function Workspace({
   const [attachments, setAttachments] =
     useState<AttachmentMeta[]>(initialAttachments);
   const [streaming, setStreaming] = useState(false);
+  // True while the first-prompt design suggestions are being generated (between
+  // the interview_generating and interview SSE events). Ephemeral, not persisted.
+  const [interviewLoading, setInterviewLoading] = useState(false);
   const [restoring, setRestoring] = useState(false);
   // Spendable EUR credit. Hydrated on mount and updated after every billed turn.
   const [balanceEur, setBalanceEur] = useState<number | null>(null);
@@ -286,7 +292,12 @@ export function Workspace({
   const handleEvent = useCallback(
     (event: AgentEvent) => {
       switch (event.type) {
+        case "interview_generating":
+          setInterviewLoading(true);
+          break;
         case "assistant_text":
+          // A build turn started streaming (interview done or generation failed).
+          setInterviewLoading(false);
           // Append to the in-progress assistant bubble, or start a new one if
           // the previous item was a tool line / user message.
           setMessages((prev) => {
@@ -305,6 +316,7 @@ export function Workspace({
           });
           break;
         case "tool_start":
+          setInterviewLoading(false);
           appendMessage("tool", event.tool, { tool: event.tool, pending: true });
           break;
         case "tool_progress": {
@@ -397,6 +409,7 @@ export function Workspace({
           ]);
           break;
         case "interview":
+          setInterviewLoading(false);
           // Persist-shaped content (same JSON as the DB row) so the live card
           // and a reloaded card render identically. The server id lets the
           // answer request reference the row.
@@ -434,6 +447,7 @@ export function Workspace({
           );
           break;
         case "error":
+          setInterviewLoading(false);
           setMessages((prev) =>
             prev.map((m) => (m.pending ? { ...m, pending: false } : m)),
           );
@@ -443,6 +457,7 @@ export function Workspace({
           setActivePath(null);
           break;
         case "done":
+          setInterviewLoading(false);
           // A block that streamed but never committed (aborted run) must not
           // keep pulsing forever.
           setMessages((prev) =>
@@ -818,6 +833,7 @@ export function Workspace({
       <ChatPanel
         messages={messages}
         streaming={streaming}
+        interviewLoading={interviewLoading}
         projectId={projectId}
         onSend={onSend}
         onInterviewSubmit={onInterviewSubmit}

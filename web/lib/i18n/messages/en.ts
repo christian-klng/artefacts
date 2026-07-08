@@ -198,6 +198,10 @@ const en: Messages = {
     parseError: "Couldn’t display the concept questions.",
     skipped: "Concept questions skipped",
     conceptLabel: "Concept",
+    generating: "Generating design suggestions …",
+    modalTitle: "Concept & design",
+    openCard: "View design suggestions",
+    close: "Close",
     skipAndBuild: "Skip the questions and build directly",
     paletteConfirmHint:
       "Clicking a palette confirms your choice and starts the build.",

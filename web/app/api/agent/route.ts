@@ -675,6 +675,9 @@ async function runInterviewPhase({
   message: string;
   send: (event: unknown) => void;
 }): Promise<boolean> {
+  // Tell the client to show the "generating design suggestions" indicator
+  // immediately — generation is one LLM call that can take a few seconds.
+  send({ type: "interview_generating" });
   const attachmentNames = (await listAttachments(projectId)).map(
     (a) => a.filename,
   );

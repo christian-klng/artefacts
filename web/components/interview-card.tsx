@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Palette, X } from "lucide-react";
 import {
   parseInterviewState,
   resolvedAnswers,
@@ -13,40 +14,30 @@ import fontCatalog from "@/lib/agent/font-catalog.json";
 import { useMessages } from "@/lib/i18n/provider";
 
 /**
- * The first-prompt concept interview card: 3 single-select questions as pill
- * buttons plus the design-direction question as clickable style tiles (v2 —
- * name, vibe, a real font specimen served by /api/fonts, shape demo, palette
- * swatches). Legacy v1 rows (palette interviews from before the style-world
- * upgrade) keep rendering with their palette grid. Clicking a tile/palette
- * (enabled once all questions are answered) CONFIRMS the interview and starts
- * the build — there is no separate submit button. Once answered or skipped
- * (content flips to that status, optimistically or from the DB) the card
- * renders as a static summary.
+ * The first-prompt concept interview. Split in two so the big interactive part
+ * (3 questions + 3 style tiles) lives in a roomy MODAL — not inline in the chat,
+ * where auto-scroll landed the user at the bottom of a tall card and cut off its
+ * start. `InterviewCard` is only the compact chat footprint: a "view
+ * suggestions" chip while pending, a Q→A summary once answered, a short note
+ * when skipped. `InterviewModal` (opened by the chip / auto-opened on arrival)
+ * carries the actual choosing. Legacy v1 rows (palette interviews) keep working.
  */
 export function InterviewCard({
-  messageId,
   content,
-  streaming,
-  onSubmit,
+  onOpen,
 }: {
-  messageId: string;
   /** The message's JSON InterviewState content (persist-shaped). */
   content: string;
-  streaming: boolean;
-  onSubmit: (messageId: string, submission: InterviewSubmission) => void;
+  /** Open the interactive modal (only relevant while pending). */
+  onOpen: () => void;
 }) {
   const t = useMessages().interview;
   const state = useMemo(() => parseInterviewState(content), [content]);
-  const [selections, setSelections] = useState<Record<string, string>>({});
-  const [submitted, setSubmitted] = useState(false);
 
   if (!state) {
     // Malformed row (shouldn't happen) — never break the chat over it.
-    return (
-      <p className="pl-1 text-xs text-neutral-500">{t.parseError}</p>
-    );
+    return <p className="pl-1 text-xs text-neutral-500">{t.parseError}</p>;
   }
-  const { spec } = state;
 
   if (state.status === "skipped") {
     return <p className="pl-1 text-xs text-neutral-500">{t.skipped}</p>;
@@ -88,76 +79,145 @@ export function InterviewCard({
     );
   }
 
-  // pending — interactive
+  // pending — a compact chip; the choosing happens in the modal.
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group inline-flex items-center gap-2 rounded-xl border border-neutral-300 bg-white px-3 py-2 text-sm font-medium text-neutral-700 shadow-sm transition hover:border-neutral-900 hover:text-neutral-900 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:border-white dark:hover:text-white"
+    >
+      <Palette className="h-4 w-4 shrink-0" aria-hidden />
+      {t.openCard}
+    </button>
+  );
+}
+
+/**
+ * The interactive interview, shown in a centered modal with room to breathe.
+ * Renders nothing unless the row is still pending. Picking a style tile (after
+ * all questions are answered) or skipping CONFIRMS the interview, starts the
+ * build, and closes the modal.
+ */
+export function InterviewModal({
+  messageId,
+  content,
+  streaming,
+  onSubmit,
+  onClose,
+}: {
+  messageId: string;
+  content: string;
+  streaming: boolean;
+  onSubmit: (messageId: string, submission: InterviewSubmission) => void;
+  onClose: () => void;
+}) {
+  const t = useMessages().interview;
+  const state = useMemo(() => parseInterviewState(content), [content]);
+  const [selections, setSelections] = useState<Record<string, string>>({});
+  const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  if (!state || state.status !== "pending") return null;
+  const { spec } = state;
   const allAnswered = spec.questions.every((q) => selections[q.id]);
   const locked = streaming || submitted;
 
+  function confirm(submission: InterviewSubmission) {
+    setSubmitted(true);
+    onSubmit(messageId, submission);
+    onClose();
+  }
+
   return (
-    <div className="max-w-[95%] space-y-4 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 text-sm dark:border-neutral-800 dark:bg-neutral-900">
-      <p className="text-neutral-700 dark:text-neutral-300">{spec.intro}</p>
-
-      {spec.questions.map((q) => (
-        <div key={q.id} className="space-y-1.5">
-          <p className="font-medium">{q.question}</p>
-          <div className="flex flex-wrap gap-1.5">
-            {q.options.map((o) => {
-              const selected = selections[q.id] === o.id;
-              return (
-                <button
-                  key={o.id}
-                  type="button"
-                  disabled={locked}
-                  aria-pressed={selected}
-                  onClick={() =>
-                    setSelections((prev) => ({ ...prev, [q.id]: o.id }))
-                  }
-                  className={`rounded-full border px-3 py-1 text-sm transition disabled:opacity-50 ${
-                    selected
-                      ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
-                      : "border-neutral-300 text-neutral-700 hover:border-neutral-900 hover:text-neutral-900 dark:border-neutral-700 dark:text-neutral-300 dark:hover:border-white dark:hover:text-white"
-                  }`}
-                >
-                  {o.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-
-      {state.v === 1 ? (
-        <PaletteChoice
-          spec={state.spec}
-          allAnswered={allAnswered}
-          locked={locked}
-          onPick={(paletteId) => {
-            setSubmitted(true);
-            onSubmit(messageId, { selections, paletteId });
-          }}
-        />
-      ) : (
-        <StyleChoice
-          spec={state.spec}
-          allAnswered={allAnswered}
-          locked={locked}
-          onPick={(styleId) => {
-            setSubmitted(true);
-            onSubmit(messageId, { selections, styleId });
-          }}
-        />
-      )}
-
-      <button
-        type="button"
-        disabled={locked}
-        onClick={() => {
-          setSubmitted(true);
-          onSubmit(messageId, { skip: true });
-        }}
-        className="text-xs text-neutral-400 underline-offset-2 transition hover:text-neutral-900 hover:underline disabled:opacity-50 dark:hover:text-white"
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
+        className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-950"
       >
-        {t.skipAndBuild}
-      </button>
+        <div className="flex shrink-0 items-center justify-between border-b border-neutral-200 px-5 py-3 dark:border-neutral-800">
+          <span className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+            {t.modalTitle}
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t.close}
+            className="rounded-md p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-800 dark:hover:text-white"
+          >
+            <X className="h-4 w-4" aria-hidden />
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-5 text-sm">
+          <p className="text-neutral-700 dark:text-neutral-300">{spec.intro}</p>
+
+          {spec.questions.map((q) => (
+            <div key={q.id} className="space-y-2">
+              <p className="font-medium">{q.question}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {q.options.map((o) => {
+                  const selected = selections[q.id] === o.id;
+                  return (
+                    <button
+                      key={o.id}
+                      type="button"
+                      disabled={locked}
+                      aria-pressed={selected}
+                      onClick={() =>
+                        setSelections((prev) => ({ ...prev, [q.id]: o.id }))
+                      }
+                      className={`rounded-full border px-3 py-1 text-sm transition disabled:opacity-50 ${
+                        selected
+                          ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
+                          : "border-neutral-300 text-neutral-700 hover:border-neutral-900 hover:text-neutral-900 dark:border-neutral-700 dark:text-neutral-300 dark:hover:border-white dark:hover:text-white"
+                      }`}
+                    >
+                      {o.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          {state.v === 1 ? (
+            <PaletteChoice
+              spec={state.spec}
+              allAnswered={allAnswered}
+              locked={locked}
+              onPick={(paletteId) => confirm({ selections, paletteId })}
+            />
+          ) : (
+            <StyleChoice
+              spec={state.spec}
+              allAnswered={allAnswered}
+              locked={locked}
+              onPick={(styleId) => confirm({ selections, styleId })}
+            />
+          )}
+
+          <button
+            type="button"
+            disabled={locked}
+            onClick={() => confirm({ skip: true })}
+            className="text-xs text-neutral-400 underline-offset-2 transition hover:text-neutral-900 hover:underline disabled:opacity-50 dark:hover:text-white"
+          >
+            {t.skipAndBuild}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -177,12 +237,12 @@ function PaletteChoice({
 }) {
   const t = useMessages().interview;
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-2">
       <p className="font-medium">{spec.paletteQuestion}</p>
       <p className="text-xs text-neutral-500">
         {allAnswered ? t.paletteConfirmHint : t.paletteAnswerFirst}
       </p>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {spec.palettes.map((p) => (
           <button
             key={p.id}
@@ -191,7 +251,7 @@ function PaletteChoice({
             onClick={() => onPick(p.id)}
             className="rounded-xl border border-neutral-300 p-2 text-left transition enabled:hover:border-neutral-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-700 dark:enabled:hover:border-white"
           >
-            <ColorSwatches colors={p.colors} className="h-6" />
+            <ColorSwatches colors={p.colors} className="h-8" />
             <span className="mt-1.5 block truncate text-xs text-neutral-600 dark:text-neutral-400">
               {p.name}
             </span>
@@ -257,7 +317,7 @@ function StyleChoice({
   }, [spec.styles]);
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-2">
       {faces && <style>{faces}</style>}
       <p className="font-medium">{spec.styleQuestion}</p>
       <p className="text-xs text-neutral-500">
@@ -299,12 +359,12 @@ function StyleTile({
     >
       {/* Specimen in the direction's own world: its colors, its heading font. */}
       <div
-        className="flex h-28 items-center justify-between overflow-hidden rounded-lg px-4"
+        className="flex h-32 items-center justify-between overflow-hidden rounded-lg px-4"
         style={{ backgroundColor: bg }}
         aria-hidden
       >
         <span
-          className="text-5xl leading-none"
+          className="text-6xl leading-none"
           style={{
             color: text,
             fontFamily: heading.family
@@ -318,24 +378,24 @@ function StyleTile({
         <span className="flex flex-col items-end gap-1.5">
           {/* Shape demo: the sampled radius on this world's primary color. */}
           <span
-            className="block h-7 w-14"
+            className="block h-8 w-16"
             style={{ backgroundColor: primary, borderRadius: radius }}
           />
           <span
-            className="block h-3 w-9"
+            className="block h-3 w-10"
             style={{ backgroundColor: accent, borderRadius: radius }}
           />
         </span>
       </div>
-      <span className="mt-2 block text-sm font-medium leading-snug text-neutral-800 dark:text-neutral-200">
+      <span className="mt-2.5 block text-sm font-medium leading-snug text-neutral-800 dark:text-neutral-200">
         {style.name}
       </span>
-      <span className="mt-0.5 block text-xs leading-snug text-neutral-500">
+      <span className="mt-1 block text-xs leading-snug text-neutral-500">
         {style.vibe}
       </span>
       <ColorSwatches
         colors={[bg, surface, primary, accent, text]}
-        className="mt-2 h-4"
+        className="mt-2.5 h-4"
       />
     </button>
   );

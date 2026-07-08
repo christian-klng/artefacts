@@ -205,6 +205,10 @@ const de = {
     parseError: "Konzeptfragen konnten nicht angezeigt werden.",
     skipped: "Konzeptfragen übersprungen",
     conceptLabel: "Konzept",
+    generating: "Generiere Design-Vorschläge …",
+    modalTitle: "Konzept & Design",
+    openCard: "Design-Vorschläge ansehen",
+    close: "Schließen",
     skipAndBuild: "Fragen überspringen und direkt bauen",
     paletteConfirmHint:
       "Klick auf eine Palette bestätigt deine Auswahl und startet den Bau.",

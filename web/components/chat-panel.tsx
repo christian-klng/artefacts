@@ -9,6 +9,7 @@ import {
   FolderOpen,
   Image as ImageIcon,
   Loader2,
+  Palette,
   Paperclip,
   Pencil,
   Receipt,
@@ -20,9 +21,14 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { AttachmentMeta } from "./attachments-view";
-import { InterviewCard } from "./interview-card";
-import type { InterviewSubmission } from "@/lib/interview";
+import { InterviewCard, InterviewModal } from "./interview-card";
+import { parseInterviewState, type InterviewSubmission } from "@/lib/interview";
 import { useMessages } from "@/lib/i18n/provider";
+
+/** True while the interview row is still awaiting the user's choice. */
+function interviewPending(content: string): boolean {
+  return parseInterviewState(content)?.status === "pending";
+}
 
 export type ChatMessage = {
   id: string;
@@ -56,6 +62,7 @@ const TOOL_ICON: Record<string, LucideIcon> = {
 export function ChatPanel({
   messages,
   streaming,
+  interviewLoading = false,
   projectId,
   onSend,
   onInterviewSubmit,
@@ -64,6 +71,8 @@ export function ChatPanel({
 }: {
   messages: ChatMessage[];
   streaming: boolean;
+  /** True while the first-prompt design suggestions are being generated. */
+  interviewLoading?: boolean;
   projectId: string;
   onSend: (text: string, attachmentIds: string[]) => void;
   /** Submits the concept-interview card (answers or skip). */
@@ -88,6 +97,30 @@ export function ChatPanel({
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streaming]);
+
+  // The concept-interview modal. The interactive card lives here, not inline,
+  // so auto-scroll never lands the user at the bottom of a tall card.
+  const [openInterviewId, setOpenInterviewId] = useState<string | null>(null);
+  const pendingInterview = messages.find(
+    (msg) => msg.kind === "interview" && interviewPending(msg.content),
+  );
+  // Auto-open once per pending interview (live arrival or reload); the ref stops
+  // it re-opening after the user closes the modal without answering.
+  const autoOpenedRef = useRef<string | null>(null);
+  const pendingInterviewId = pendingInterview?.id ?? null;
+  useEffect(() => {
+    if (pendingInterviewId && autoOpenedRef.current !== pendingInterviewId) {
+      autoOpenedRef.current = pendingInterviewId;
+      setOpenInterviewId(pendingInterviewId);
+    }
+  }, [pendingInterviewId]);
+
+  const modalMessage =
+    openInterviewId != null
+      ? messages.find(
+          (msg) => msg.id === openInterviewId && msg.kind === "interview",
+        )
+      : undefined;
 
   async function uploadFiles(files: FileList | File[]) {
     const list = Array.from(files);
@@ -157,19 +190,23 @@ export function ChatPanel({
         {messages.length === 0 && (
           <p className="text-sm text-neutral-500">{m.chat.empty}</p>
         )}
-        {messages.map((m) => (
+        {messages.map((msg) => (
           <MessageRow
-            key={m.id}
-            message={m}
-            streaming={streaming}
-            onInterviewSubmit={onInterviewSubmit}
+            key={msg.id}
+            message={msg}
+            onOpenInterview={setOpenInterviewId}
           />
         ))}
-        {streaming && (
+        {interviewLoading ? (
+          <div className="flex animate-pulse items-center gap-1.5 pl-1 font-mono text-xs text-neutral-500">
+            <Palette className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span>{m.interview.generating}</span>
+          </div>
+        ) : streaming ? (
           <p className="animate-pulse pl-1 text-xs tabular-nums text-neutral-500">
             {m.chat.working} <WorkingTimer />
           </p>
-        )}
+        ) : null}
         <div ref={endRef} />
       </div>
 
@@ -306,6 +343,16 @@ export function ChatPanel({
           </div>
         </div>
       </div>
+
+      {modalMessage && interviewPending(modalMessage.content) && (
+        <InterviewModal
+          messageId={modalMessage.id}
+          content={modalMessage.content}
+          streaming={streaming}
+          onSubmit={onInterviewSubmit}
+          onClose={() => setOpenInterviewId(null)}
+        />
+      )}
     </div>
   );
 }
@@ -338,24 +385,18 @@ function WorkingTimer() {
 
 function MessageRow({
   message,
-  streaming,
-  onInterviewSubmit,
+  onOpenInterview,
 }: {
   message: ChatMessage;
-  streaming: boolean;
-  onInterviewSubmit: (
-    messageId: string,
-    submission: InterviewSubmission,
-  ) => void;
+  onOpenInterview: (id: string) => void;
 }) {
-  // The first-prompt concept interview card (interactive while pending).
+  // The first-prompt concept interview: a compact inline footprint (chip while
+  // pending, summary once answered). The choosing happens in the modal.
   if (message.kind === "interview") {
     return (
       <InterviewCard
-        messageId={message.id}
         content={message.content}
-        streaming={streaming}
-        onSubmit={onInterviewSubmit}
+        onOpen={() => onOpenInterview(message.id)}
       />
     );
   }
