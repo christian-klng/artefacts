@@ -6,12 +6,24 @@
 // choice), the interview LLM picks the best fits for the project and
 // instantiates them, and the user chooses one as their design DNA.
 //
-// Deliberately includes ONE "modern-product" world: the 2025 SaaS canon stays
-// available as a conscious choice — it just stops being the default.
+// Every world carries a `register`: "professional" (restrained, expected,
+// trustworthy — right for B2B/enterprise/institutional apps) or "expressive"
+// (character-forward). Interview sampling is STRATIFIED across both registers
+// (see sampleInterviewCandidates) so a B2B request always has serious options
+// to offer and a playful one always has expressive ones — the LLM then matches
+// the request's register. Deliberately includes a "modern-product" world so the
+// 2025 SaaS canon stays available as a conscious choice, not the default.
 import "server-only";
 import type { StyleMutations } from "@/lib/interview";
 
 export type { StyleMutations };
+
+/**
+ * A world's suitability register. "professional" = safe/expected/trustworthy
+ * (B2B, enterprise, finance, healthcare, institutional); "expressive" =
+ * character-forward. Drives the stratified interview sample.
+ */
+export type WorldRegister = "professional" | "expressive";
 
 export type FontPairing = {
   /** Heading font — catalog id from lib/agent/font-catalog.json. */
@@ -24,6 +36,8 @@ export type FontPairing = {
 
 export type DesignWorld = {
   id: string;
+  /** Suitability register — drives the stratified interview sample. */
+  register: WorldRegister;
   /** Canonical English name; the interview LLM renames per project/language. */
   name: string;
   /** One-line character sketch. */
@@ -55,6 +69,7 @@ export type DesignWorld = {
 export const DESIGN_WORLDS: DesignWorld[] = [
   {
     id: "swiss-international",
+    register: "professional",
     name: "Swiss International",
     blurb: "Rational grid, objective type, one signal color — form follows content.",
     epoch: "International Typographic Style, Zürich/Basel 1950s–60s",
@@ -89,6 +104,7 @@ export const DESIGN_WORLDS: DesignWorld[] = [
   },
   {
     id: "editorial-print",
+    register: "expressive",
     name: "Editorial Print",
     blurb: "A magazine spread on screen: serif headlines, columns, pull quotes, restraint.",
     epoch: "Print magazines & Sunday supplements, timeless",
@@ -123,6 +139,7 @@ export const DESIGN_WORLDS: DesignWorld[] = [
   },
   {
     id: "bauhaus-geometric",
+    register: "expressive",
     name: "Bauhaus Geometric",
     blurb: "Primary colors, primary shapes, mechanical order with diagonal energy.",
     epoch: "Bauhaus & De Stijl, 1919–1933",
@@ -157,6 +174,7 @@ export const DESIGN_WORLDS: DesignWorld[] = [
   },
   {
     id: "brutalist-web",
+    register: "expressive",
     name: "Web Brutalism",
     blurb: "Raw document energy: system honesty, hard borders, zero decoration.",
     epoch: "Web brutalism 2014+, honoring the early web",
@@ -191,6 +209,7 @@ export const DESIGN_WORLDS: DesignWorld[] = [
   },
   {
     id: "terminal-mono",
+    register: "expressive",
     name: "Terminal",
     blurb: "Phosphor on glass: a character grid, cursor blink, engineering as aesthetic.",
     epoch: "CRT terminals & early computing, 1970s–80s",
@@ -225,6 +244,7 @@ export const DESIGN_WORLDS: DesignWorld[] = [
   },
   {
     id: "art-deco",
+    register: "expressive",
     name: "Art Déco",
     blurb: "Gatsby geometry: symmetry, gold hairlines, sunbursts, vertical elegance.",
     epoch: "Art déco, 1920s–30s",
@@ -259,6 +279,7 @@ export const DESIGN_WORLDS: DesignWorld[] = [
   },
   {
     id: "organic-hand",
+    register: "expressive",
     name: "Organic Handcraft",
     blurb: "Warm, imperfect, human: hand-drawn lines, kraft paper, market-stand charm.",
     epoch: "Contemporary craft & farmers-market culture",
@@ -293,6 +314,7 @@ export const DESIGN_WORLDS: DesignWorld[] = [
   },
   {
     id: "luxury-maison",
+    register: "expressive",
     name: "Luxury Maison",
     blurb: "Vast silence, tracked-out capitals, hairlines — wealth whispers.",
     epoch: "Timeless haute maison, Paris/Milan",
@@ -327,6 +349,7 @@ export const DESIGN_WORLDS: DesignWorld[] = [
   },
   {
     id: "retro-diner",
+    register: "expressive",
     name: "Retro Diner",
     blurb: "1950s roadside optimism: script signs, starbursts, cherry-red vinyl.",
     epoch: "American diner & roadside signage, 1950s",
@@ -361,6 +384,7 @@ export const DESIGN_WORLDS: DesignWorld[] = [
   },
   {
     id: "y2k-cyber",
+    register: "expressive",
     name: "Y2K Cyber",
     blurb: "Chrome, acid, pixel gloss — the millennium bug as an aesthetic.",
     epoch: "Y2K digital culture, 1998–2004",
@@ -395,6 +419,7 @@ export const DESIGN_WORLDS: DesignWorld[] = [
   },
   {
     id: "soft-pop",
+    register: "expressive",
     name: "Soft Pop",
     blurb: "Memphis-descended play: confetti geometry, thick outlines, happy color.",
     epoch: "Memphis Group 1980s → contemporary playful branding",
@@ -429,6 +454,7 @@ export const DESIGN_WORLDS: DesignWorld[] = [
   },
   {
     id: "modern-product",
+    register: "professional",
     name: "Modern Product",
     blurb: "The contemporary product-web canon — chosen deliberately, executed sharply.",
     epoch: "Product web, 2020s",
@@ -463,6 +489,7 @@ export const DESIGN_WORLDS: DesignWorld[] = [
   },
   {
     id: "dark-academia",
+    register: "expressive",
     name: "Dark Academia",
     blurb: "University press meets candlelit library: Garamond, parchment, footnotes.",
     epoch: "Classic book & university-press typography",
@@ -497,6 +524,7 @@ export const DESIGN_WORLDS: DesignWorld[] = [
   },
   {
     id: "nordic-minimal",
+    register: "professional",
     name: "Nordic Minimal",
     blurb: "Scandinavian daylight: function, air, birch wood and muted nature tones.",
     epoch: "Scandinavian functionalism, 1960s → today",
@@ -531,6 +559,7 @@ export const DESIGN_WORLDS: DesignWorld[] = [
   },
   {
     id: "industrial-utility",
+    register: "expressive",
     name: "Industrial Utility",
     blurb: "Mil-spec labels and factory signage: stencils, hazard accents, data density.",
     epoch: "Industrial signage & utilitarian print, 20th century",
@@ -563,6 +592,111 @@ export const DESIGN_WORLDS: DesignWorld[] = [
     ],
     typeScales: [1.2, 1.25],
   },
+  {
+    id: "corporate-trust",
+    register: "professional",
+    name: "Corporate Trust",
+    blurb: "Dependable enterprise software: structured, blue, reassuringly unflashy.",
+    epoch: "Enterprise & B2B software, 2010s–today",
+    inspirations: [
+      "IBM Carbon",
+      "Salesforce Lightning",
+      "SAP Fiori",
+      "Microsoft Fluent",
+      "Atlassian Design",
+      "Cisco",
+    ],
+    pairings: [
+      { heading: "ibm-plex-sans", body: "ibm-plex-sans" },
+      { heading: "archivo", body: "ibm-plex-sans" },
+      { heading: "ibm-plex-sans", body: "work-sans", accent: "ibm-plex-mono" },
+    ],
+    grid: "Structured container grid with a consistent card and section system; clear top navigation; feature grids, dashboards and comparison tables are welcome; hierarchy through weight and spacing, not decoration.",
+    spacingUnits: [8, 12],
+    shape: "Moderate radius (4–8px), restrained 1px borders, a single subtle elevation shadow for cards. Nothing floats dramatically.",
+    radiusOptions: ["4px", "6px", "8px"],
+    colorPhilosophy:
+      "White or near-white ground, a disciplined cool-gray neutral ramp, near-black text, and ONE dependable corporate blue (navy→azure) as the primary that signals trust. Accents stay within that blue family — no second loud hue.",
+    motion: "Minimal and functional: 150–200ms ease transitions and quiet fades; never playful or bouncy.",
+    forbidden: [
+      "neon or acid colors",
+      "playful script or hand-drawn type",
+      "more than one accent hue",
+      "brutalist raw edges",
+      "meme or novelty energy",
+    ],
+    typeScales: [1.2, 1.25],
+  },
+  {
+    id: "professional-services",
+    register: "professional",
+    name: "Professional Services",
+    blurb: "Consultancy authority: serif headlines, restrained sans, quiet confidence.",
+    epoch: "Consultancy, finance & legal communication, timeless",
+    inspirations: [
+      "McKinsey",
+      "Deloitte",
+      "Goldman Sachs",
+      "Financial Times",
+      "Bain & Company",
+      "top-tier law firm identities",
+    ],
+    pairings: [
+      { heading: "lora", body: "work-sans" },
+      { heading: "libre-caslon-text", body: "ibm-plex-sans" },
+      { heading: "eb-garamond", body: "work-sans", accent: "ibm-plex-mono" },
+    ],
+    grid: "Structured multi-column with generous margins; understated authority through alignment and restraint; charts, figures and key statistics carry the page; a confident but quiet headline hierarchy.",
+    spacingUnits: [8, 12],
+    shape: "Square to barely-soft corners (0–4px), hairline dividers between sections, no or whisper-soft shadows. Substance over ornament.",
+    radiusOptions: ["0", "2px", "4px"],
+    colorPhilosophy:
+      "Deep navy or charcoal with a white/ivory ground and near-black text; ONE restrained accent (oxblood, deep teal, or muted gold) for links and key figures. Muted and confident, never bright.",
+    motion: "Quiet and composed: subtle fades and section scroll-reveals at most. Authority does not animate.",
+    forbidden: [
+      "bright saturated colors",
+      "playful illustration or emoji",
+      "loud pill-shaped CTAs",
+      "gradients",
+      "trendy startup gimmicks",
+    ],
+    typeScales: [1.25, 1.333],
+  },
+  {
+    id: "clean-clinical",
+    register: "professional",
+    name: "Clear & Accessible",
+    blurb: "Public-service clarity: calm, high-contrast, task-first, trustworthy.",
+    epoch: "Digital public services, health & fintech, 2015–today",
+    inspirations: [
+      "GOV.UK Design System",
+      "NHS digital service manual",
+      "US Web Design System",
+      "Stripe (its calmer surfaces)",
+      "Wise",
+      "health-insurance portals",
+    ],
+    pairings: [
+      { heading: "lexend", body: "lexend" },
+      { heading: "work-sans", body: "work-sans" },
+      { heading: "sora", body: "ibm-plex-sans" },
+    ],
+    grid: "Plain, task-first layout with clear steps and generous line-height; one primary action per view; forms and content designed for comprehension, not persuasion; obvious, strong focus states.",
+    spacingUnits: [8, 12],
+    shape: "Modest radius (4–8px), clear 2px focus outlines, restrained borders, minimal shadow. Interactive affordances are visible and obvious.",
+    radiusOptions: ["4px", "8px"],
+    colorPhilosophy:
+      "Calm and trustworthy: white or very-light ground, a confident but non-aggressive blue or teal as the primary action color, and near-black text at WCAG-AAA contrast. Success-green and warning-amber only for status, never decoration.",
+    motion: "Minimal and never distracting: short functional transitions only; motion never carries required information.",
+    forbidden: [
+      "low-contrast gray-on-gray text",
+      "decorative gradients",
+      "dark moody themes",
+      "tiny type",
+      "more than one accent hue",
+    ],
+    typeScales: [1.2, 1.25],
+  },
 ];
 
 const worldById = new Map(DESIGN_WORLDS.map((w) => [w.id, w]));
@@ -588,20 +722,60 @@ export function sampleMutations(world: DesignWorld): StyleMutations {
   };
 }
 
+function shuffled<T>(arr: T[]): T[] {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+function toCandidate(world: DesignWorld): WorldCandidate {
+  return { world, mutations: sampleMutations(world) };
+}
+
 /**
  * Samples n candidate worlds (without replacement) with per-project mutations.
- * This is where the entropy comes from: the LLM only ever picks among and
- * instantiates what the dice offered — asked freely, it would converge on the
- * same three "creative" answers every time.
+ * Register-BLIND — used only for the interview-generation-failure fallback,
+ * where no request register is known. The interview itself uses the stratified
+ * sampler below. The LLM only ever picks among and instantiates what the dice
+ * offered — asked freely, it would converge on the same three answers.
  */
 export function sampleWorldCandidates(n = 6): WorldCandidate[] {
-  const shuffled = [...DESIGN_WORLDS];
-  for (let i = shuffled.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  return shuffled(DESIGN_WORLDS)
+    .slice(0, Math.min(n, DESIGN_WORLDS.length))
+    .map(toCandidate);
+}
+
+/**
+ * The interview's candidate pool: a STRATIFIED sample that always spans both
+ * registers, so the LLM can offer an all-professional trio to a B2B request OR
+ * an all-expressive one to a playful request — then it picks by fit. Real
+ * server entropy still decides WHICH worlds within each register; the LLM only
+ * ever instantiates what the dice offered. Backfills from the other register if
+ * one can't meet its quota (it never can't with the current library).
+ */
+export function sampleInterviewCandidates(
+  total = 6,
+  professional = 3,
+): WorldCandidate[] {
+  const pool = (r: WorldRegister) =>
+    shuffled(DESIGN_WORLDS.filter((w) => w.register === r));
+  const picked: DesignWorld[] = [
+    ...pool("professional").slice(0, professional),
+    ...pool("expressive").slice(0, total - professional),
+  ];
+  if (picked.length < total) {
+    const chosen = new Set(picked);
+    for (const w of shuffled(DESIGN_WORLDS)) {
+      if (picked.length >= total) break;
+      if (!chosen.has(w)) {
+        chosen.add(w);
+        picked.push(w);
+      }
+    }
   }
-  return shuffled.slice(0, Math.min(n, shuffled.length)).map((world) => ({
-    world,
-    mutations: sampleMutations(world),
-  }));
+  // Re-shuffle so professional worlds aren't always presented first.
+  return shuffled(picked).map(toCandidate);
 }

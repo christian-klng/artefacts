@@ -11,7 +11,11 @@ import {
 } from "@/lib/projects";
 import { createBackup } from "@/lib/backup";
 import { CONCEPT_PATH, DESIGN_PATH, isInternalVfsPath } from "@/lib/concept";
-import { getWorld, sampleWorldCandidates } from "@/lib/design-worlds";
+import {
+  getWorld,
+  sampleInterviewCandidates,
+  sampleWorldCandidates,
+} from "@/lib/design-worlds";
 import { composeDesignMd, composeFallbackDesignMd } from "@/lib/agent/design";
 import { listAttachments } from "@/lib/attachments";
 import { runAgent } from "@/lib/agent/run";
@@ -675,8 +679,10 @@ async function runInterviewPhase({
     (a) => a.filename,
   );
   // The dice roll: which style worlds (and which in-world variation) this
-  // project gets offered at all. Real server entropy — see lib/design-worlds.
-  const candidates = sampleWorldCandidates(6);
+  // project gets offered at all. Real server entropy, STRATIFIED across
+  // registers so a B2B request always has professional options to be offered
+  // and a playful one always has expressive ones — see lib/design-worlds.
+  const candidates = sampleInterviewCandidates(6);
   const generated = await generateInterview(message, attachmentNames, candidates);
   if (!generated) return false;
 

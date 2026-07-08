@@ -263,7 +263,7 @@ function StyleChoice({
       <p className="text-xs text-neutral-500">
         {allAnswered ? t.styleConfirmHint : t.styleAnswerFirst}
       </p>
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-3">
         {spec.styles.map((s) => (
           <StyleTile
             key={s.id}
@@ -295,16 +295,16 @@ function StyleTile({
       type="button"
       disabled={disabled}
       onClick={onPick}
-      className="group rounded-xl border border-neutral-300 p-2 text-left transition enabled:hover:border-neutral-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-700 dark:enabled:hover:border-white"
+      className="group rounded-xl border border-neutral-300 p-3 text-left transition enabled:hover:border-neutral-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-700 dark:enabled:hover:border-white"
     >
       {/* Specimen in the direction's own world: its colors, its heading font. */}
       <div
-        className="flex h-20 items-center justify-between overflow-hidden rounded-lg px-3"
+        className="flex h-28 items-center justify-between overflow-hidden rounded-lg px-4"
         style={{ backgroundColor: bg }}
         aria-hidden
       >
         <span
-          className="text-4xl leading-none"
+          className="text-5xl leading-none"
           style={{
             color: text,
             fontFamily: heading.family
@@ -315,27 +315,27 @@ function StyleTile({
         >
           Ag
         </span>
-        <span className="flex flex-col items-end gap-1">
+        <span className="flex flex-col items-end gap-1.5">
           {/* Shape demo: the sampled radius on this world's primary color. */}
           <span
-            className="block h-6 w-12"
+            className="block h-7 w-14"
             style={{ backgroundColor: primary, borderRadius: radius }}
           />
           <span
-            className="block h-2.5 w-8"
+            className="block h-3 w-9"
             style={{ backgroundColor: accent, borderRadius: radius }}
           />
         </span>
       </div>
-      <span className="mt-1.5 block truncate text-xs font-medium text-neutral-800 dark:text-neutral-200">
+      <span className="mt-2 block text-sm font-medium leading-snug text-neutral-800 dark:text-neutral-200">
         {style.name}
       </span>
-      <span className="block truncate text-xs text-neutral-500" title={style.vibe}>
+      <span className="mt-0.5 block text-xs leading-snug text-neutral-500">
         {style.vibe}
       </span>
       <ColorSwatches
         colors={[bg, surface, primary, accent, text]}
-        className="mt-1.5 h-3"
+        className="mt-2 h-4"
       />
     </button>
   );
