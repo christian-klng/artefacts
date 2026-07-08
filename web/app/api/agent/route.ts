@@ -8,8 +8,13 @@ import {
   readFile,
   writeFile,
   updateMessageContent,
+  renameProject,
+  isDefaultProjectName,
+  extractHtmlTitle,
 } from "@/lib/projects";
 import { createBackup } from "@/lib/backup";
+import { generateThumbnail } from "@/lib/thumbnail";
+import { THUMBNAIL_PATH } from "@/lib/og-image";
 import { CONCEPT_PATH, DESIGN_PATH, isInternalVfsPath } from "@/lib/concept";
 import {
   getWorld,
@@ -84,6 +89,10 @@ export async function POST(request: Request) {
   // The agent's distilled design memory (durable decisions). Survives the
   // transcript window cap; always re-injected so it's considered every turn.
   const concept = await readFile(project.id, CONCEPT_PATH);
+  // Whether the app already has an entry point. Captured BEFORE the build so we
+  // can tell the initial creation turn (index.html appears for the first time)
+  // from every later edit — the auto-name from <title> only fires on the former.
+  const hadIndexHtml = (await readFile(project.id, "/index.html")) !== null;
 
   let turnPrompt: string;
   // Whether this turn should open with the concept interview instead of a
@@ -150,6 +159,9 @@ export async function POST(request: Request) {
         tool?: string;
       }[] = [];
       let filesChanged = false;
+      // Which VFS paths changed this turn — lets us regenerate the OG thumbnail
+      // only when the entry document actually changed (see the post-turn block).
+      const changedPaths = new Set<string>();
       // The SDK's terminal `result` message carries per-model token usage — our
       // billing source (we self-compute EUR cost; total_cost_usd is Anthropic-
       // priced and meaningless under Cortecs).
@@ -223,6 +235,7 @@ export async function POST(request: Request) {
           prompt,
           onFileEvent: (event) => {
             filesChanged = true;
+            if ("path" in event) changedPaths.add(event.path);
             // Internal files (CONCEPT.md) are agent memory: snapshot them in a
             // version, but never surface them in the client's file tree/preview.
             if ("path" in event && isInternalVfsPath(event.path)) return;
@@ -354,6 +367,33 @@ export async function POST(request: Request) {
           assets: client.assets,
           internal: client.internal,
         });
+        // Initial creation: adopt the generated <title> as the project name, so
+        // the user doesn't have to name the app up front. Gated to the first
+        // build (index.html just appeared) AND a still-default name, so a manual
+        // rename or a landing prompt-derived name is never overwritten. Done
+        // before createBackup so the snapshot already carries the final name.
+        if (filesChanged && !hadIndexHtml && isDefaultProjectName(project.name)) {
+          const title = extractHtmlTitle(client.files["/index.html"] ?? "");
+          if (title && title !== project.name) {
+            await renameProject(project.id, userId, title);
+            send({ type: "project_renamed", name: title });
+          }
+        }
+        // Regenerate the OG thumbnail when the entry document changed this turn.
+        // Runs AFTER the files snapshot (the app is already visible to the user)
+        // and BEFORE the backup, so the auto-snapshot carries the fresh image.
+        // Fully fail-safe + time-boxed inside generateThumbnail — a screenshot
+        // failure or a missing service must never break the turn.
+        if (changedPaths.has("/index.html")) {
+          try {
+            const asset = await generateThumbnail(project.id);
+            if (asset) {
+              send({ type: "asset_changed", path: THUMBNAIL_PATH, asset });
+            }
+          } catch (thumbError) {
+            console.error("[agent] thumbnail generation failed", thumbError);
+          }
+        }
         // Snapshot the whole app so the user can restore it later.
         if (filesChanged) {
           const backup = await createBackup(project.id, "auto");

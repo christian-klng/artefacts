@@ -1,0 +1,14 @@
+{
+  "name": "shot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Internal headless-Chromium screenshot service: renders a generated app's inlined HTML and returns a 1200x630 OpenGraph thumbnail of the top of the page.",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "playwright": "1.55.0",
+    "sharp": "^0.34.5"
+  }
+}

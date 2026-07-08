@@ -12,6 +12,7 @@ import {
 import { publishSlugFromLabel } from "@/lib/app-host";
 import { canonicalSignatureMap, filesSignature } from "@/lib/files-signature";
 import { isInternalVfsPath } from "@/lib/concept";
+import { THUMBNAIL_PATH } from "@/lib/og-image";
 // NOTE: lib/backup.ts imports helpers from this module; the cycle is safe
 // because neither side calls the other at module top level.
 import { createBackup } from "@/lib/backup";
@@ -95,6 +96,40 @@ export async function renameProject(
     .update(projects)
     .set({ name, updatedAt: new Date() })
     .where(and(eq(projects.id, projectId), eq(projects.userId, userId)));
+}
+
+/**
+ * System-assigned placeholder names (never user-chosen). Only these are eligible
+ * to be replaced by the auto-derived <title> on a project's first build — a
+ * manual rename (or a landing prompt-derived name) is always preserved.
+ */
+export const DEFAULT_PROJECT_NAMES = new Set([
+  "Untitled app", // createProject default (project switcher)
+  "My first app", // ensureDefaultProject
+  "Untitled project", // DB column default
+]);
+
+export const isDefaultProjectName = (name: string): boolean =>
+  DEFAULT_PROJECT_NAMES.has(name.trim());
+
+/**
+ * Extracts a project name from an HTML document's <title>: decodes the few
+ * common entities, collapses whitespace, and truncates to 60 chars (mirrors
+ * deriveName in app/start/route.ts). Returns null when there's no usable title.
+ */
+export function extractHtmlTitle(html: string): string | null {
+  const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  if (!match) return null;
+  const title = match[1]
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#0*39;|&apos;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!title) return null;
+  return title.length > 60 ? `${title.slice(0, 60).trimEnd()}…` : title;
 }
 
 /**
@@ -563,6 +598,7 @@ export async function readPublishedFile(
   mimeType: string | null;
   dbEnabled: boolean;
   badgeHidden: boolean;
+  hasThumbnail: boolean;
 } | null> {
   const project = await db.query.projects.findFirst({
     where: and(eq(projects.publishSlug, slug), eq(projects.published, true)),
@@ -575,6 +611,10 @@ export async function readPublishedFile(
   const entry = snapshot[path === "/" ? "/index.html" : path];
   if (entry == null) return null;
   const { databaseEnabled: dbEnabled, badgeHidden } = project;
+  // Whether an OG thumbnail is part of the frozen snapshot — free/authoritative
+  // (the map is already loaded), so the served <head> only links an image that
+  // actually resolves under this published slug.
+  const hasThumbnail = snapshot[THUMBNAIL_PATH] != null;
   return typeof entry === "string"
     ? {
         projectId: project.id,
@@ -583,6 +623,7 @@ export async function readPublishedFile(
         mimeType: null,
         dbEnabled,
         badgeHidden,
+        hasThumbnail,
       }
     : {
         projectId: project.id,
@@ -591,6 +632,7 @@ export async function readPublishedFile(
         mimeType: entry.mimeType ?? null,
         dbEnabled,
         badgeHidden,
+        hasThumbnail,
       };
 }
 

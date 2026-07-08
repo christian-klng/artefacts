@@ -5,6 +5,7 @@ import {
 } from "@/lib/projects";
 import { isInternalVfsPath } from "@/lib/concept";
 import { injectBadge } from "@/lib/badge";
+import { injectOgImage, THUMBNAIL_PATH } from "@/lib/og-image";
 import { substituteSiteUrl, originFromHost } from "@/lib/site-url";
 import { contentTypeFor } from "@/lib/vfs";
 import { verifyPreviewToken } from "@/lib/preview-token";
@@ -85,6 +86,7 @@ function fileResponse(
   origin: string,
   dbEnabled: boolean,
   showBadge: boolean,
+  hasThumbnail: boolean,
 ): Response {
   const contentType = contentTypeFor(path, file.mimeType);
   const isHtml = contentType.startsWith("text/html");
@@ -104,6 +106,10 @@ function fileResponse(
     // the published app + preview but is absent from the exported ZIP. Skipped
     // per project via badgeHidden.
     if (showBadge) body = injectBadge(body);
+    // Auto-generated OG thumbnail (screenshot of the page header): link it as
+    // og:image with this real origin. Serve-time only, like the badge — the
+    // exported ZIP keeps the user's own tags. No-op when no thumbnail exists.
+    body = injectOgImage(body, origin, hasThumbnail);
   }
   return new Response(body, {
     headers: { "content-type": contentType, "cache-control": "no-store" },
@@ -145,6 +151,13 @@ export async function GET(request: Request) {
     const file = await readFileRaw(projectId, path);
     if (!file) return new Response("Not found", { status: 404 });
     const { dbEnabled, badgeHidden } = await getProjectServeMeta(projectId);
+    // Only the HTML entry doc needs the thumbnail check — one cheap indexed read,
+    // skipped for asset sub-requests (and for the thumbnail file itself).
+    const isHtml = contentTypeFor(path, file.mimeType).startsWith("text/html");
+    const hasThumbnail =
+      isHtml &&
+      path !== THUMBNAIL_PATH &&
+      (await readFileRaw(projectId, THUMBNAIL_PATH)) !== null;
     const res = fileResponse(
       file,
       path,
@@ -152,6 +165,7 @@ export async function GET(request: Request) {
       originFromHost(host ?? ""),
       dbEnabled,
       !badgeHidden,
+      hasThumbnail,
     );
     // The preview origin is an ephemeral, gated view of the live VFS — never the
     // canonical address — so keep it out of search/answer-engine indexes.
@@ -178,6 +192,7 @@ export async function GET(request: Request) {
         originFromHost(host ?? ""),
         file.dbEnabled,
         !file.badgeHidden,
+        file.hasThumbnail,
       );
     }
   }

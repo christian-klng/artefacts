@@ -88,6 +88,8 @@ type AgentEvent =
   | { type: "interview"; id: string; spec: InterviewSpec }
   | { type: "attachments_changed" }
   | { type: "database_changed"; tables: string[] }
+  // The initial build named the project from its <title>; refresh the header.
+  | { type: "project_renamed"; name: string }
   | {
       type: "usage";
       model: string;
@@ -427,6 +429,11 @@ export function Workspace({
         case "attachments_changed":
           refreshAttachments();
           break;
+        case "project_renamed":
+          // The header's ProjectSwitcher is rendered by the server layout; a
+          // refresh re-fetches listProjects so the new name shows immediately.
+          router.refresh();
+          break;
         case "database_changed":
           setHasDatabase(true);
           setDbRefreshKey((k) => k + 1);
@@ -475,6 +482,7 @@ export function Workspace({
       maybeAutoSwitchToCode,
       maybeAutoReturnToPreview,
       markFileDone,
+      router,
     ],
   );
 

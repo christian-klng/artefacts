@@ -14,6 +14,7 @@ import {
   setSiteUrl,
 } from "@/lib/projects";
 import { buildAppOrigin } from "@/lib/app-host";
+import { generateThumbnail } from "@/lib/thumbnail";
 import { normalizeSiteOrigin } from "@/lib/site-url";
 import { resolveLocale } from "@/lib/locale";
 import { getMessages } from "@/lib/i18n/messages";
@@ -66,6 +67,10 @@ export async function publishProjectAction(
     return { error: t.errPublishNotConfigured };
   }
   try {
+    // Refresh the OG thumbnail from the current state BEFORE freezing the publish
+    // snapshot, so the public app links an up-to-date screenshot. Best-effort:
+    // publish must never fail because the screenshot service is down/slow.
+    await generateThumbnail(projectId).catch(() => {});
     const { slug, firstPublish } = await publishProject(projectId, userId);
     return { url: buildAppOrigin(appsDomain, slug), firstPublish };
   } catch (e) {
