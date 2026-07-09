@@ -89,10 +89,6 @@ export async function POST(request: Request) {
   // The agent's distilled design memory (durable decisions). Survives the
   // transcript window cap; always re-injected so it's considered every turn.
   const concept = await readFile(project.id, CONCEPT_PATH);
-  // Whether the app already has an entry point. Captured BEFORE the build so we
-  // can tell the initial creation turn (index.html appears for the first time)
-  // from every later edit — the auto-name from <title> only fires on the former.
-  const hadIndexHtml = (await readFile(project.id, "/index.html")) !== null;
 
   let turnPrompt: string;
   // Whether this turn should open with the concept interview instead of a
@@ -367,12 +363,13 @@ export async function POST(request: Request) {
           assets: client.assets,
           internal: client.internal,
         });
-        // Initial creation: adopt the generated <title> as the project name, so
-        // the user doesn't have to name the app up front. Gated to the first
-        // build (index.html just appeared) AND a still-default name, so a manual
-        // rename or a landing prompt-derived name is never overwritten. Done
-        // before createBackup so the snapshot already carries the final name.
-        if (filesChanged && !hadIndexHtml && isDefaultProjectName(project.name)) {
+        // Adopt the generated <title> as the project name, so the user doesn't
+        // have to name the app up front. Gated ONLY to a still-default name:
+        // once we (or the user) set a real name it's no longer a default, so
+        // this fires at most once and never overwrites a manual rename or a
+        // landing prompt-derived name. Runs before createBackup so the snapshot
+        // already carries the final name.
+        if (filesChanged && isDefaultProjectName(project.name)) {
           const title = extractHtmlTitle(client.files["/index.html"] ?? "");
           if (title && title !== project.name) {
             await renameProject(project.id, userId, title);
