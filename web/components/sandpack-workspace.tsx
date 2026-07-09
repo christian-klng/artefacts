@@ -5,6 +5,7 @@ import {
   SandpackProvider,
   SandpackLayout,
   SandpackCodeEditor,
+  useSandpack,
 } from "@codesandbox/sandpack-react";
 import type { DeviceMode, ViewMode } from "./workspace-toolbar";
 import { FileTree } from "./file-tree";
@@ -178,14 +179,84 @@ export function SandpackWorkspace({
             doneTicks={doneTicks}
           />
         </div>
-        <SandpackCodeEditor
-          readOnly
-          showTabs={false}
-          showLineNumbers
-          style={{ height: "100%", flex: 1 }}
-        />
+        <CodeArea assets={assets} projectId={projectId} />
       </SandpackLayout>
     </SandpackProvider>
+  );
+}
+
+function isImageAsset(path: string, meta?: AssetMeta): boolean {
+  if (meta?.mimeType?.startsWith("image/")) return true;
+  // SVGs are stored as text (→ `files`), so `assets` only holds raster images,
+  // but fall back to the extension when the stored mimeType is missing.
+  return /\.(png|jpe?g|gif|webp|avif|bmp|ico)$/i.test(path);
+}
+
+// The editor pane. Sandpack's read-only code editor can't render images, so for
+// a binary IMAGE asset we swap in a real <img> (bytes fetched on demand from the
+// owner-scoped /api/projects/asset route) — that's how the user sees the
+// auto-generated OG thumbnail, embedded logos and stock photos. Text files and
+// non-image binaries (PDF/fonts) keep the code editor (which shows the binary
+// placeholder text for the latter). Must live inside SandpackProvider for
+// useSandpack/SandpackCodeEditor to work.
+function CodeArea({
+  assets,
+  projectId,
+}: {
+  assets: Record<string, AssetMeta>;
+  projectId: string;
+}) {
+  const { sandpack } = useSandpack();
+  const active = sandpack.activeFile;
+  const meta = assets[active];
+  if (meta && isImageAsset(active, meta)) {
+    return <AssetImageView projectId={projectId} path={active} meta={meta} />;
+  }
+  return (
+    <SandpackCodeEditor
+      readOnly
+      showTabs={false}
+      showLineNumbers
+      style={{ height: "100%", flex: 1 }}
+    />
+  );
+}
+
+// A small light/dark checkerboard so transparent images (logos) read clearly.
+const CHECKERBOARD =
+  "repeating-conic-gradient(rgba(0,0,0,0.06) 0% 25%, transparent 0% 50%) 50% / 20px 20px";
+
+function AssetImageView({
+  projectId,
+  path,
+  meta,
+}: {
+  projectId: string;
+  path: string;
+  meta: AssetMeta;
+}) {
+  const name = path.split("/").pop() ?? path;
+  // Hash in the query so an updated asset (new bytes → new hash) busts the cache.
+  const src =
+    `/api/projects/asset?projectId=${encodeURIComponent(projectId)}` +
+    `&path=${encodeURIComponent(path)}&v=${encodeURIComponent(meta.hash)}`;
+  return (
+    <div className="flex h-full flex-1 flex-col bg-neutral-50 dark:bg-neutral-950">
+      <div
+        className="flex flex-1 items-center justify-center overflow-auto p-6"
+        style={{ background: CHECKERBOARD }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt={name}
+          className="max-h-full max-w-full rounded border border-neutral-200 object-contain shadow-sm dark:border-neutral-800"
+        />
+      </div>
+      <div className="shrink-0 border-t border-neutral-200 px-4 py-2 text-xs text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
+        {name} · {meta.mimeType ?? "image"} · {formatSize(meta.size)}
+      </div>
+    </div>
   );
 }
 
