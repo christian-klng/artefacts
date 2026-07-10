@@ -193,6 +193,29 @@ const en: Messages = {
     balanceTitle: "Available credit",
     balance: "Credit: {amount}",
     send: "Send",
+    // Consecutive tool steps collapse into one expandable group.
+    toolSteps: "{count} steps",
+    toolStepsToggle: "Toggle steps",
+    // Human-readable agent tool names (key = raw tool name). The cost line
+    // ("usage") and DB notices deliberately have no entry and stay as their
+    // own sentence.
+    toolNames: {
+      write_file: "Write file",
+      edit_file: "Edit file",
+      read_file: "Read file",
+      list_files: "List files",
+      delete_file: "Delete file",
+      list_attachments: "List attachments",
+      read_attachment: "Read attachment",
+      embed_attachment: "Embed file",
+      search_icons: "Search icons",
+      get_icons: "Get icons",
+      search_fonts: "Search fonts",
+      add_font: "Add font",
+      search_stock_photos: "Search photos",
+      add_stock_photo: "Add photo",
+      apply_schema: "Apply schema",
+    },
   },
   interview: {
     parseError: "Couldn’t display the concept questions.",

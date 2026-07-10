@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
+  ChevronDown,
+  ChevronRight,
+  Database,
   Eye,
   FileText,
   FolderOpen,
@@ -12,10 +15,13 @@ import {
   Palette,
   Paperclip,
   Pencil,
-  Receipt,
+  ReceiptEuro,
+  Search,
   Send,
+  Shapes,
   TriangleAlert,
   Trash2,
+  Type,
   Wrench,
   X,
   type LucideIcon,
@@ -54,10 +60,86 @@ const TOOL_ICON: Record<string, LucideIcon> = {
   list_attachments: Paperclip,
   read_attachment: Paperclip,
   embed_attachment: ImageIcon,
+  search_icons: Search,
+  get_icons: Shapes,
+  search_fonts: Search,
+  add_font: Type,
+  search_stock_photos: Search,
+  add_stock_photo: ImageIcon,
+  apply_schema: Database,
+  // The DB-provisioned notice (database_changed SSE event).
+  database: Database,
   // The per-turn cost line (live from the usage SSE event; restored from the
-  // usage_event ledger on reload).
-  usage: Receipt,
+  // usage_event ledger on reload). Euro receipt — the plain Receipt glyph draws
+  // a "$".
+  usage: ReceiptEuro,
 };
+
+// Minimum consecutive tool rows before they fold into a collapsible group. Runs
+// shorter than this render as individual lines (nothing to collapse).
+const GROUP_MIN_RUN = 2;
+
+// The noisy per-action tool rows we fold into a group. The cost line ("usage")
+// and the DB notice ("database") are one-off milestones — kept standalone so
+// they stay visible instead of vanishing into a collapsed run.
+function isGroupableTool(message: ChatMessage): boolean {
+  return (
+    message.role === "tool" &&
+    message.tool !== "usage" &&
+    message.tool !== "database"
+  );
+}
+
+// A chat item to render: either a normal message or a run of tool rows folded
+// into one expandable group.
+type RenderItem =
+  | { kind: "single"; message: ChatMessage }
+  | { kind: "group"; key: string; messages: ChatMessage[] };
+
+// Partition the flat message list so consecutive groupable tool rows collapse
+// into a group. Purely presentational — the message model is untouched, so this
+// works identically for the live SSE stream and a reloaded transcript. The group
+// key is the first row's id: stable while the run grows during streaming.
+function buildRenderItems(messages: ChatMessage[]): RenderItem[] {
+  const items: RenderItem[] = [];
+  let run: ChatMessage[] = [];
+  const flush = () => {
+    if (run.length >= GROUP_MIN_RUN) {
+      items.push({ kind: "group", key: run[0].id, messages: run });
+    } else {
+      for (const msg of run) items.push({ kind: "single", message: msg });
+    }
+    run = [];
+  };
+  for (const msg of messages) {
+    if (isGroupableTool(msg)) {
+      run.push(msg);
+    } else {
+      flush();
+      items.push({ kind: "single", message: msg });
+    }
+  }
+  flush();
+  return items;
+}
+
+// Turns a tool row into its human-readable label. The content always begins with
+// the raw tool token (e.g. "write_file /index.html · 3.2 kB"); we swap that token
+// for the localized name and keep the detail (path/size). Rows without a mapped
+// name (cost line, DB notice, unknown tools) render their content verbatim, so
+// nothing localized is ever baked into the persisted transcript.
+function friendlyToolLabel(
+  toolNames: Record<string, string>,
+  message: ChatMessage,
+): string {
+  const raw = message.tool;
+  const friendly = raw ? toolNames[raw] : undefined;
+  if (!raw || !friendly) return message.content;
+  let detail = message.content;
+  if (detail === raw) detail = "";
+  else if (detail.startsWith(`${raw} `)) detail = detail.slice(raw.length + 1);
+  return detail ? `${friendly} ${detail}` : friendly;
+}
 
 export function ChatPanel({
   messages,
@@ -93,6 +175,21 @@ export function ChatPanel({
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  // Which tool-run groups the user has expanded (keyed by the run's first-row
+  // id). Default collapsed; a stable key keeps a group open while more tool rows
+  // stream into it.
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const toggleGroup = useCallback((key: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+  const renderItems = useMemo(() => buildRenderItems(messages), [messages]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -190,13 +287,22 @@ export function ChatPanel({
         {messages.length === 0 && (
           <p className="text-sm text-neutral-500">{m.chat.empty}</p>
         )}
-        {messages.map((msg) => (
-          <MessageRow
-            key={msg.id}
-            message={msg}
-            onOpenInterview={setOpenInterviewId}
-          />
-        ))}
+        {renderItems.map((item) =>
+          item.kind === "group" ? (
+            <ToolGroup
+              key={item.key}
+              messages={item.messages}
+              expanded={expandedGroups.has(item.key)}
+              onToggle={() => toggleGroup(item.key)}
+            />
+          ) : (
+            <MessageRow
+              key={item.message.id}
+              message={item.message}
+              onOpenInterview={setOpenInterviewId}
+            />
+          ),
+        )}
         {interviewLoading ? (
           <div className="flex animate-pulse items-center gap-1.5 pl-1 font-mono text-xs text-neutral-500">
             <Palette className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -402,17 +508,7 @@ function MessageRow({
   }
 
   if (message.role === "tool") {
-    const Icon = (message.tool && TOOL_ICON[message.tool]) || Wrench;
-    return (
-      <div
-        className={`flex items-center gap-1.5 pl-1 font-mono text-xs text-neutral-500 ${
-          message.pending ? "animate-pulse" : ""
-        }`}
-      >
-        <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-        <span className="truncate">{message.content}</span>
-      </div>
-    );
+    return <ToolLine message={message} className="pl-1" />;
   }
 
   // Client-side error/warning notice.
@@ -454,6 +550,100 @@ function MessageRow({
           </ReactMarkdown>
         </div>
       </div>
+    </div>
+  );
+}
+
+// A single tool-log line: icon + localized name + detail, pulsing while its
+// input is still being generated. Reused for standalone rows and inside a group.
+function ToolLine({
+  message,
+  className = "",
+}: {
+  message: ChatMessage;
+  className?: string;
+}) {
+  const m = useMessages();
+  const Icon = (message.tool && TOOL_ICON[message.tool]) || Wrench;
+  const label = friendlyToolLabel(
+    m.chat.toolNames as Record<string, string>,
+    message,
+  );
+  return (
+    <div
+      className={`flex items-center gap-1.5 font-mono text-xs text-neutral-500 ${
+        message.pending ? "animate-pulse" : ""
+      } ${className}`}
+    >
+      <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+      <span className="truncate">{label}</span>
+    </div>
+  );
+}
+
+// A run of consecutive tool rows, collapsed to just the latest step with a "+N"
+// counter so a build firing dozens of icon/photo/font calls stays readable.
+// Clicking toggles an accordion that reveals every step. Collapsed by default —
+// the pulsing header + rising counter is the "the agent is busy" signal.
+function ToolGroup({
+  messages,
+  expanded,
+  onToggle,
+}: {
+  messages: ChatMessage[];
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const m = useMessages();
+  const last = messages[messages.length - 1];
+  const hidden = messages.length - 1;
+  const LastIcon = (last.tool && TOOL_ICON[last.tool]) || Wrench;
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        aria-label={m.chat.toolStepsToggle}
+        className={`flex w-full items-center gap-1.5 pl-1 text-left font-mono text-xs text-neutral-500 ${
+          !expanded && last.pending ? "animate-pulse" : ""
+        }`}
+      >
+        {expanded ? (
+          <ChevronDown
+            className="h-3.5 w-3.5 shrink-0 text-neutral-400"
+            aria-hidden
+          />
+        ) : (
+          <LastIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        )}
+        <span className="min-w-0 flex-1 truncate">
+          {expanded
+            ? m.chat.toolSteps.replace("{count}", String(messages.length))
+            : friendlyToolLabel(
+                m.chat.toolNames as Record<string, string>,
+                last,
+              )}
+        </span>
+        {!expanded && (
+          <>
+            <span className="shrink-0 rounded-full bg-neutral-100 px-1.5 py-px text-[10px] text-neutral-500 dark:bg-neutral-800">
+              +{hidden}
+            </span>
+            <ChevronRight
+              className="h-3.5 w-3.5 shrink-0 text-neutral-400"
+              aria-hidden
+            />
+          </>
+        )}
+      </button>
+      {expanded && (
+        <div className="mt-1 space-y-1 border-l border-neutral-200 pl-3 dark:border-neutral-800">
+          {messages.map((msg) => (
+            <ToolLine key={msg.id} message={msg} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

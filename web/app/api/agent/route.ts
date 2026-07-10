@@ -5,6 +5,7 @@ import {
   addMessage,
   getMessages,
   getClientFiles,
+  listFiles,
   readFile,
   writeFile,
   updateMessageContent,
@@ -15,7 +16,19 @@ import {
 import { createBackup } from "@/lib/backup";
 import { generateThumbnail } from "@/lib/thumbnail";
 import { THUMBNAIL_PATH } from "@/lib/og-image";
-import { CONCEPT_PATH, DESIGN_PATH, isInternalVfsPath } from "@/lib/concept";
+import {
+  CONCEPT_PATH,
+  DESIGN_PATH,
+  SEO_GEO_PATH,
+  isInternalVfsPath,
+} from "@/lib/concept";
+import { resolveLocale } from "@/lib/locale";
+import {
+  evaluateSeo,
+  composeSeoGeoMd,
+  parseSiteType,
+  siteTypeNeedsSeo,
+} from "@/lib/seo-checklist";
 import {
   getWorld,
   sampleInterviewCandidates,
@@ -90,6 +103,10 @@ export async function POST(request: Request) {
   // The agent's distilled design memory (durable decisions). Survives the
   // transcript window cap; always re-injected so it's considered every turn.
   const concept = await readFile(project.id, CONCEPT_PATH);
+  // Resolved once up front (before streaming) for the auto-maintained SEO/GEO
+  // report — the user's language for a user-facing file. Never let a locale
+  // read break a turn; German is the product default.
+  const locale = await resolveLocale().catch(() => "de" as const);
 
   let turnPrompt: string;
   // Whether this turn should open with the concept interview instead of a
@@ -230,9 +247,28 @@ export async function POST(request: Request) {
         // already too dense and disappears by itself once the page is edited
         // down. A lint failure must never block a turn.
         let density: DensityFinding[] = [];
+        // SEO/GEO checklist status — a SOFT per-turn reminder for websites so the
+        // agent knows where it stands, without ever doing the (paid) work
+        // unprompted. Only when the /CONCEPT.md marker says website/hybrid AND
+        // items are still open; recomputed from the live VFS, so it self-clears.
+        let seoStatus: { done: number; total: number } | null = null;
         try {
           const indexHtml = await readFile(project.id, "/index.html");
-          if (indexHtml) density = lintDensity(indexHtml);
+          if (indexHtml) {
+            density = lintDensity(indexHtml);
+            if (siteTypeNeedsSeo(parseSiteType(concept))) {
+              const paths = new Set(
+                (await listFiles(project.id)).map((f) => f.path),
+              );
+              const ev = evaluateSeo(indexHtml, {
+                hasRobots: paths.has("/robots.txt"),
+                hasSitemap: paths.has("/sitemap.xml"),
+                hasLlms: paths.has("/llms.txt"),
+              });
+              if (ev.done < ev.total)
+                seoStatus = { done: ev.done, total: ev.total };
+            }
+          }
         } catch {}
         const prompt = withProjectContext(
           concept,
@@ -240,6 +276,7 @@ export async function POST(request: Request) {
           history,
           turnPrompt,
           density,
+          seoStatus,
         );
 
         const run = await runAgent({
@@ -371,6 +408,41 @@ export async function POST(request: Request) {
         for (const tm of turnMessages) {
           if (tm.role === "assistant" && tm.content.trim() === "") continue;
           await addMessage(project.id, tm.role, tm.content, tm.tool);
+        }
+        // Auto-maintain the SEO/GEO report for websites — deterministic, no LLM
+        // cost. Recomputed from the LIVE VFS so its checkmarks reflect the real
+        // page (a `[x]` is measured, never claimed by the agent). Reads CONCEPT
+        // FRESH because this very turn may have just written the `Site type:`
+        // marker. Internal like CONCEPT/DESIGN, so the getClientFiles snapshot
+        // below ships it on the `internal` channel. Fully fail-safe — a lint or
+        // write error must never break the turn.
+        if (filesChanged) {
+          try {
+            const siteType = parseSiteType(
+              await readFile(project.id, CONCEPT_PATH),
+            );
+            if (siteTypeNeedsSeo(siteType)) {
+              const [indexHtml, allFiles] = await Promise.all([
+                readFile(project.id, "/index.html"),
+                listFiles(project.id),
+              ]);
+              if (indexHtml) {
+                const paths = new Set(allFiles.map((f) => f.path));
+                const ev = evaluateSeo(indexHtml, {
+                  hasRobots: paths.has("/robots.txt"),
+                  hasSitemap: paths.has("/sitemap.xml"),
+                  hasLlms: paths.has("/llms.txt"),
+                });
+                await writeFile(
+                  project.id,
+                  SEO_GEO_PATH,
+                  composeSeoGeoMd(ev, { locale }),
+                );
+              }
+            }
+          } catch (seoError) {
+            console.error("[agent] SEO checklist update failed", seoError);
+          }
         }
         const client = await getClientFiles(project.id);
         send({
@@ -525,6 +597,7 @@ function withProjectContext(
   history: { role: string; content: string; kind?: string | null }[],
   currentPrompt: string,
   density: DensityFinding[] = [],
+  seoStatus: { done: number; total: number } | null = null,
 ): string {
   const prior = history
     // Interview cards persist as JSON — replay answered ones as a readable
@@ -577,6 +650,21 @@ function withProjectContext(
         `and never cut content the user explicitly asked for. If the design ` +
         `DNA above or the user's wishes explicitly call for this density, ` +
         `they win — keep it and ignore this readout.`,
+    );
+  }
+
+  // SEO/GEO checklist status for websites — soft awareness, never a mandate to
+  // do the (paid) work. Present only when the marker says website/hybrid and
+  // items are open (computed in the route from the live VFS).
+  if (seoStatus) {
+    sections.push(
+      `## SEO/GEO checklist status\n` +
+        `This site's SEO/GEO checklist stands at ${seoStatus.done}/${seoStatus.total} ` +
+        `(system-maintained in ${SEO_GEO_PATH}). Work through the OPEN items ONLY ` +
+        `when the user has asked you to — it is optional, paid work; never start ` +
+        `it unprompted or as a side-effect of an unrelated change. Always keep the ` +
+        `baseline meta. If you have not offered it before, you may offer once and ` +
+        `then wait.`,
     );
   }
 

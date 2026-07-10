@@ -12,6 +12,10 @@ const EXT_CONTENT_TYPE: Record<string, string> = {
   js: "text/javascript; charset=utf-8",
   mjs: "text/javascript; charset=utf-8",
   json: "application/json; charset=utf-8",
+  // Serve SEO files with correct types — without `xml`, sitemap.xml falls
+  // through to application/octet-stream and some crawlers reject it.
+  xml: "application/xml; charset=utf-8",
+  webmanifest: "application/manifest+json; charset=utf-8",
   svg: "image/svg+xml",
   png: "image/png",
   jpg: "image/jpeg",

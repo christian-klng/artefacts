@@ -200,6 +200,30 @@ const de = {
     balanceTitle: "Verfügbares Guthaben",
     balance: "Guthaben: {amount}",
     send: "Senden",
+    // Aufeinanderfolgende Tool-Schritte werden zu einer aufklappbaren Gruppe
+    // zusammengefasst.
+    toolSteps: "{count} Schritte",
+    toolStepsToggle: "Schritte ein-/ausklappen",
+    // Menschenlesbare Namen der Agent-Tools (Schlüssel = roher Tool-Name). Die
+    // Kostenzeile ("usage") und DB-Hinweise haben bewusst keinen Eintrag und
+    // bleiben als eigener Satz stehen.
+    toolNames: {
+      write_file: "Schreibe Datei",
+      edit_file: "Bearbeite Datei",
+      read_file: "Lese Datei",
+      list_files: "Liste Dateien",
+      delete_file: "Lösche Datei",
+      list_attachments: "Liste Anhänge",
+      read_attachment: "Lese Anhang",
+      embed_attachment: "Bette Datei ein",
+      search_icons: "Suche Icons",
+      get_icons: "Hole Icons",
+      search_fonts: "Suche Schriften",
+      add_font: "Füge Schrift hinzu",
+      search_stock_photos: "Suche Fotos",
+      add_stock_photo: "Füge Foto hinzu",
+      apply_schema: "Wende Schema an",
+    },
   },
   interview: {
     parseError: "Konzeptfragen konnten nicht angezeigt werden.",
