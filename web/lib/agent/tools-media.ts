@@ -3,8 +3,16 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 import { timedTool as tool } from "./timed-tool";
-import { writeBinaryFile } from "@/lib/projects";
-import { searchIcons, getIcons } from "./icons";
+import { writeBinaryFile, writeFile, readFile } from "@/lib/projects";
+import { ICON_SPRITE_PATH } from "@/lib/vfs";
+import {
+  searchIcons,
+  getIcons,
+  iconSymbolId,
+  svgToSymbol,
+  buildIconSprite,
+  parseSpriteSymbols,
+} from "./icons";
 import {
   getFont,
   searchFonts,
@@ -81,15 +89,15 @@ export function buildMediaServer(
     name: "media",
     version: "1.0.0",
     instructions:
-      "Icons (Lucide + brand logos) as inline SVG, real webfonts (bundled OFL " +
-      "catalog, saved as local woff2 assets), and Pexels stock photos saved " +
-      "into the project as local assets. Use these instead of emoji icons, " +
-      "hand-drawn common glyphs, system-font-only typography, or external " +
-      "font/image URLs.",
+      "Icons (Lucide + brand logos) collected into a shared SVG sprite you " +
+      "reference with <use>, real webfonts (bundled OFL catalog, saved as local " +
+      "woff2 assets), and Pexels stock photos saved into the project as local " +
+      "assets. Use these instead of emoji icons, hand-drawn common glyphs, " +
+      "system-font-only typography, or external font/image URLs.",
     tools: [
       tool(
         "search_icons",
-        "Search the fixed icon libraries: Lucide (~2000 consistent stroke-style UI icons) and Simple Icons brand logos (prefixed 'brand:', e.g. brand:github). Returns matching icon names for get_icons.",
+        "Search the fixed icon libraries: Lucide (~2000 consistent stroke-style UI icons) and Simple Icons brand logos (prefixed 'brand:', e.g. brand:github). Returns matching icon names for add_icons.",
         {
           query: z
             .string()
@@ -108,14 +116,14 @@ export function buildMediaServer(
             return tags ? `${m.name} — ${tags}` : m.name;
           });
           return ok(
-            `Icons matching "${query}" (fetch markup with get_icons):\n${lines.join("\n")}`,
+            `Icons matching "${query}" (add them with add_icons):\n${lines.join("\n")}`,
           );
         },
       ),
 
       tool(
-        "get_icons",
-        "Get ready-to-inline <svg> markup for named icons (names from search_icons; 'brand:<slug>' for brand logos). Inline the SVG directly into the HTML — it uses currentColor, so it inherits the CSS `color` and can be sized via CSS or width/height.",
+        "add_icons",
+        "Add named icons (from search_icons; 'brand:<slug>' for brand logos) to the project's shared icon sprite and get a tiny snippet to place each. The full SVG is written ONCE into /assets/icons.svg; you reference each icon with a small <use> — so DON'T paste raw <svg> icon markup into the HTML. Icons still inherit the CSS `color` via currentColor.",
         {
           names: z
             .array(z.string())
@@ -125,18 +133,58 @@ export function buildMediaServer(
         },
         async ({ names }) => {
           const results = getIcons(names);
-          const parts = results.map((r) =>
-            r.found
-              ? `${r.name}:\n${r.svg}`
-              : `${r.name}: NOT FOUND${
+          // Page-relative ref (matches the stock-photo convention, no leading /).
+          const spriteRef = ICON_SPRITE_PATH.replace(/^\//, "");
+          const existing = await readFile(projectId, ICON_SPRITE_PATH);
+          const symbols = existing
+            ? parseSpriteSymbols(existing)
+            : new Map<string, string>();
+
+          const placed: string[] = [];
+          const missing: string[] = [];
+          let added = 0;
+          for (const r of results) {
+            if (!r.found) {
+              missing.push(
+                `${r.name}: NOT FOUND${
                   r.suggestions.length > 0
                     ? ` — did you mean: ${r.suggestions.join(", ")}?`
                     : ""
                 }`,
-          );
-          const anyFound = results.some((r) => r.found);
-          const text = parts.join("\n\n");
-          return anyFound ? ok(text) : err(text);
+              );
+              continue;
+            }
+            const id = iconSymbolId(r.name);
+            if (!symbols.has(id)) {
+              const symbol = svgToSymbol(id, r.svg);
+              if (symbol) {
+                symbols.set(id, symbol);
+                added++;
+              }
+            }
+            placed.push(
+              `${r.name}:\n<svg class="icon" width="24" height="24" aria-hidden="true"><use href="${spriteRef}#${id}"/></svg>`,
+            );
+          }
+
+          // Nothing resolved — surface the misses as an error so the model retries.
+          if (placed.length === 0) {
+            return err(missing.join("\n\n") || "No icons resolved.");
+          }
+
+          const sprite = buildIconSprite(symbols.values());
+          await writeFile(projectId, ICON_SPRITE_PATH, sprite);
+          onEvent({ type: "file_changed", path: ICON_SPRITE_PATH, content: sprite });
+
+          const parts = [
+            `Added ${added} new icon${added === 1 ? "" : "s"} to /${spriteRef} (sprite now holds ${symbols.size}). Place each where it belongs:`,
+            placed.join("\n\n"),
+            "Add this sizing rule to /styles.css once (icons default to 24×24, override per context):\n" +
+              ".icon { width: 1.25rem; height: 1.25rem; display: inline-block; vertical-align: middle; }",
+            "For icon-only links/buttons put an aria-label on the <a>/<button> — the icon stays aria-hidden.",
+          ];
+          if (missing.length > 0) parts.push(`Not found:\n${missing.join("\n")}`);
+          return ok(parts.join("\n\n"));
         },
       ),
 
@@ -344,7 +392,7 @@ export function buildMediaServer(
 // Tool names as the agent loop sees them (mcp__<server>__<tool>).
 export const MEDIA_TOOL_NAMES = [
   "mcp__media__search_icons",
-  "mcp__media__get_icons",
+  "mcp__media__add_icons",
   "mcp__media__search_fonts",
   "mcp__media__add_font",
   "mcp__media__search_stock_photos",

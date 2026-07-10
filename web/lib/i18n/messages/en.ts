@@ -210,6 +210,7 @@ const en: Messages = {
       embed_attachment: "Embed file",
       search_icons: "Search icons",
       get_icons: "Get icons",
+      add_icons: "Add icons",
       search_fonts: "Search fonts",
       add_font: "Add font",
       search_stock_photos: "Search photos",

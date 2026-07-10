@@ -14,7 +14,7 @@ import type {
 // Why this matters: a tool row looks slow in the UI mostly because the model is
 // streaming the tool's arguments token-by-token, not because the handler is
 // slow. This split lets the server log prove where the time actually goes
-// (e.g. get_icons exec ~0ms vs. a multi-second input window).
+// (e.g. search_icons exec ~0ms vs. a multi-second input window).
 export function timedTool<Schema extends AnyZodRawShape>(
   name: string,
   description: string,

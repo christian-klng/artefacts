@@ -218,6 +218,7 @@ const de = {
       embed_attachment: "Bette Datei ein",
       search_icons: "Suche Icons",
       get_icons: "Hole Icons",
+      add_icons: "Füge Icons hinzu",
       search_fonts: "Suche Schriften",
       add_font: "Füge Schrift hinzu",
       search_stock_photos: "Suche Fotos",

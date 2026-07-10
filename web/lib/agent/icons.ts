@@ -137,3 +137,58 @@ export function getIcons(names: string[]): IconLookup[] {
     };
   });
 }
+
+// --- SVG sprite support ----------------------------------------------------
+// Inlining full `<svg>` markup per icon makes the model REGENERATE hundreds of
+// characters of path data as output tokens — paid twice (once as the get_icons
+// result, once written into the HTML). The `add_icons` tool instead collects
+// chosen icons into ONE sprite file (`/assets/icons.svg`) of `<symbol>`s and the
+// model references each with a tiny `<use href="assets/icons.svg#id">`. Same
+// `currentColor` theming, a fraction of the tokens. The preview inliner
+// (lib/vfs.ts) embeds the sprite for the self-contained srcDoc/thumbnail render;
+// the real subdomain serve resolves the external file natively.
+
+/** URL/id-safe symbol id for a catalog name ("brand:github" → "brand-github"). */
+export function iconSymbolId(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/**
+ * Converts a catalog `<svg>` into a `<symbol id="…">`, keeping the presentational
+ * attributes (`viewBox`, stroke/fill) so a `<use>` renders identically and
+ * dropping the sizing/namespace/class attrs that belong on the referencing
+ * `<svg>` instead. Returns null if the markup isn't a single-root `<svg>`.
+ */
+export function svgToSymbol(id: string, svg: string): string | null {
+  const m = svg.match(/^<svg\b([^>]*)>([\s\S]*?)<\/svg>\s*$/i);
+  if (!m) return null;
+  const attrs = m[1]
+    .replace(
+      /\s(?:xmlns(?::[\w-]+)?|class|width|height|role|focusable|aria-[\w-]+)\s*=\s*("[^"]*"|'[^']*')/gi,
+      "",
+    )
+    .trim();
+  return `<symbol id="${id}"${attrs ? ` ${attrs}` : ""}>${m[2]}</symbol>`;
+}
+
+const SPRITE_OPEN =
+  '<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true" data-icon-sprite>';
+const SPRITE_CLOSE = "</svg>";
+
+/** Wraps a set of `<symbol>` strings into the hidden sprite `<svg>` document. */
+export function buildIconSprite(symbols: Iterable<string>): string {
+  return `${SPRITE_OPEN}${[...symbols].join("")}${SPRITE_CLOSE}`;
+}
+
+/** Parses an existing sprite file back into a map of symbol id → `<symbol>…`. */
+export function parseSpriteSymbols(sprite: string): Map<string, string> {
+  const map = new Map<string, string>();
+  const re = /<symbol\b[^>]*?\bid="([^"]+)"[\s\S]*?<\/symbol>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(sprite)) !== null) map.set(m[1], m[0]);
+  return map;
+}

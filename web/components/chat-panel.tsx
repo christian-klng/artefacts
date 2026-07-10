@@ -62,6 +62,7 @@ const TOOL_ICON: Record<string, LucideIcon> = {
   embed_attachment: ImageIcon,
   search_icons: Search,
   get_icons: Shapes,
+  add_icons: Shapes,
   search_fonts: Search,
   add_font: Type,
   search_stock_photos: Search,

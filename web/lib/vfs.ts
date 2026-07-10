@@ -5,6 +5,22 @@ import { listFiles } from "@/lib/projects";
 // static site: content types for serving, and an inliner that turns a multi-file
 // page into a single self-contained HTML for the srcDoc preview fallback.
 
+/**
+ * Fixed path of the shared icon sprite the media tool maintains (see
+ * lib/agent/tools-media.ts `add_icons`). The self-contained render (srcDoc
+ * preview + OG thumbnail) has no origin to fetch an external
+ * `<use href="assets/icons.svg#id">` from, so the inliner embeds the sprite once
+ * and rewrites those refs to same-document `#id`. The real subdomain serve
+ * resolves the external file natively and needs none of this.
+ */
+export const ICON_SPRITE_PATH = "/assets/icons.svg";
+
+// Fresh instance per use (global regex; see cssUrlPattern note). Matches a
+// `(xlink:)href="…assets/icons.svg#id"` sprite reference; the path mirrors the
+// basename of ICON_SPRITE_PATH.
+const spriteRefPattern = () =>
+  /(xlink:href|href)\s*=\s*(["'])(?:\.?\/)?assets\/icons\.svg#([^"'#]+)\2/gi;
+
 const EXT_CONTENT_TYPE: Record<string, string> = {
   html: "text/html; charset=utf-8",
   htm: "text/html; charset=utf-8",
@@ -125,6 +141,22 @@ export function inlineFilesIntoHtml(
     const file = lookup(ref);
     return file ? dataUri(file) : null;
   };
+
+  // Icon sprite: an external `<use href="assets/icons.svg#id">` can't resolve in
+  // an origin-less render, so embed the sprite's symbols once (right after
+  // <body>) and rewrite the refs to same-document `#id`. Data-URI `<use>` is
+  // blocked by browsers, so this — not the general src/href pass below — is how
+  // the sprite reaches the srcDoc preview and the OG thumbnail.
+  const sprite = byPath.get(ICON_SPRITE_PATH);
+  if (sprite && sprite.encoding !== "base64" && spriteRefPattern().test(html)) {
+    html = html.replace(
+      spriteRefPattern(),
+      (_whole, attr, q, id) => `${attr}=${q}#${id}${q}`,
+    );
+    const bodyOpen = html.match(/<body[^>]*>/i);
+    const at = bodyOpen ? bodyOpen.index! + bodyOpen[0].length : 0;
+    html = html.slice(0, at) + sprite.content + html.slice(at);
+  }
 
   // src="…" / href="…" (single or double quoted)
   html = html.replace(

@@ -354,7 +354,7 @@ export async function POST(request: Request) {
                 // Time the model spent generating this tool's arguments — the
                 // "input" window. Pairs with the tool's own "exec" line (see
                 // timed-tool.ts): input ≫ exec means the model, not the tool,
-                // is the bottleneck (typically true for get_icons/write_file).
+                // is the bottleneck (typically true for write_file/add_icons).
                 console.log(
                   `[agent] tool ${liveTool.name} input ${
                     Date.now() - liveTool.startedAt
