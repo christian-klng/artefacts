@@ -652,3 +652,39 @@ export const stripeEvents = pgTable("stripe_event", {
   type: text("type").notNull(),
   createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
 });
+
+// ---------------------------------------------------------------------------
+// Operational error log (surfaced read-only in the admin panel's /logs view).
+// Server-side failures that would otherwise vanish into the container's stdout
+// on the next redeploy are persisted here by lib/error-log.ts, so the operator
+// can diagnose them (e.g. a failed restore) without SSH-ing onto the VPS. This
+// is NOT request-level access logging — only caught exceptions at the route
+// handlers, written best-effort (a logging failure never breaks the request).
+// ---------------------------------------------------------------------------
+export const errorLogs = pgTable(
+  "error_log",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    // Where it happened, for filtering: "restore" | "agent" | "stripe-webhook"
+    // | "cron-backup" | … . Free-form; the writer picks a stable short slug.
+    scope: text("scope").notNull(),
+    // The affected project/builder-user when known. Plain uuid (no FK / cascade)
+    // like publishedBackupId — a log entry must OUTLIVE the row it references so
+    // the history survives a project or user deletion.
+    projectId: uuid("project_id"),
+    userId: uuid("user_id"),
+    // The error message (error.message, or String(error) for non-Errors).
+    message: text("message").notNull(),
+    // The stack trace when available; null otherwise.
+    stack: text("stack"),
+    // Optional JSON with extra context (e.g. { backupId }), stringified.
+    context: text("context"),
+    createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+  },
+  // Plain indexes only (never .unique()) so the non-TTY migrate push can't hit
+  // the populated-table truncate prompt. Newest-first listing + scope filter.
+  (e) => [
+    index("error_log_created_idx").on(e.createdAt),
+    index("error_log_scope_idx").on(e.scope),
+  ],
+);

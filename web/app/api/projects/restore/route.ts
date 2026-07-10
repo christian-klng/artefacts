@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { getOwnedProject } from "@/lib/projects";
 import { restoreBackup } from "@/lib/backup";
+import { logError } from "@/lib/error-log";
 
 export const runtime = "nodejs";
 
@@ -34,10 +35,12 @@ export async function POST(request: Request) {
     const result = await restoreBackup(projectId, backupId);
     return Response.json(result);
   } catch (e) {
-    console.error(
-      `[restore] project=${projectId} backup=${backupId} failed:`,
-      e,
-    );
+    // Persist for the admin /logs view (also console.errors the full trace).
+    await logError("restore", e, {
+      projectId,
+      userId: session.user.id,
+      context: { backupId },
+    });
     const message = e instanceof Error ? e.message : String(e);
     return Response.json({ error: message }, { status: 500 });
   }

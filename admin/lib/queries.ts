@@ -5,6 +5,7 @@ import {
   appSettings,
   coupons,
   couponRedemptions,
+  errorLogs,
   mailTemplates,
   projects,
   userCredits,
@@ -295,4 +296,43 @@ export async function listRedemptions(limit = 200): Promise<RedemptionRow[]> {
     recipientCreditedEur: Number(r.recipientCreditedEur),
     referrerRewardEur: Number(r.referrerRewardEur),
   }));
+}
+
+export type ErrorLogRow = {
+  id: string;
+  scope: string;
+  projectId: string | null;
+  projectName: string | null;
+  userId: string | null;
+  userEmail: string | null;
+  message: string;
+  stack: string | null;
+  context: string | null;
+  createdAt: Date;
+};
+
+/**
+ * Recent server-side errors (newest first), joined to the affected app + builder
+ * user when known. projectId/userId are plain columns (the log outlives the rows
+ * they point at), so the joins are left joins and may resolve to null.
+ */
+export async function listErrorLogs(limit = 200): Promise<ErrorLogRow[]> {
+  return db
+    .select({
+      id: errorLogs.id,
+      scope: errorLogs.scope,
+      projectId: errorLogs.projectId,
+      projectName: projects.name,
+      userId: errorLogs.userId,
+      userEmail: users.email,
+      message: errorLogs.message,
+      stack: errorLogs.stack,
+      context: errorLogs.context,
+      createdAt: errorLogs.createdAt,
+    })
+    .from(errorLogs)
+    .leftJoin(projects, eq(errorLogs.projectId, projects.id))
+    .leftJoin(users, eq(errorLogs.userId, users.id))
+    .orderBy(desc(errorLogs.createdAt))
+    .limit(limit);
 }

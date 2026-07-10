@@ -18,6 +18,7 @@ const en: Messages = {
     coupons: "Coupons",
     mail: "Emails",
     settings: "Settings",
+    logs: "Logs",
   },
   common: {
     save: "Save",
@@ -66,6 +67,18 @@ const en: Messages = {
     statusPublished: "published",
     statusDraft: "Draft",
     empty: "No apps yet.",
+  },
+  logs: {
+    title: "Error log",
+    intro:
+      "Server-side errors (e.g. failed restores) that would otherwise only live briefly in the container log. Newest first, max. 200.",
+    colTime: "Time",
+    colScope: "Scope",
+    colApp: "App",
+    colUser: "User",
+    colMessage: "Message",
+    details: "Show details",
+    empty: "No errors logged. 🎉",
   },
   coupons: {
     title: "Coupons",

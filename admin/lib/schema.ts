@@ -118,3 +118,18 @@ export const couponRedemptions = pgTable("coupon_redemption", {
   }),
   redeemedAt: timestamp("redeemed_at", { mode: "date" }).notNull().defaultNow(),
 });
+
+// Operational error log (mirrors web/lib/db/schema.ts). The admin READS this to
+// surface server-side failures (e.g. a failed restore) in its /logs view. The
+// builder WRITES it via web/lib/error-log.ts. Indexes live on the real table
+// (created by the builder's migrate) — the mirror omits them.
+export const errorLogs = pgTable("error_log", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  scope: text("scope").notNull(),
+  projectId: uuid("project_id"),
+  userId: uuid("user_id"),
+  message: text("message").notNull(),
+  stack: text("stack"),
+  context: text("context"),
+  createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+});

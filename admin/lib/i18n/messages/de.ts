@@ -18,6 +18,7 @@ const de = {
     coupons: "Gutscheine",
     mail: "E-Mails",
     settings: "Einstellungen",
+    logs: "Logs",
   },
   common: {
     save: "Speichern",
@@ -66,6 +67,18 @@ const de = {
     statusPublished: "veröffentlicht",
     statusDraft: "Entwurf",
     empty: "Noch keine Apps.",
+  },
+  logs: {
+    title: "Fehler-Log",
+    intro:
+      "Server-seitige Fehler (z. B. fehlgeschlagene Wiederherstellungen), die sonst nur flüchtig im Container-Log stünden. Neueste zuerst, max. 200.",
+    colTime: "Zeit",
+    colScope: "Bereich",
+    colApp: "App",
+    colUser: "Nutzer",
+    colMessage: "Meldung",
+    details: "Details anzeigen",
+    empty: "Keine Fehler protokolliert. 🎉",
   },
   coupons: {
     title: "Gutscheine",

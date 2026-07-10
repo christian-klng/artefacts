@@ -15,6 +15,7 @@ export function Nav() {
     { href: "/coupons", label: m.nav.coupons },
     { href: "/mail", label: m.nav.mail },
     { href: "/settings", label: m.nav.settings },
+    { href: "/logs", label: m.nav.logs },
   ];
 
   return (
