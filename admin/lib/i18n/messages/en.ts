@@ -63,6 +63,7 @@ const en: Messages = {
     colStatus: "Status",
     colCreated: "Created",
     colUpdated: "Updated",
+    thumbnailAlt: "Preview of {name}",
     statusPublished: "published",
     statusDraft: "Draft",
     empty: "No apps yet.",

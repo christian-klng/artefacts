@@ -63,6 +63,7 @@ const de = {
     colStatus: "Status",
     colCreated: "Erstellt",
     colUpdated: "Aktualisiert",
+    thumbnailAlt: "Vorschau von {name}",
     statusPublished: "veröffentlicht",
     statusDraft: "Entwurf",
     empty: "Noch keine Apps.",

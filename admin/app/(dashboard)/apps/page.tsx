@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { listApps } from "@/lib/queries";
 import { formatDate } from "@/lib/format";
 import { resolveLocale } from "@/lib/locale";
@@ -38,8 +39,22 @@ export default async function AppsPage() {
                 className="border-b border-black/5 last:border-0 dark:border-white/5"
               >
                 <td className="px-4 py-3">
-                  <div className="font-medium">{a.name}</div>
-                  <div className="text-foreground/50">{a.template}</div>
+                  <div className="flex items-center gap-3">
+                    {a.hasThumbnail && (
+                      <Image
+                        src={`/api/apps/${a.id}/thumbnail`}
+                        alt={m.thumbnailAlt.replace("{name}", a.name)}
+                        width={64}
+                        height={40}
+                        unoptimized
+                        className="h-10 w-16 shrink-0 rounded border border-black/10 object-cover dark:border-white/10"
+                      />
+                    )}
+                    <div className="min-w-0">
+                      <div className="font-medium">{a.name}</div>
+                      <div className="text-foreground/50">{a.template}</div>
+                    </div>
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-foreground/70">
                   {a.ownerEmail ?? "—"}
