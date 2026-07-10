@@ -9,6 +9,7 @@ import { AttachmentsView, type AttachmentMeta } from "./attachments-view";
 import { ConfettiBurst } from "./confetti";
 import { DataView } from "./data-view";
 import type { AssetMeta } from "./sandpack-workspace";
+import { diffToRange, type EditHighlight } from "./editor-flash";
 import { canonicalSignatureMap, filesSignature } from "@/lib/files-signature";
 import {
   WorkspaceToolbar,
@@ -181,6 +182,13 @@ export function Workspace({
   // to replay the green "done" flash (see file-tree.tsx).
   const [activePath, setActivePath] = useState<string | null>(null);
   const [doneTicks, setDoneTicks] = useState<Record<string, number>>({});
+  // A just-changed spot to scroll to + flash yellow in the code editor, derived
+  // from the prev-vs-new diff on `file_changed`. `editNonce` bumps its nonce so
+  // a repeated edit to the same range re-fires; `filesRef` mirrors `files` so
+  // the SSE handler can read the PRE-edit content without a churny callback dep.
+  const [highlight, setHighlight] = useState<EditHighlight | null>(null);
+  const filesRef = useRef(files);
+  const editNonce = useRef(0);
   // Auto-view-switch bookkeeping (maybeAutoSwitchToCode / …ReturnToPreview below).
   // `viewRef`/`hasIndexRef` mirror state so the SSE handler reads fresh values
   // without adding churny deps; the two flags are reset at the start of each turn.
@@ -232,6 +240,7 @@ export function Workspace({
   }, [view]);
   useEffect(() => {
     hasIndexRef.current = !!files["/index.html"];
+    filesRef.current = files;
   }, [files]);
 
   const appendMessage = useCallback(
@@ -365,11 +374,28 @@ export function Workspace({
           });
           break;
         }
-        case "file_changed":
+        case "file_changed": {
+          // Diff the pre-edit content against the incoming content; a targeted
+          // edit yields a spot to scroll to and flash (null for new files /
+          // wholesale rewrites — see diffToRange).
+          const previous = filesRef.current[event.path];
+          const range =
+            previous !== undefined
+              ? diffToRange(previous, event.content)
+              : null;
+          if (range) {
+            setHighlight({
+              path: event.path,
+              from: range.from,
+              to: range.to,
+              nonce: (editNonce.current += 1),
+            });
+          }
           setFiles((prev) => ({ ...prev, [event.path]: event.content }));
           markFileDone(event.path);
           maybeAutoSwitchToCode();
           break;
+        }
         case "asset_changed":
           setAssets((prev) => ({ ...prev, [event.path]: event.asset }));
           markFileDone(event.path);
@@ -667,6 +693,7 @@ export function Workspace({
         // The restored file set is a clean slate — drop any live-build highlights.
         setActivePath(null);
         setDoneTicks({});
+        setHighlight(null);
         // A full-backup restore can also change the database + attachments, so
         // refresh the Daten/Dateien tabs to reflect the restored state.
         setHasDatabase(data.databaseEnabled);
@@ -739,6 +766,7 @@ export function Workspace({
       manualViewRef.current = false;
       didAutoSwitchRef.current = false;
       setActivePath(null);
+      setHighlight(null);
 
       try {
         const res = await fetch("/api/agent", {
@@ -905,6 +933,7 @@ export function Workspace({
               showBadge={showBadge}
               activePath={activePath}
               doneTicks={doneTicks}
+              highlight={highlight}
             />
           )}
         </div>

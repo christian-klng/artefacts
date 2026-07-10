@@ -64,4 +64,26 @@ body {
   .file-editing-dot {
     animation: fileEditingPulse 1200ms ease-in-out infinite;
   }
+
+  /* The read-only code editor flashes the exact spot a targeted edit just
+     changed (see components/editor-flash.ts). Yellow is --color-warning
+     (#ffd166); the band fades over ~1s, then the decoration is removed. */
+  @keyframes editFlash {
+    from {
+      background-color: rgba(255, 209, 102, 0.55);
+    }
+    to {
+      background-color: rgba(255, 209, 102, 0);
+    }
+  }
+  .cm-edit-flash {
+    animation: editFlash 1000ms ease-out forwards;
+  }
+}
+
+/* Base tint set outside the motion query so that with reduced motion the edited
+   spot still reads as highlighted (held, no fade) until it's cleared ~1s later. */
+.cm-edit-flash {
+  background-color: rgba(255, 209, 102, 0.5);
+  border-radius: 2px;
 }

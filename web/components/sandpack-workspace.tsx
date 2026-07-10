@@ -1,14 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   SandpackProvider,
   SandpackLayout,
   SandpackCodeEditor,
   useSandpack,
 } from "@codesandbox/sandpack-react";
+import type { EditorView } from "@codemirror/view";
 import type { DeviceMode, ViewMode } from "./workspace-toolbar";
 import { FileTree } from "./file-tree";
+import {
+  flashExtension,
+  flashEditRange,
+  type EditHighlight,
+} from "./editor-flash";
 import { injectBadge } from "@/lib/badge";
 import { useMessages } from "@/lib/i18n/provider";
 
@@ -54,6 +60,7 @@ export function SandpackWorkspace({
   showBadge = true,
   activePath = null,
   doneTicks = {},
+  highlight = null,
 }: {
   files: Record<string, string>;
   assets: Record<string, AssetMeta>;
@@ -70,6 +77,9 @@ export function SandpackWorkspace({
   // (yellow) and a per-path completion counter (green flash). See file-tree.tsx.
   activePath?: string | null;
   doneTicks?: Record<string, number>;
+  // A just-changed spot to scroll to and flash yellow in the code editor. Bumps
+  // its `nonce` each edit so a repeated change to the same range re-fires.
+  highlight?: EditHighlight | null;
   // When set, the preview is served from the project's own origin instead of
   // an inline srcDoc (enables real DB/auth). Undefined → srcDoc fallback.
   previewUrl?: string;
@@ -179,7 +189,12 @@ export function SandpackWorkspace({
             doneTicks={doneTicks}
           />
         </div>
-        <CodeArea files={files} assets={assets} projectId={projectId} />
+        <CodeArea
+          files={files}
+          assets={assets}
+          projectId={projectId}
+          highlight={highlight}
+        />
       </SandpackLayout>
     </SandpackProvider>
   );
@@ -204,10 +219,12 @@ function CodeArea({
   files,
   assets,
   projectId,
+  highlight,
 }: {
   files: Record<string, string>;
   assets: Record<string, AssetMeta>;
   projectId: string;
+  highlight: EditHighlight | null;
 }) {
   const { sandpack } = useSandpack();
   const active = sandpack.activeFile;
@@ -248,11 +265,61 @@ function CodeArea({
       />
     );
   }
+  return <CodeEditorPane highlight={highlight} />;
+}
+
+// Minimal shape of SandpackCodeEditor's ref (its CodeEditorRef/CodeMirrorRef is
+// not re-exported from the package root). Structurally identical, so it types
+// the ref without reaching into the package's dist path.
+type SandpackEditorHandle = { getCodemirror: () => EditorView | undefined };
+
+// The read-only code editor, plus the "scroll to the edited spot + flash it
+// yellow" behavior. Split out from CodeArea so its hooks never sit behind the
+// early image/font returns above. Streaming NOT via the files prop: a files-prop
+// change resets Sandpack (active file snaps back to /index.html, scroll lost),
+// so we drive the CodeMirror EditorView directly (ref + `extensions`).
+function CodeEditorPane({ highlight }: { highlight: EditHighlight | null }) {
+  const { sandpack } = useSandpack();
+  const active = sandpack.activeFile;
+  const code = sandpack.files[active]?.code ?? "";
+  const editorRef = useRef<SandpackEditorHandle>(null);
+  const pendingRef = useRef<EditHighlight | null>(null);
+  const cancelRef = useRef<() => void>(() => {});
+
+  // A new highlight arrived: remember it and switch to its file if needed. The
+  // actual flash waits for that file's content to land in the editor (below),
+  // because openFile + Sandpack's own doc update happen across a re-render.
+  useEffect(() => {
+    if (!highlight) return;
+    pendingRef.current = highlight;
+    if (highlight.path !== sandpack.activeFile) sandpack.openFile(highlight.path);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlight?.nonce]);
+
+  // Once the target file is active AND its post-edit content is in the editor
+  // (guarded by doc length), scroll to the change and flash it. Sandpack's inner
+  // CodeMirror is a child, so its doc-replace effect runs before this parent
+  // effect — the content is ready here.
+  useEffect(() => {
+    const pending = pendingRef.current;
+    if (!pending || active !== pending.path) return;
+    const view = editorRef.current?.getCodemirror();
+    if (!view || view.state.doc.length < pending.to) return;
+    pendingRef.current = null;
+    cancelRef.current();
+    cancelRef.current = flashEditRange(view, pending);
+  }, [active, code]);
+
+  // Clear a pending flash-clear timer on unmount.
+  useEffect(() => () => cancelRef.current(), []);
+
   return (
     <SandpackCodeEditor
+      ref={editorRef}
       readOnly
       showTabs={false}
       showLineNumbers
+      extensions={flashExtension}
       style={{ height: "100%", flex: 1 }}
     />
   );
