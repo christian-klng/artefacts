@@ -22,8 +22,23 @@ export async function POST(request: Request) {
 
   // Ownership check before touching anything.
   await getOwnedProject(projectId, session.user.id);
-  // Restores the WHOLE app (files + DB + end-user accounts + attachments +
-  // settings). Returns { files, assets, internal } for the workspace to re-render.
-  const result = await restoreBackup(projectId, backupId);
-  return Response.json(result);
+
+  // Restore mutates several stores in sequence and is NOT one transaction, so a
+  // mid-way failure (insufficient DB privileges, non-replayable app DDL, a data
+  // type the dump can't round-trip, an oversized blob) throws. Surface the real
+  // reason instead of a bare 500 — this is an owner-gated builder route, so the
+  // message is safe to return, and the server log keeps the full stack.
+  try {
+    // Restores the WHOLE app (files + DB + end-user accounts + attachments +
+    // settings). Returns { files, assets, internal } for the workspace to re-render.
+    const result = await restoreBackup(projectId, backupId);
+    return Response.json(result);
+  } catch (e) {
+    console.error(
+      `[restore] project=${projectId} backup=${backupId} failed:`,
+      e,
+    );
+    const message = e instanceof Error ? e.message : String(e);
+    return Response.json({ error: message }, { status: 500 });
+  }
 }

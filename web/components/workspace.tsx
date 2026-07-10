@@ -646,7 +646,15 @@ export function Workspace({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ projectId, backupId }),
         });
-        if (!res.ok) throw new Error(`Restore failed (${res.status})`);
+        if (!res.ok) {
+          // The route returns the real failure reason as { error } — surface it
+          // instead of a bare status so a failed restore is diagnosable.
+          const detail = await res
+            .json()
+            .then((d: { error?: string }) => d?.error)
+            .catch(() => null);
+          throw new Error(detail || `Restore failed (${res.status})`);
+        }
         const data = (await res.json()) as {
           files: Record<string, string>;
           assets: Record<string, AssetMeta>;
@@ -664,10 +672,15 @@ export function Workspace({
         setHasDatabase(data.databaseEnabled);
         setDbRefreshKey((k) => k + 1);
         refreshAttachments();
-      } catch {
-        appendMessage("assistant", m.workspace.restoreFailed, {
-          kind: "error",
-        });
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : "";
+        appendMessage(
+          "assistant",
+          detail
+            ? `${m.workspace.restoreFailed} ${detail}`
+            : m.workspace.restoreFailed,
+          { kind: "error" },
+        );
       } finally {
         setRestoring(false);
       }
