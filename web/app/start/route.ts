@@ -28,14 +28,6 @@ const COOKIE_OPTS = {
   path: "/",
 } as const;
 
-/** A short, human-friendly project name derived from the prompt. */
-function deriveName(prompt: string): string {
-  const firstLine = prompt.split("\n")[0]?.trim() ?? "";
-  const base = (firstLine || prompt.trim()).replace(/\s+/g, " ");
-  if (!base) return "Neue App";
-  return base.length > 40 ? `${base.slice(0, 40).trimEnd()}…` : base;
-}
-
 export async function GET(request: NextRequest) {
   const session = await auth();
   const url = request.nextUrl;
@@ -59,9 +51,14 @@ export async function GET(request: NextRequest) {
     return res;
   }
 
-  // Authenticated with a prompt: spin up a fresh app and auto-run it.
+  // Authenticated with a prompt: spin up a fresh app and auto-run it. We leave
+  // the app on its default "Untitled app" name (no prompt-derived name) so the
+  // auto-naming from /index.html's <title> applies on the first build — the
+  // prompt sentence as a name shadowed the title and produced long, unwieldy
+  // publish slugs (slugify(name)); the concise concept <title> is what we want
+  // to drive both the project name AND the publish URL.
   if (prompt) {
-    const project = await createProject(session.user.id, deriveName(prompt));
+    const project = await createProject(session.user.id);
     const res = NextResponse.redirect(
       new URL(`/app/${project.id}?run=1`, origin),
     );

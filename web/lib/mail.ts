@@ -26,6 +26,14 @@ async function buildTransport(): Promise<Transporter> {
     // true for port 465 (implicit TLS), false for 587 (STARTTLS).
     secure: (await settingString("SMTP_SECURE", "")) === "true",
     auth: { user, pass },
+    // Fail fast instead of hanging on a slow/unreachable/misconfigured SMTP
+    // server. nodemailer's defaults are ~2 min for connect — long enough to
+    // silently stall a request that awaits a send (see the signup flow). A
+    // fresh transport is built per send (no pooling), so the first send after a
+    // deploy pays the full cold connect; keep it bounded.
+    connectionTimeout: 5000,
+    greetingTimeout: 5000,
+    socketTimeout: 10000,
   });
 }
 

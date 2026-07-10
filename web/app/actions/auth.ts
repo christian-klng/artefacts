@@ -87,19 +87,27 @@ export async function signup(
   const passwordHash = await bcrypt.hash(password, 10);
   await db.insert(users).values({ name, email, passwordHash });
 
-  // Fire-and-forget: a failed welcome mail must not block signup.
-  try {
-    const { subject, html } = await welcomeEmail(
-      {
-        name: name || (locale === "de" ? "an Bord" : "aboard"),
-        appUrl: `${appBaseUrl()}/app`,
-      },
-      locale,
-    );
-    await sendMail({ to: email, subject, html });
-  } catch (error) {
-    console.error("Failed to send welcome email:", error);
-  }
+  // Truly fire-and-forget: composing + sending the welcome mail must never
+  // block — let alone delay — the signup→signIn→redirect flow. Awaiting the
+  // send inline (as before) meant a slow/unreachable SMTP server stalled the
+  // whole request until nodemailer's connection timeout, stranding the user on
+  // the form with no feedback (the try/catch only guards a *thrown* error, not
+  // latency). We deliberately do NOT await this promise; on our long-lived Node
+  // server it runs to completion after the redirect response is sent.
+  void (async () => {
+    try {
+      const { subject, html } = await welcomeEmail(
+        {
+          name: name || (locale === "de" ? "an Bord" : "aboard"),
+          appUrl: `${appBaseUrl()}/app`,
+        },
+        locale,
+      );
+      await sendMail({ to: email, subject, html });
+    } catch (error) {
+      console.error("Failed to send welcome email:", error);
+    }
+  })();
 
   await signIn("credentials", {
     email,

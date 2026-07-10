@@ -114,8 +114,8 @@ export const isDefaultProjectName = (name: string): boolean =>
 
 /**
  * Extracts a project name from an HTML document's <title>: decodes the few
- * common entities, collapses whitespace, and truncates to 60 chars (mirrors
- * deriveName in app/start/route.ts). Returns null when there's no usable title.
+ * common entities, collapses whitespace, and truncates to 60 chars. Returns
+ * null when there's no usable title.
  */
 export function extractHtmlTitle(html: string): string | null {
   const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
