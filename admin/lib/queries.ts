@@ -5,6 +5,7 @@ import {
   appSettings,
   coupons,
   couponRedemptions,
+  files,
   mailTemplates,
   projects,
   userCredits,
@@ -91,11 +92,12 @@ export type AppRow = {
   updatedAt: Date;
   ownerEmail: string | null;
   ownerName: string | null;
+  hasThumbnail: boolean;
 };
 
 /** All projects with their owner, newest activity first. */
 export async function listApps(): Promise<AppRow[]> {
-  return db
+  const rows = await db
     .select({
       id: projects.id,
       name: projects.name,
@@ -106,10 +108,20 @@ export async function listApps(): Promise<AppRow[]> {
       updatedAt: projects.updatedAt,
       ownerEmail: users.email,
       ownerName: users.name,
+      thumbnailId: files.id,
     })
     .from(projects)
     .leftJoin(users, eq(projects.userId, users.id))
+    .leftJoin(
+      files,
+      sql`${files.projectId} = ${projects.id} and ${files.path} = '/assets/og-thumbnail.png'`,
+    )
     .orderBy(desc(projects.updatedAt));
+
+  return rows.map(({ thumbnailId, ...app }) => ({
+    ...app,
+    hasThumbnail: thumbnailId !== null,
+  }));
 }
 
 export type Totals = {
