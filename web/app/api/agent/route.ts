@@ -38,6 +38,7 @@ import { composeDesignMd, composeFallbackDesignMd } from "@/lib/agent/design";
 import { lintDensity, type DensityFinding } from "@/lib/density-lint";
 import { listAttachments } from "@/lib/attachments";
 import { runAgent } from "@/lib/agent/run";
+import { partialStringValue } from "@/lib/agent/stream-json";
 import { modelForTask } from "@/lib/cortecs/config";
 import {
   ensureCredit,
@@ -189,6 +190,12 @@ export async function POST(request: Request) {
       // committed block isn't sent twice.
       let streamedTextChars = 0;
       // The tool_use block currently streaming its input, if any.
+      // Live "watch the file being typed" streaming of a write_file's content
+      // (see components/sandpack-workspace.tsx): a steady ~10 updates/s, not one
+      // per model token; a hard buffer cap keeps a pathologically large file from
+      // streaming (it still commits normally via file_changed).
+      const STREAM_THROTTLE_MS = 90;
+      const MAX_STREAM_BUF = 512 * 1024;
       let liveTool: {
         name: string;
         path?: string;
@@ -202,6 +209,13 @@ export async function POST(request: Request) {
         // "input" window (how long the model spent generating the arguments),
         // the dominant cost behind a slow-looking tool row.
         startedAt: number;
+        // write_file content streaming: accumulate the raw input JSON, extract
+        // the growing `content` value, and emit only the newly-typed chars.
+        streamable: boolean;
+        buf: string;
+        contentSentLen: number;
+        streaming: boolean;
+        lastStreamAt: number;
       } | null = null;
       try {
         // First user prompt: ask the concept interview instead of building.
@@ -309,6 +323,11 @@ export async function POST(request: Request) {
                   lastSentChars: 0,
                   lastSentAt: startedAt,
                   startedAt,
+                  streamable: tool === "write_file",
+                  buf: "",
+                  contentSentLen: 0,
+                  streaming: false,
+                  lastStreamAt: startedAt,
                 };
                 send({ type: "tool_start", tool });
               }
@@ -348,9 +367,51 @@ export async function POST(request: Request) {
                     chars: liveTool.chars,
                   });
                 }
+                // Live content stream for write_file: rebuild the growing file
+                // text from the raw input JSON and emit just the newly-typed
+                // chars, so the code view types it out. Skips internal files (they
+                // never reach the tree) and over-large buffers (commit still works).
+                if (liveTool.streamable && liveTool.buf.length <= MAX_STREAM_BUF) {
+                  liveTool.buf += ev.delta.partial_json;
+                  if (
+                    liveTool.path !== undefined &&
+                    !isInternalVfsPath(liveTool.path) &&
+                    (!liveTool.streaming ||
+                      now - liveTool.lastStreamAt >= STREAM_THROTTLE_MS)
+                  ) {
+                    const content = partialStringValue(liveTool.buf, "content");
+                    if (content !== null && content.length > liveTool.contentSentLen) {
+                      send({
+                        type: "file_stream",
+                        path: liveTool.path,
+                        delta: content.slice(liveTool.contentSentLen),
+                        first: !liveTool.streaming,
+                      });
+                      liveTool.contentSentLen = content.length;
+                      liveTool.streaming = true;
+                      liveTool.lastStreamAt = now;
+                    }
+                  }
+                }
               }
             } else if (ev.type === "content_block_stop") {
               if (liveTool) {
+                // Flush any streamed tail the throttle held back, so the live
+                // view shows the whole file a beat before the commit rasts in.
+                if (liveTool.streaming && liveTool.path) {
+                  const content = partialStringValue(liveTool.buf, "content");
+                  if (
+                    content !== null &&
+                    content.length > liveTool.contentSentLen
+                  ) {
+                    send({
+                      type: "file_stream",
+                      path: liveTool.path,
+                      delta: content.slice(liveTool.contentSentLen),
+                      first: false,
+                    });
+                  }
+                }
                 // Time the model spent generating this tool's arguments — the
                 // "input" window. Pairs with the tool's own "exec" line (see
                 // timed-tool.ts): input ≫ exec means the model, not the tool,

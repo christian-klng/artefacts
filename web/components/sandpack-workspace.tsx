@@ -7,7 +7,7 @@ import {
   SandpackCodeEditor,
   useSandpack,
 } from "@codesandbox/sandpack-react";
-import type { EditorView } from "@codemirror/view";
+import { EditorView } from "@codemirror/view";
 import type { DeviceMode, ViewMode } from "./workspace-toolbar";
 import { FileTree } from "./file-tree";
 import {
@@ -61,6 +61,7 @@ export function SandpackWorkspace({
   activePath = null,
   doneTicks = {},
   highlight = null,
+  stream = null,
 }: {
   files: Record<string, string>;
   assets: Record<string, AssetMeta>;
@@ -80,6 +81,9 @@ export function SandpackWorkspace({
   // A just-changed spot to scroll to and flash yellow in the code editor. Bumps
   // its `nonce` each edit so a repeated change to the same range re-fires.
   highlight?: EditHighlight | null;
+  // Live-typed content of the write_file currently streaming (path + content so
+  // far); shown in the editor as it arrives. Null when nothing is streaming.
+  stream?: { path: string; content: string } | null;
   // When set, the preview is served from the project's own origin instead of
   // an inline srcDoc (enables real DB/auth). Undefined → srcDoc fallback.
   previewUrl?: string;
@@ -194,6 +198,7 @@ export function SandpackWorkspace({
           assets={assets}
           projectId={projectId}
           highlight={highlight}
+          stream={stream}
         />
       </SandpackLayout>
     </SandpackProvider>
@@ -220,11 +225,13 @@ function CodeArea({
   assets,
   projectId,
   highlight,
+  stream,
 }: {
   files: Record<string, string>;
   assets: Record<string, AssetMeta>;
   projectId: string;
   highlight: EditHighlight | null;
+  stream: { path: string; content: string } | null;
 }) {
   const { sandpack } = useSandpack();
   const active = sandpack.activeFile;
@@ -265,7 +272,7 @@ function CodeArea({
       />
     );
   }
-  return <CodeEditorPane highlight={highlight} />;
+  return <CodeEditorPane highlight={highlight} stream={stream} />;
 }
 
 // Minimal shape of SandpackCodeEditor's ref (its CodeEditorRef/CodeMirrorRef is
@@ -278,13 +285,21 @@ type SandpackEditorHandle = { getCodemirror: () => EditorView | undefined };
 // early image/font returns above. Streaming NOT via the files prop: a files-prop
 // change resets Sandpack (active file snaps back to /index.html, scroll lost),
 // so we drive the CodeMirror EditorView directly (ref + `extensions`).
-function CodeEditorPane({ highlight }: { highlight: EditHighlight | null }) {
+function CodeEditorPane({
+  highlight,
+  stream,
+}: {
+  highlight: EditHighlight | null;
+  stream: { path: string; content: string } | null;
+}) {
   const { sandpack } = useSandpack();
   const active = sandpack.activeFile;
   const code = sandpack.files[active]?.code ?? "";
   const editorRef = useRef<SandpackEditorHandle>(null);
   const pendingRef = useRef<EditHighlight | null>(null);
   const cancelRef = useRef<() => void>(() => {});
+  const streamPathRef = useRef<string | null>(null);
+  const appliedLenRef = useRef(0);
 
   // A new highlight arrived: remember it and switch to its file if needed. The
   // actual flash waits for that file's content to land in the editor (below),
@@ -312,6 +327,42 @@ function CodeEditorPane({ highlight }: { highlight: EditHighlight | null }) {
 
   // Clear a pending flash-clear timer on unmount.
   useEffect(() => () => cancelRef.current(), []);
+
+  // Live-type a streaming write_file into the editor by writing DIRECTLY to
+  // CodeMirror (not via Sandpack's files, which would reset the view each tick).
+  // First creates + activates the file; once it's the active one, the first
+  // write replaces the doc (handles a rewrite of an existing file) and later
+  // writes append only the new chars, following the caret to the end. On commit
+  // the committed content flows in via Sandpack and supersedes this.
+  useEffect(() => {
+    if (!stream) {
+      streamPathRef.current = null;
+      appliedLenRef.current = 0;
+      return;
+    }
+    if (streamPathRef.current !== stream.path) {
+      streamPathRef.current = stream.path;
+      appliedLenRef.current = 0;
+      if (!(stream.path in sandpack.files)) sandpack.updateFile(stream.path, "");
+      sandpack.openFile(stream.path);
+      return; // wait until this file is the active one (next run)
+    }
+    if (active !== stream.path) return;
+    if (stream.content.length <= appliedLenRef.current) return;
+    const view = editorRef.current?.getCodemirror();
+    if (!view) return;
+    const applied = appliedLenRef.current;
+    const changes =
+      applied === 0
+        ? { from: 0, to: view.state.doc.length, insert: stream.content }
+        : { from: view.state.doc.length, insert: stream.content.slice(applied) };
+    appliedLenRef.current = stream.content.length;
+    view.dispatch({
+      changes,
+      effects: EditorView.scrollIntoView(stream.content.length, { y: "end" }),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stream, active]);
 
   return (
     <SandpackCodeEditor

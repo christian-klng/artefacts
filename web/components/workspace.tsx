@@ -66,6 +66,9 @@ type AgentEvent =
   | { type: "tool_progress"; tool: string; path?: string; chars: number }
   | { type: "tool_use"; tool: string; path?: string }
   | { type: "file_changed"; path: string; content: string }
+  // Live write_file content: `delta` appends to the in-progress buffer for
+  // `path` (or starts it when `first`), so the code view types the file out.
+  | { type: "file_stream"; path: string; delta: string; first: boolean }
   | { type: "asset_changed"; path: string; asset: AssetMeta }
   | { type: "file_deleted"; path: string }
   | {
@@ -189,6 +192,13 @@ export function Workspace({
   const [highlight, setHighlight] = useState<EditHighlight | null>(null);
   const filesRef = useRef(files);
   const editNonce = useRef(0);
+  // The write_file whose content is streaming in live (accumulated from
+  // file_stream deltas), fed to the editor to type the file out. Kept separate
+  // from `files` so a stream never triggers Sandpack's file-tree/scroll reset;
+  // cleared when the write commits or the turn ends.
+  const [stream, setStream] = useState<{ path: string; content: string } | null>(
+    null,
+  );
   // Auto-view-switch bookkeeping (maybeAutoSwitchToCode / …ReturnToPreview below).
   // `viewRef`/`hasIndexRef` mirror state so the SSE handler reads fresh values
   // without adding churny deps; the two flags are reset at the start of each turn.
@@ -391,11 +401,23 @@ export function Workspace({
               nonce: (editNonce.current += 1),
             });
           }
+          // The committed content supersedes any live stream for this file.
+          setStream((s) => (s && s.path === event.path ? null : s));
           setFiles((prev) => ({ ...prev, [event.path]: event.content }));
           markFileDone(event.path);
           maybeAutoSwitchToCode();
           break;
         }
+        case "file_stream":
+          // Append (or start, on `first`) the live-typed content for this file.
+          setStream((prev) =>
+            event.first || !prev || prev.path !== event.path
+              ? { path: event.path, content: event.delta }
+              : { path: event.path, content: prev.content + event.delta },
+          );
+          setActivePath(event.path);
+          maybeAutoSwitchToCode();
+          break;
         case "asset_changed":
           setAssets((prev) => ({ ...prev, [event.path]: event.asset }));
           markFileDone(event.path);
@@ -488,6 +510,7 @@ export function Workspace({
           // Stop any lingering yellow highlight; leave the user in the code view
           // so they can see how far the build got.
           setActivePath(null);
+          setStream(null);
           break;
         case "done":
           setInterviewLoading(false);
@@ -497,6 +520,7 @@ export function Workspace({
             prev.map((m) => (m.pending ? { ...m, pending: false } : m)),
           );
           setActivePath(null);
+          setStream(null);
           maybeAutoReturnToPreview();
           break;
       }
@@ -694,6 +718,7 @@ export function Workspace({
         setActivePath(null);
         setDoneTicks({});
         setHighlight(null);
+        setStream(null);
         // A full-backup restore can also change the database + attachments, so
         // refresh the Daten/Dateien tabs to reflect the restored state.
         setHasDatabase(data.databaseEnabled);
@@ -767,6 +792,7 @@ export function Workspace({
       didAutoSwitchRef.current = false;
       setActivePath(null);
       setHighlight(null);
+      setStream(null);
 
       try {
         const res = await fetch("/api/agent", {
@@ -934,6 +960,7 @@ export function Workspace({
               activePath={activePath}
               doneTicks={doneTicks}
               highlight={highlight}
+              stream={stream}
             />
           )}
         </div>
