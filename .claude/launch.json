@@ -39,14 +39,6 @@
         "3002"
       ],
       "port": 3002
-    },
-    {
-      "name": "web-prod",
-      "runtimeExecutable": "sh",
-      "runtimeArgs": [
-        "/private/tmp/claude-501/-Users-christianklang-Documents-GitHub-artefacts/cb0641dd-64e8-4141-862a-75dfe063e440/scratchpad/run-prod.sh"
-      ],
-      "port": 3000
     }
   ]
 }
