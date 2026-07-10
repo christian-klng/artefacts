@@ -30,6 +30,19 @@ export const projects = pgTable("project", {
   updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
 });
 
+// The builder stores generated app assets, including the current OpenGraph
+// thumbnail, in the project's virtual filesystem. The admin panel only reads
+// the thumbnail row; its contents are served by an authenticated route.
+export const files = pgTable("file", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  projectId: uuid("projectId").notNull(),
+  path: text("path").notNull(),
+  content: text("content").notNull().default(""),
+  encoding: text("encoding").notNull().default("utf8"),
+  mimeType: text("mimeType"),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
+});
+
 export const userCredits = pgTable("user_credit", {
   userId: uuid("userId").notNull().primaryKey(),
   balanceEur: numeric("balance_eur", { precision: 12, scale: 6 }).notNull(),
