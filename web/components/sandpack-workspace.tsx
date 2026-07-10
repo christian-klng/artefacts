@@ -179,38 +179,74 @@ export function SandpackWorkspace({
             doneTicks={doneTicks}
           />
         </div>
-        <CodeArea assets={assets} projectId={projectId} />
+        <CodeArea files={files} assets={assets} projectId={projectId} />
       </SandpackLayout>
     </SandpackProvider>
   );
 }
 
-function isImageAsset(path: string, meta?: AssetMeta): boolean {
+function isRasterImageAsset(path: string, meta?: AssetMeta): boolean {
   if (meta?.mimeType?.startsWith("image/")) return true;
-  // SVGs are stored as text (→ `files`), so `assets` only holds raster images,
-  // but fall back to the extension when the stored mimeType is missing.
   return /\.(png|jpe?g|gif|webp|avif|bmp|ico)$/i.test(path);
 }
 
-// The editor pane. Sandpack's read-only code editor can't render images, so for
-// a binary IMAGE asset we swap in a real <img> (bytes fetched on demand from the
-// owner-scoped /api/projects/asset route) — that's how the user sees the
-// auto-generated OG thumbnail, embedded logos and stock photos. Text files and
-// non-image binaries (PDF/fonts) keep the code editor (which shows the binary
-// placeholder text for the latter). Must live inside SandpackProvider for
-// useSandpack/SandpackCodeEditor to work.
+// The editor pane. Sandpack's read-only code editor can't render images, so we
+// swap in a real <img> (bytes fetched on demand from the owner-scoped
+// /api/projects/asset route) for image content — that's how the user sees the
+// auto-generated OG thumbnail, embedded logos and stock photos. Two cases:
+//   - binary raster images live in `assets` (base64) and carry a content hash;
+//   - SVGs are stored as TEXT (in `files`), so we render them from their content
+//     (the route serves them as image/svg+xml; <img src> never runs SVG scripts).
+// Text files and non-image binaries (PDF/fonts) keep the code editor (which shows
+// the binary placeholder text for the latter). Must live inside SandpackProvider
+// for useSandpack/SandpackCodeEditor to work.
 function CodeArea({
+  files,
   assets,
   projectId,
 }: {
+  files: Record<string, string>;
   assets: Record<string, AssetMeta>;
   projectId: string;
 }) {
   const { sandpack } = useSandpack();
   const active = sandpack.activeFile;
   const meta = assets[active];
-  if (meta && isImageAsset(active, meta)) {
-    return <AssetImageView projectId={projectId} path={active} meta={meta} />;
+  if (meta && isRasterImageAsset(active, meta)) {
+    return (
+      <AssetImageView
+        projectId={projectId}
+        path={active}
+        version={meta.hash}
+        mimeType={meta.mimeType ?? "image"}
+        size={meta.size}
+      />
+    );
+  }
+  const svg = files[active];
+  if (svg !== undefined && /\.svg$/i.test(active)) {
+    return (
+      <AssetImageView
+        projectId={projectId}
+        path={active}
+        // No stored hash for text files — a cheap content hash busts the cache
+        // when the SVG changes.
+        version={String(hashContent(svg))}
+        mimeType="image/svg+xml"
+        size={new TextEncoder().encode(svg).length}
+      />
+    );
+  }
+  if (meta && isFontAsset(active, meta)) {
+    return (
+      <FontSpecimenView
+        projectId={projectId}
+        path={active}
+        version={meta.hash}
+        mimeType={meta.mimeType ?? "font"}
+        size={meta.size}
+      />
+    );
   }
   return (
     <SandpackCodeEditor
@@ -222,6 +258,18 @@ function CodeArea({
   );
 }
 
+function isFontAsset(path: string, meta?: AssetMeta): boolean {
+  if (meta?.mimeType && /^font\//i.test(meta.mimeType)) return true;
+  return /\.(woff2?|ttf|otf)$/i.test(path);
+}
+
+function assetUrl(projectId: string, path: string, version: string): string {
+  return (
+    `/api/projects/asset?projectId=${encodeURIComponent(projectId)}` +
+    `&path=${encodeURIComponent(path)}&v=${encodeURIComponent(version)}`
+  );
+}
+
 // A small light/dark checkerboard so transparent images (logos) read clearly.
 const CHECKERBOARD =
   "repeating-conic-gradient(rgba(0,0,0,0.06) 0% 25%, transparent 0% 50%) 50% / 20px 20px";
@@ -229,17 +277,17 @@ const CHECKERBOARD =
 function AssetImageView({
   projectId,
   path,
-  meta,
+  version,
+  mimeType,
+  size,
 }: {
   projectId: string;
   path: string;
-  meta: AssetMeta;
+  version: string;
+  mimeType: string;
+  size: number;
 }) {
   const name = path.split("/").pop() ?? path;
-  // Hash in the query so an updated asset (new bytes → new hash) busts the cache.
-  const src =
-    `/api/projects/asset?projectId=${encodeURIComponent(projectId)}` +
-    `&path=${encodeURIComponent(path)}&v=${encodeURIComponent(meta.hash)}`;
   return (
     <div className="flex h-full flex-1 flex-col bg-neutral-50 dark:bg-neutral-950">
       <div
@@ -248,13 +296,86 @@ function AssetImageView({
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={src}
+          src={assetUrl(projectId, path, version)}
           alt={name}
           className="max-h-full max-w-full rounded border border-neutral-200 object-contain shadow-sm dark:border-neutral-800"
         />
       </div>
       <div className="shrink-0 border-t border-neutral-200 px-4 py-2 text-xs text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
-        {name} · {meta.mimeType ?? "image"} · {formatSize(meta.size)}
+        {name} · {mimeType} · {formatSize(size)}
+      </div>
+    </div>
+  );
+}
+
+// Sample text for the font preview. A German pangram (the builder's audience) +
+// the Latin alphabet, digits and punctuation, rendered in the actual VFS font.
+const FONT_PANGRAM =
+  "Zwölf Boxkämpfer jagen Viktor quer über den großen Sylter Deich.";
+
+// A read-only viewer can't "show" a font file, so we register it as an @font-face
+// (loaded from the same owner-scoped asset route) and render a specimen in it —
+// that's how the user sees what an embedded/added webfont actually looks like.
+function FontSpecimenView({
+  projectId,
+  path,
+  version,
+  mimeType,
+  size,
+}: {
+  projectId: string;
+  path: string;
+  version: string;
+  mimeType: string;
+  size: number;
+}) {
+  const name = path.split("/").pop() ?? path;
+  const src = assetUrl(projectId, path, version);
+  // Unique + stable per file version, so a changed font re-registers cleanly.
+  const family = `vfsfont-${version.replace(/[^a-z0-9]/gi, "")}`;
+  const format = /\.woff2$/i.test(path)
+    ? "woff2"
+    : /\.woff$/i.test(path)
+      ? "woff"
+      : /\.ttf$/i.test(path)
+        ? "truetype"
+        : /\.otf$/i.test(path)
+          ? "opentype"
+          : null;
+  const css =
+    `@font-face{font-family:'${family}';` +
+    `src:url('${src}')${format ? ` format('${format}')` : ""};font-display:swap;}`;
+  const fontFamily = `'${family}', system-ui, sans-serif`;
+  return (
+    <div className="flex h-full flex-1 flex-col overflow-auto bg-white dark:bg-neutral-950">
+      <style>{css}</style>
+      <div className="flex-1 space-y-5 p-8" style={{ fontFamily }}>
+        <p className="text-4xl leading-tight text-neutral-900 dark:text-neutral-100">
+          {FONT_PANGRAM}
+        </p>
+        <p className="break-all text-2xl text-neutral-800 dark:text-neutral-200">
+          ABCDEFGHIJKLMNOPQRSTUVWXYZ
+        </p>
+        <p className="break-all text-2xl text-neutral-800 dark:text-neutral-200">
+          abcdefghijklmnopqrstuvwxyz
+        </p>
+        <p className="break-all text-xl text-neutral-700 dark:text-neutral-300">
+          0123456789 &amp; .,:;!?&ldquo;&rdquo;()[]{"{}"}#$%@*/—
+        </p>
+        <div className="space-y-1 pt-2">
+          {[14, 18, 24, 32].map((px) => (
+            <p
+              key={px}
+              style={{ fontSize: px }}
+              className="text-neutral-700 dark:text-neutral-300"
+            >
+              {px}px — The quick brown fox jumps over the lazy dog.
+            </p>
+          ))}
+        </div>
+      </div>
+      <div className="shrink-0 border-t border-neutral-200 px-4 py-2 text-xs text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
+        {name} · {mimeType} · {formatSize(size)}
       </div>
     </div>
   );

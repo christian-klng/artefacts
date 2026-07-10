@@ -10,6 +10,11 @@ import {
   editFile,
   deleteFile,
 } from "@/lib/projects";
+import {
+  lintDensity,
+  formatDensityNote,
+  type DensityRule,
+} from "@/lib/density-lint";
 
 export type VfsAssetMeta = { mimeType: string | null; size: number; hash: string };
 
@@ -29,6 +34,47 @@ function err(text: string) {
   return { content: [{ type: "text" as const, text }], isError: true };
 }
 
+// Advisory density readout appended to /index.html writes: a measured
+// violation arriving in the tool result gets fixed far more reliably than a
+// standing prompt rule (same effect that makes agents self-correct on
+// compiler errors). Only rules the write NEWLY introduced (vs the pre-write
+// content) are reported, so rewriting an already-dense page for an unrelated
+// fix doesn't nag — the per-turn route injection covers legacy density with
+// its own bounded mandate. `reported` tracks what this TURN already flagged:
+// those rules keep resurfacing as "still unresolved" while present, so a
+// failed fix attempt doesn't read as success. A lint error must never break
+// a write.
+function densityNote(
+  reported: Set<DensityRule>,
+  content: string,
+  previous: string | null,
+): string {
+  try {
+    const findings = lintDensity(content);
+    const baseline =
+      previous != null
+        ? new Set(lintDensity(previous).map((f) => f.rule))
+        : new Set<DensityRule>();
+    const fresh = findings.filter(
+      (f) => !baseline.has(f.rule) && !reported.has(f.rule),
+    );
+    const open = findings.filter((f) => reported.has(f.rule));
+    for (const f of fresh) reported.add(f.rule);
+    const parts: string[] = [];
+    if (fresh.length > 0) parts.push(formatDensityNote(fresh));
+    if (open.length > 0) {
+      parts.push(
+        "Still unresolved from the density check earlier in this turn:\n" +
+          open.map((f) => `- ${f.measured}`).join("\n") +
+          "\n(If a listed item is deliberate — app UI, dense design DNA, or user-requested — ignore it and move on.)",
+      );
+    }
+    return parts.length > 0 ? `\n\n${parts.join("\n\n")}` : "";
+  } catch {
+    return "";
+  }
+}
+
 /**
  * Builds an in-process MCP server exposing a virtual filesystem backed by the
  * project's rows in Postgres. The agent gets file tools that look like Claude
@@ -39,6 +85,8 @@ export function buildVfsServer(
   projectId: string,
   onEvent: (event: VfsEvent) => void,
 ) {
+  // Density rules already flagged during THIS turn (see densityNote).
+  const reportedDensity = new Set<DensityRule>();
   return createSdkMcpServer({
     name: "vfs",
     version: "1.0.0",
@@ -78,9 +126,17 @@ export function buildVfsServer(
         "Create or overwrite a file with the given contents.",
         { path: z.string(), content: z.string() },
         async ({ path, content }) => {
+          // Pre-write baseline so a full rewrite of an already-dense page
+          // doesn't re-flag pre-existing density (see densityNote).
+          const previous =
+            path === "/index.html" ? await readFile(projectId, path) : null;
           await writeFile(projectId, path, content);
           onEvent({ type: "file_changed", path, content });
-          return ok(`Wrote ${path}`);
+          const note =
+            path === "/index.html"
+              ? densityNote(reportedDensity, content, previous)
+              : "";
+          return ok(`Wrote ${path}${note}`);
         },
       ),
 
@@ -99,12 +155,13 @@ export function buildVfsServer(
           }
           const result = await editFile(projectId, path, old_string, new_string);
           if (!result.ok) return err(result.error);
-          onEvent({
-            type: "file_changed",
-            path,
-            content: (await readFile(projectId, path)) ?? "",
-          });
-          return ok(`Edited ${path}`);
+          const content = (await readFile(projectId, path)) ?? "";
+          onEvent({ type: "file_changed", path, content });
+          const note =
+            path === "/index.html"
+              ? densityNote(reportedDensity, content, raw?.content ?? null)
+              : "";
+          return ok(`Edited ${path}${note}`);
         },
       ),
 

@@ -23,6 +23,8 @@ const EXT_CONTENT_TYPE: Record<string, string> = {
   txt: "text/plain; charset=utf-8",
   woff: "font/woff",
   woff2: "font/woff2",
+  ttf: "font/ttf",
+  otf: "font/otf",
 };
 
 function ext(path: string): string {
@@ -50,23 +52,44 @@ function isExternal(ref: string): boolean {
 /**
  * Inlines references to other VFS files into the HTML so the page renders as a
  * single self-contained document — used only for the srcDoc preview fallback
- * (no APPS_DOMAIN). Every `src`/`href`/`url(...)` that resolves to a project file
- * becomes a `data:` URI of that file's content. Best-effort and regex-based; the
- * real multi-file path is the subdomain serve route.
+ * (no APPS_DOMAIN) and the OG-thumbnail render. Every `src`/`href`/`url(...)`
+ * that resolves to a project file becomes a `data:` URI of that file's content.
+ * Best-effort and regex-based; the real multi-file path is the subdomain serve
+ * route.
  */
 export async function inlineVfsAssets(
   projectId: string,
   html: string,
 ): Promise<string> {
-  const files = await listFiles(projectId);
+  return inlineFilesIntoHtml(html, await listFiles(projectId));
+}
+
+type VfsFileLike = {
+  path: string;
+  content: string;
+  encoding: string;
+  mimeType: string | null;
+};
+
+// Fresh instance per use: the pattern runs nested (page pass + inside-CSS
+// pass), and a shared global regex would clobber its own lastIndex.
+const cssUrlPattern = () => /url\(\s*(["']?)([^"')]+)\1\s*\)/gi;
+
+/** The pure inliner behind `inlineVfsAssets` (exported for tests). */
+export function inlineFilesIntoHtml(
+  html: string,
+  files: VfsFileLike[],
+): string {
   const byPath = new Map(files.map((f) => [f.path, f]));
 
-  const dataUri = (file: {
-    path: string;
-    content: string;
-    encoding: string;
-    mimeType: string | null;
-  }): string => {
+  const lookup = (ref: string): VfsFileLike | null => {
+    if (isExternal(ref)) return null;
+    const file = byPath.get(refToVfsPath(ref));
+    if (!file || file.path === "/index.html") return null;
+    return file;
+  };
+
+  const rawDataUri = (file: VfsFileLike): string => {
     const ct = contentTypeFor(file.path, file.mimeType).split(";")[0];
     const base64 =
       file.encoding === "base64"
@@ -75,11 +98,28 @@ export async function inlineVfsAssets(
     return `data:${ct};base64,${base64}`;
   };
 
+  // A text stylesheet's own url(...) refs (webfonts, background images) must
+  // be inlined BEFORE the stylesheet itself becomes a data: URI — relative
+  // URLs cannot resolve against a data: base, so an untouched /styles.css
+  // would lose its fonts/images in the srcDoc preview and the OG thumbnail.
+  // One level deep: a css referenced from within css embeds as-is.
+  const dataUri = (file: VfsFileLike): string => {
+    if (file.encoding !== "base64" && ext(file.path) === "css") {
+      const rewritten = file.content.replace(
+        cssUrlPattern(),
+        (whole, _q, ref) => {
+          const target = lookup(ref);
+          return target ? `url(${rawDataUri(target)})` : whole;
+        },
+      );
+      return `data:text/css;base64,${Buffer.from(rewritten, "utf-8").toString("base64")}`;
+    }
+    return rawDataUri(file);
+  };
+
   const resolve = (ref: string): string | null => {
-    if (isExternal(ref)) return null;
-    const file = byPath.get(refToVfsPath(ref));
-    if (!file || file.path === "/index.html") return null;
-    return dataUri(file);
+    const file = lookup(ref);
+    return file ? dataUri(file) : null;
   };
 
   // src="…" / href="…" (single or double quoted)
@@ -92,13 +132,10 @@ export async function inlineVfsAssets(
   );
 
   // url(…) inside inline CSS
-  html = html.replace(
-    /url\(\s*(["']?)([^"')]+)\1\s*\)/gi,
-    (whole, _q, ref) => {
-      const uri = resolve(ref);
-      return uri ? `url(${uri})` : whole;
-    },
-  );
+  html = html.replace(cssUrlPattern(), (whole, _q, ref) => {
+    const uri = resolve(ref);
+    return uri ? `url(${uri})` : whole;
+  });
 
   return html;
 }

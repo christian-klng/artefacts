@@ -16,6 +16,9 @@ const GLOBAL_FORBIDDEN = [
   "the same soft drop shadow on everything",
   "a three-feature-card row as the reflex page structure",
   '"Welcome to …" filler copy and emoji standing in for UI icons',
+  "the same CTA as a button in both header and hero — one primary action, placed once",
+  'pattern-filler sections without real content behind them (stats rows, invented testimonial trios, logo-soup "Trusted by" strips)',
+  "a nav item for every section — six entries where four carry the content",
 ];
 
 const PALETTE_ROLES = ["background", "surface", "primary", "accent", "text"];
@@ -63,7 +66,7 @@ export function composeDesignMd(
       ? `_(Direction chosen by the system — the user skipped the concept interview. Keep it unless the user asks for a different look.)_`
       : null,
     `## Epoch & inspiration\nDesign language: **${world.name}** — ${world.epoch}.\nDraw from: ${world.inspirations.join(", ")}. Channel the character, never copy a specific site.`,
-    `## Typography\n${fonts}\nLoad exactly these via \`add_font\` (2–4 cuts each) and inline the returned @font-face CSS. Typography carries this design's identity — no other families.`,
+    `## Typography\n${fonts}\nLoad exactly these via \`add_font\` (2–4 cuts each) and add the returned @font-face CSS to \`/styles.css\`. Typography carries this design's identity — no other families.`,
     `## Color philosophy\n${world.colorPhilosophy}\nBinding palette (define as CSS custom properties \`--color-bg\`, \`--color-surface\`, \`--color-primary\`, \`--color-accent\`, \`--color-text\` and derive the design from them; fine-tune shades only for contrast/accessibility):\n${paletteLines}`,
     ...sharedSections(world, style.mutations),
   ]
@@ -92,7 +95,7 @@ export function composeFallbackDesignMd(
     `> ${world.blurb}`,
     `_(Direction sampled by the system for this project. Keep it unless the user asks for a different look.)_`,
     `## Epoch & inspiration\n${world.epoch}.\nDraw from: ${world.inspirations.join(", ")}. Channel the character, never copy a specific site.`,
-    `## Typography\n${fonts}\nLoad exactly these via \`add_font\` (2–4 cuts each) and inline the returned @font-face CSS.`,
+    `## Typography\n${fonts}\nLoad exactly these via \`add_font\` (2–4 cuts each) and add the returned @font-face CSS to \`/styles.css\`.`,
     `## Color philosophy\n${world.colorPhilosophy}\nDerive a concrete 5-color palette from this (background, surface, primary, accent, text), define it as CSS custom properties (\`--color-bg\` …), and record the hex values here in /DESIGN.md.`,
     ...sharedSections(world, mutations),
   ].join("\n\n");

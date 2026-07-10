@@ -22,6 +22,7 @@ import {
   sampleWorldCandidates,
 } from "@/lib/design-worlds";
 import { composeDesignMd, composeFallbackDesignMd } from "@/lib/agent/design";
+import { lintDensity, type DensityFinding } from "@/lib/density-lint";
 import { listAttachments } from "@/lib/attachments";
 import { runAgent } from "@/lib/agent/run";
 import { modelForTask } from "@/lib/cortecs/config";
@@ -224,7 +225,22 @@ export async function POST(request: Request) {
         // request just wrote (interview answered/skipped, or the fallback
         // below) is already part of the prompt.
         const design = await readFile(project.id, DESIGN_PATH);
-        const prompt = withProjectContext(concept, design, history, turnPrompt);
+        // Measured density of the CURRENT page (advisory): recomputed from the
+        // live VFS every turn, so it also reaches projects whose page is
+        // already too dense and disappears by itself once the page is edited
+        // down. A lint failure must never block a turn.
+        let density: DensityFinding[] = [];
+        try {
+          const indexHtml = await readFile(project.id, "/index.html");
+          if (indexHtml) density = lintDensity(indexHtml);
+        } catch {}
+        const prompt = withProjectContext(
+          concept,
+          design,
+          history,
+          turnPrompt,
+          density,
+        );
 
         const run = await runAgent({
           projectId: project.id,
@@ -508,6 +524,7 @@ function withProjectContext(
   design: string | null,
   history: { role: string; content: string; kind?: string | null }[],
   currentPrompt: string,
+  density: DensityFinding[] = [],
 ): string {
   const prior = history
     // Interview cards persist as JSON — replay answered ones as a readable
@@ -544,6 +561,22 @@ function withProjectContext(
         `this turn must stay inside it, including its VERBOTEN list; change it ` +
         `only on an explicit redesign request.\n\n` +
         design.trim(),
+    );
+  }
+
+  // Advisory density readout — only when the page is clearly over the line
+  // (several findings at once), so a single debatable measurement (e.g. a
+  // legitimate repeated app-toolbar button) never turns into a standing nag.
+  if (density.length >= 2) {
+    sections.push(
+      `## Measured density (computed from the current /index.html)\n` +
+        density.map((f) => `- ${f.measured}`).join("\n") +
+        `\n\nA real site would have been edited tighter before shipping. When ` +
+        `this turn touches one of these areas anyway, fix it as part of the ` +
+        `work — but do NOT start an unrequested full rewrite for this alone, ` +
+        `and never cut content the user explicitly asked for. If the design ` +
+        `DNA above or the user's wishes explicitly call for this density, ` +
+        `they win — keep it and ignore this readout.`,
     );
   }
 
