@@ -392,7 +392,7 @@ export const projectBackups = pgTable(
     projectId: uuid("projectId")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
-    // 'auto' | 'daily' | 'publish' | 'manual'.
+    // 'auto' | 'daily' | 'publish' | 'manual' | 'admin' (see BackupKind).
     kind: text("kind").notNull(),
     label: text("label"),
     // Self-contained JSON blob (BackupBlob in lib/backup.ts). Plain text (NOT
@@ -699,4 +699,30 @@ export const errorLogs = pgTable(
     index("error_log_created_idx").on(e.createdAt),
     index("error_log_scope_idx").on(e.scope),
   ],
+);
+
+// ---------------------------------------------------------------------------
+// Admin/dev edit log for the external MCP interface (POST /api/mcp — lib/mcp/*).
+// A support operator can edit a user's app through their OWN AI (e.g. Claude
+// Code) via the MCP bridge, gated by DEV_API_SECRET. Those edits are DELIBERATELY
+// kept out of the user's chat transcript (no `message` row), so this table is the
+// operator-side audit trail that keeps them accountable — one row per mutating
+// tool call. Plain uuid projectId (no FK) so the history OUTLIVES a deleted
+// project, exactly like errorLogs / publishedBackupId.
+// ---------------------------------------------------------------------------
+export const adminEditLog = pgTable(
+  "admin_edit_log",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id").notNull(),
+    // "write" | "edit" | "delete".
+    action: text("action").notNull(),
+    path: text("path").notNull(),
+    // Optional free-text actor label the caller sets via the X-Actor header
+    // (the shared DEV_API_SECRET carries no identity of its own).
+    actor: text("actor"),
+    createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+  },
+  // Plain index only (never .unique()) → migrate-safe. Newest-first per project.
+  (l) => [index("admin_edit_log_project_idx").on(l.projectId, l.createdAt)],
 );

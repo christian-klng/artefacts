@@ -13,6 +13,7 @@
     "db:studio": "drizzle-kit studio",
     "spike": "node scripts/run-spike-embedded.mjs",
     "e2e:publish-db": "node scripts/run-publish-db-e2e.mjs",
+    "e2e:mcp": "node scripts/run-mcp-e2e.mjs",
     "check:fonts": "node scripts/check-fonts.mjs",
     "check:badge": "node scripts/check-badge.mjs",
     "check:thumbnail": "node scripts/check-thumbnail.mjs",

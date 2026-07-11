@@ -29,7 +29,10 @@ import { settingNumber } from "@/lib/settings";
 // project_backup table (lib/db/schema.ts) and the plan in CLAUDE.md's backup
 // section.
 
-export type BackupKind = "auto" | "daily" | "publish" | "manual";
+// 'admin' = a pre-edit restore point created before an external MCP-interface
+// mutation (lib/mcp/*), so the user can roll back changes a support operator
+// made through their own AI. Pruned by the normal day-window retention.
+export type BackupKind = "auto" | "daily" | "publish" | "manual" | "admin";
 
 // createdAt is a Date when built, a string after JSON round-trip → accept both;
 // restore wraps it back into a Date before re-inserting.

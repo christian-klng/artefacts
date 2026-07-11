@@ -89,6 +89,12 @@ services:
       # the builder's backup + thumbnail logic). Env-only, like BACKUP_CRON_SECRET;
       # must match the admin service below. Unset → the endpoint is closed (403).
       ADMIN_API_SECRET: ${ADMIN_API_SECRET}
+      # External MCP editing bridge (POST /api/mcp): a support operator points their
+      # OWN AI (e.g. Claude Code) at one user's app via MCP to help build it, without
+      # spending the user's credit or touching their chat. Env-only, like the secrets
+      # above; unset → the endpoint is closed (401). See .env.example for the connect
+      # command.
+      DEV_API_SECRET: ${DEV_API_SECRET}
       # Stripe billing (Payment Links). SECRET_KEY + WEBHOOK_SECRET are secrets
       # (env-only, like CORTECS_API_KEY; unset → the webhook route rejects). The
       # Payment Link URLs + monthly credit are also editable in admin /settings
