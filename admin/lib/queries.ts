@@ -89,6 +89,7 @@ export type AppRow = {
   template: string;
   published: boolean;
   publishSlug: string | null;
+  featured: boolean;
   createdAt: Date;
   updatedAt: Date;
   ownerEmail: string | null;
@@ -105,6 +106,7 @@ export async function listApps(): Promise<AppRow[]> {
       template: projects.template,
       published: projects.published,
       publishSlug: projects.publishSlug,
+      featured: projects.featured,
       createdAt: projects.createdAt,
       updatedAt: projects.updatedAt,
       ownerEmail: users.email,

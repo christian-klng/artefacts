@@ -7,7 +7,7 @@ import { isInternalVfsPath } from "@/lib/concept";
 import { injectBadge } from "@/lib/badge";
 import { injectOgImage, THUMBNAIL_PATH } from "@/lib/og-image";
 import { substituteSiteUrl, originFromHost } from "@/lib/site-url";
-import { contentTypeFor } from "@/lib/vfs";
+import { contentTypeFor, embedIconSprite, ICON_SPRITE_PATH } from "@/lib/vfs";
 import { verifyPreviewToken } from "@/lib/preview-token";
 import {
   parseAppLabel,
@@ -87,6 +87,7 @@ function fileResponse(
   dbEnabled: boolean,
   showBadge: boolean,
   hasThumbnail: boolean,
+  spriteContent: string | null,
 ): Response {
   const contentType = contentTypeFor(path, file.mimeType);
   const isHtml = contentType.startsWith("text/html");
@@ -110,10 +111,21 @@ function fileResponse(
     // og:image with this real origin. Serve-time only, like the badge — the
     // exported ZIP keeps the user's own tags. No-op when no thumbnail exists.
     body = injectOgImage(body, origin, hasThumbnail);
+    // Embed the icon sprite so same-document `<use href="#id">` — static or built
+    // at runtime by the app's JS — resolves. External refs still work natively on
+    // this real origin; this makes the leaner `#id` form work here too.
+    body = embedIconSprite(body, spriteContent);
   }
   return new Response(body, {
     headers: { "content-type": contentType, "cache-control": "no-store" },
   });
+}
+
+// The sprite is served/stored as text; only its text content can be embedded.
+function spriteText(
+  file: { content: string; encoding: string } | null,
+): string | null {
+  return file && file.encoding !== "base64" ? file.content : null;
 }
 
 function readCookie(header: string | null, name: string): string | null {
@@ -158,6 +170,10 @@ export async function GET(request: Request) {
       isHtml &&
       path !== THUMBNAIL_PATH &&
       (await readFileRaw(projectId, THUMBNAIL_PATH)) !== null;
+    const spriteContent =
+      isHtml && path !== ICON_SPRITE_PATH
+        ? spriteText(await readFileRaw(projectId, ICON_SPRITE_PATH))
+        : null;
     const res = fileResponse(
       file,
       path,
@@ -166,6 +182,7 @@ export async function GET(request: Request) {
       dbEnabled,
       !badgeHidden,
       hasThumbnail,
+      spriteContent,
     );
     // The preview origin is an ephemeral, gated view of the live VFS — never the
     // canonical address — so keep it out of search/answer-engine indexes.
@@ -185,6 +202,11 @@ export async function GET(request: Request) {
   if (slug) {
     const file = await readPublishedFile(slug, path);
     if (file) {
+      const isHtml = contentTypeFor(path, file.mimeType).startsWith("text/html");
+      const spriteContent =
+        isHtml && path !== ICON_SPRITE_PATH
+          ? spriteText(await readPublishedFile(slug, ICON_SPRITE_PATH))
+          : null;
       return fileResponse(
         file,
         path,
@@ -193,6 +215,7 @@ export async function GET(request: Request) {
         file.dbEnabled,
         !file.badgeHidden,
         file.hasThumbnail,
+        spriteContent,
       );
     }
   }

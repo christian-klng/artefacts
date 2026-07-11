@@ -26,6 +26,10 @@ export const projects = pgTable("project", {
   template: text("template").notNull(),
   published: boolean("published").notNull(),
   publishSlug: text("publish_slug"),
+  // "Leuchtturm" flag: eligible to be featured on the marketing landing page.
+  // The admin panel WRITES this column (curates the showcase); the builder reads
+  // it. Kept in sync with web/lib/db/schema.ts.
+  featured: boolean("featured").notNull().default(false),
   createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
 });

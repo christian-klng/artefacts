@@ -7,11 +7,12 @@ import { listFiles } from "@/lib/projects";
 
 /**
  * Fixed path of the shared icon sprite the media tool maintains (see
- * lib/agent/tools-media.ts `add_icons`). The self-contained render (srcDoc
- * preview + OG thumbnail) has no origin to fetch an external
- * `<use href="assets/icons.svg#id">` from, so the inliner embeds the sprite once
- * and rewrites those refs to same-document `#id`. The real subdomain serve
- * resolves the external file natively and needs none of this.
+ * lib/agent/tools-media.ts `add_icons`). Icons are referenced by same-document
+ * `<use href="#id">`; `embedIconSprite` inlines the sprite into the served HTML
+ * on EVERY path (srcDoc preview + OG thumbnail, subdomain/publish serve, export
+ * ZIP), so that one reference form resolves everywhere — including icons the
+ * app's JS builds at runtime and file:// downloads. Legacy external
+ * `assets/icons.svg#id` refs are normalized to `#id` on the way out.
  */
 export const ICON_SPRITE_PATH = "/assets/icons.svg";
 
@@ -20,6 +21,30 @@ export const ICON_SPRITE_PATH = "/assets/icons.svg";
 // basename of ICON_SPRITE_PATH.
 const spriteRefPattern = () =>
   /(xlink:href|href)\s*=\s*(["'])(?:\.?\/)?assets\/icons\.svg#([^"'#]+)\2/gi;
+
+/**
+ * Embeds the icon sprite into an HTML document and normalizes any legacy
+ * external `assets/icons.svg#id` refs to same-document `#id`. Used by EVERY
+ * html-producing path (srcDoc render, subdomain/publish serve, export ZIP) so a
+ * single reference form — `<use href="#id">`, whether hand-written or built at
+ * runtime by the app's own JS — resolves everywhere: the origin-less srcDoc
+ * preview, the real subdomain, and a file:// download. Idempotent (the sprite
+ * carries a `data-icon-sprite` marker, so it is never embedded twice).
+ */
+export function embedIconSprite(
+  html: string,
+  spriteContent: string | null,
+): string {
+  if (!spriteContent) return html;
+  html = html.replace(
+    spriteRefPattern(),
+    (_whole, attr, q, id) => `${attr}=${q}#${id}${q}`,
+  );
+  if (/\bdata-icon-sprite\b/i.test(html)) return html;
+  const bodyOpen = html.match(/<body[^>]*>/i);
+  const at = bodyOpen ? bodyOpen.index! + bodyOpen[0].length : 0;
+  return html.slice(0, at) + spriteContent + html.slice(at);
+}
 
 const EXT_CONTENT_TYPE: Record<string, string> = {
   html: "text/html; charset=utf-8",
@@ -134,6 +159,20 @@ export function inlineFilesIntoHtml(
       );
       return `data:text/css;base64,${Buffer.from(rewritten, "utf-8").toString("base64")}`;
     }
+    // A separate JS file that builds icons at runtime uses the same sprite ref;
+    // the origin-less srcDoc render can't fetch the external file, so point those
+    // runtime `<use>`s at the embedded sprite too. New builds already emit "#id"
+    // (this is the no-op-then; it only rescues legacy assets/icons.svg#id JS).
+    if (
+      file.encoding !== "base64" &&
+      (ext(file.path) === "js" || ext(file.path) === "mjs")
+    ) {
+      const rewritten = file.content.replace(
+        /(["'`])(?:\.?\/)?assets\/icons\.svg#/gi,
+        "$1#",
+      );
+      return `data:text/javascript;base64,${Buffer.from(rewritten, "utf-8").toString("base64")}`;
+    }
     return rawDataUri(file);
   };
 
@@ -143,20 +182,16 @@ export function inlineFilesIntoHtml(
   };
 
   // Icon sprite: an external `<use href="assets/icons.svg#id">` can't resolve in
-  // an origin-less render, so embed the sprite's symbols once (right after
-  // <body>) and rewrite the refs to same-document `#id`. Data-URI `<use>` is
-  // blocked by browsers, so this — not the general src/href pass below — is how
-  // the sprite reaches the srcDoc preview and the OG thumbnail.
+  // an origin-less render, and a JS-built `<use href="#id">` needs the symbols in
+  // the document — so embed the sprite once and normalize refs (shared with the
+  // serve + export paths). Data-URI `<use>` is blocked by browsers, so this — not
+  // the general src/href pass below — is how the sprite reaches the srcDoc
+  // preview and the OG thumbnail.
   const sprite = byPath.get(ICON_SPRITE_PATH);
-  if (sprite && sprite.encoding !== "base64" && spriteRefPattern().test(html)) {
-    html = html.replace(
-      spriteRefPattern(),
-      (_whole, attr, q, id) => `${attr}=${q}#${id}${q}`,
-    );
-    const bodyOpen = html.match(/<body[^>]*>/i);
-    const at = bodyOpen ? bodyOpen.index! + bodyOpen[0].length : 0;
-    html = html.slice(0, at) + sprite.content + html.slice(at);
-  }
+  html = embedIconSprite(
+    html,
+    sprite && sprite.encoding !== "base64" ? sprite.content : null,
+  );
 
   // src="…" / href="…" (single or double quoted)
   html = html.replace(

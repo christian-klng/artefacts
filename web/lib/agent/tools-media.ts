@@ -123,7 +123,7 @@ export function buildMediaServer(
 
       tool(
         "add_icons",
-        "Add named icons (from search_icons; 'brand:<slug>' for brand logos) to the project's shared icon sprite and get a tiny snippet to place each. The full SVG is written ONCE into /assets/icons.svg; you reference each icon with a small <use> — so DON'T paste raw <svg> icon markup into the HTML. Icons still inherit the CSS `color` via currentColor.",
+        "Add named icons (from search_icons; 'brand:<slug>' for brand logos) to the project's shared icon sprite and get a tiny snippet to place each. The full SVG is written ONCE into /assets/icons.svg; you reference each icon with a small same-document <use href=\"#id\"> — the platform embeds the sprite into the page, so `#id` resolves in every preview and when published. Use the SAME `#id` reference when you create icons from JavaScript. DON'T paste raw <svg> icon markup into the HTML, and DON'T put the file path in the ref. Icons still inherit the CSS `color` via currentColor.",
         {
           names: z
             .array(z.string())
@@ -163,7 +163,7 @@ export function buildMediaServer(
               }
             }
             placed.push(
-              `${r.name}:\n<svg class="icon" width="24" height="24" aria-hidden="true"><use href="${spriteRef}#${id}"/></svg>`,
+              `${r.name}:\n<svg class="icon" width="24" height="24" aria-hidden="true"><use href="#${id}"/></svg>`,
             );
           }
 

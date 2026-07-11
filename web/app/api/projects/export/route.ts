@@ -2,6 +2,7 @@ import { zipSync, strToU8 } from "fflate";
 import { auth } from "@/auth";
 import { getOwnedProject, listFiles } from "@/lib/projects";
 import { isInternalVfsPath } from "@/lib/concept";
+import { embedIconSprite, ICON_SPRITE_PATH } from "@/lib/vfs";
 import { substituteSiteUrl, normalizeSiteOrigin } from "@/lib/site-url";
 import { dumpTenantData } from "@/lib/appdb/provision";
 import { serializeTenantDump } from "@/lib/appdb/dump";
@@ -63,16 +64,25 @@ export async function GET(request: Request) {
     (param != null ? normalizeSiteOrigin(param) : null) ?? project.siteUrl ?? "";
 
   const all = await listFiles(projectId);
+  const spriteFile = all.find((f) => f.path === ICON_SPRITE_PATH);
+  const spriteContent =
+    spriteFile && spriteFile.encoding !== "base64" ? spriteFile.content : null;
   const entries: Record<string, Uint8Array> = {};
   for (const f of all) {
     // Internal agent files (CONCEPT.md) are memory, not part of the app.
     if (isInternalVfsPath(f.path)) continue;
     // Strip the leading "/" so the zip has clean relative paths.
     const name = f.path.replace(/^\//, "");
-    entries[name] =
-      f.encoding === "base64"
-        ? new Uint8Array(Buffer.from(f.content, "base64"))
-        : strToU8(substituteSiteUrl(f.content, origin));
+    if (f.encoding === "base64") {
+      entries[name] = new Uint8Array(Buffer.from(f.content, "base64"));
+      continue;
+    }
+    let text = substituteSiteUrl(f.content, origin);
+    // Embed the sprite into the entry doc so `<use href="#id">` resolves when the
+    // downloaded app is opened directly (file://), where an external sprite ref
+    // can't load. Other files keep their refs — they serve fine from a webserver.
+    if (f.path === "/index.html") text = embedIconSprite(text, spriteContent);
+    entries[name] = strToU8(text);
   }
 
   // When the app has a managed database, ship its current data alongside the

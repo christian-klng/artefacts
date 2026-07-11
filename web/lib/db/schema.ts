@@ -159,6 +159,12 @@ export const projects = pgTable(
     // Plain default column (no unique) → safe for the non-TTY migrate push.
     // Prepared for a future paid-plan toggle; no UI flips it yet.
     badgeHidden: boolean("badge_hidden").notNull().default(false),
+    // --- "Leuchttürme" (landing-page showcase) ---
+    // When true, this app is eligible to be featured as a "Leuchtturm" on the
+    // marketing landing page. Curated in the admin panel (read-only elsewhere);
+    // the landing rendering is a later step. Plain default column (no unique) →
+    // safe for the non-TTY migrate push.
+    featured: boolean("featured").notNull().default(false),
     // --- Hosting subscription (Stripe) ---
     // True while this app has an ACTIVE 5€/month hosting subscription. Set by the
     // Stripe webhook (see lib/stripe/). Denormalised from the `subscription` table

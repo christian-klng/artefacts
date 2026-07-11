@@ -3,6 +3,7 @@ import { listApps } from "@/lib/queries";
 import { formatDate } from "@/lib/format";
 import { resolveLocale } from "@/lib/locale";
 import { getMessages } from "@/lib/i18n/messages";
+import { FeaturedToggle, PublishButton } from "./row-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -28,8 +29,10 @@ export default async function AppsPage() {
               <th className="px-4 py-3 font-medium">{m.colApp}</th>
               <th className="px-4 py-3 font-medium">{m.colOwner}</th>
               <th className="px-4 py-3 font-medium">{m.colStatus}</th>
+              <th className="px-4 py-3 font-medium">{m.colFeatured}</th>
               <th className="px-4 py-3 font-medium">{m.colCreated}</th>
               <th className="px-4 py-3 font-medium">{m.colUpdated}</th>
+              <th className="px-4 py-3 font-medium">{m.colActions}</th>
             </tr>
           </thead>
           <tbody>
@@ -71,18 +74,24 @@ export default async function AppsPage() {
                     </span>
                   )}
                 </td>
+                <td className="px-4 py-3">
+                  <FeaturedToggle projectId={a.id} featured={a.featured} />
+                </td>
                 <td className="px-4 py-3 text-foreground/70">
                   {formatDate(a.createdAt, locale)}
                 </td>
                 <td className="px-4 py-3 text-foreground/70">
                   {formatDate(a.updatedAt, locale)}
                 </td>
+                <td className="px-4 py-3">
+                  <PublishButton projectId={a.id} published={a.published} />
+                </td>
               </tr>
             ))}
             {apps.length === 0 && (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={7}
                   className="px-4 py-10 text-center text-foreground/50"
                 >
                   {m.empty}
