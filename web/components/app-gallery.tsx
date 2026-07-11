@@ -114,9 +114,9 @@ export function AppGallery({
             <Link
               key={p.id}
               href={`/app/${p.id}`}
-              className="group overflow-hidden rounded-xl border border-neutral-200 bg-white transition hover:border-neutral-300 hover:shadow-md dark:border-neutral-800 dark:bg-neutral-950 dark:hover:border-neutral-700"
+              className="group overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm transition hover:border-neutral-300 hover:shadow-md dark:border-neutral-700 dark:bg-neutral-900 dark:hover:border-neutral-600"
             >
-              <div className="aspect-[1200/630] w-full overflow-hidden bg-neutral-100 dark:bg-neutral-900">
+              <div className="aspect-[1200/630] w-full overflow-hidden bg-neutral-100 dark:bg-neutral-800">
                 {p.thumbnailUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
