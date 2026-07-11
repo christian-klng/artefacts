@@ -102,6 +102,7 @@ export function SandpackWorkspace({
   // Binary assets shown as placeholder entries so they appear in the file tree
   // (the editor is read-only and can't render images); real bytes ship via the
   // serve/export routes, never to the client.
+  const streamPath = stream?.path ?? null;
   const sandpackFiles = useMemo(() => {
     const map: Record<string, string> = { ...files };
     for (const [path, meta] of Object.entries(assets)) {
@@ -115,8 +116,13 @@ export function SandpackWorkspace({
     for (const [path, content] of Object.entries(internal)) {
       map[path] = content;
     }
+    // Surface the file currently streaming (keyed on PATH, not content, so it
+    // doesn't reset Sandpack on every delta) so the editor renders even before
+    // the first commit — otherwise the very first build shows EmptyState while
+    // the file types in. The live text is written via updateFile in CodeArea.
+    if (streamPath && !(streamPath in map)) map[streamPath] = "";
     return map;
-  }, [files, assets, internal]);
+  }, [files, assets, internal, streamPath]);
 
   if (view === "preview") {
     if (!indexHtml) {
@@ -310,8 +316,6 @@ function CodeEditorPane({
   const editorRef = useRef<SandpackEditorHandle>(null);
   const pendingRef = useRef<EditHighlight | null>(null);
   const cancelRef = useRef<() => void>(() => {});
-  const streamPathRef = useRef<string | null>(null);
-  const appliedLenRef = useRef(0);
 
   // A new highlight arrived: remember it and switch to its file if needed. The
   // actual flash waits for that file's content to land in the editor (below),
@@ -340,41 +344,30 @@ function CodeEditorPane({
   // Clear a pending flash-clear timer on unmount.
   useEffect(() => () => cancelRef.current(), []);
 
-  // Live-type a streaming write_file into the editor by writing DIRECTLY to
-  // CodeMirror (not via Sandpack's files, which would reset the view each tick).
-  // First creates + activates the file; once it's the active one, the first
-  // write replaces the doc (handles a rewrite of an existing file) and later
-  // writes append only the new chars, following the caret to the end. On commit
-  // the committed content flows in via Sandpack and supersedes this.
+  // Live-type a streaming write_file into the editor via Sandpack's own path.
+  // Sandpack's read-only editor stays "pristine" (a static highlighted <pre>)
+  // until it's focused, so its CodeMirror view — and getCodemirror() — usually
+  // doesn't exist yet; updateFile() is what actually shows the growing text
+  // (verified against real Sandpack). We only follow the caret to the bottom:
+  // the CM scroller if it happens to be mounted, else the pristine container.
+  // On commit the committed content flows in via Sandpack's files and takes over.
   useEffect(() => {
-    if (!stream) {
-      streamPathRef.current = null;
-      appliedLenRef.current = 0;
-      return;
-    }
-    if (streamPathRef.current !== stream.path) {
-      streamPathRef.current = stream.path;
-      appliedLenRef.current = 0;
-      if (!(stream.path in sandpack.files)) sandpack.updateFile(stream.path, "");
-      sandpack.openFile(stream.path);
-      return; // wait until this file is the active one (next run)
-    }
-    if (active !== stream.path) return;
-    if (stream.content.length <= appliedLenRef.current) return;
+    if (!stream) return;
+    sandpack.updateFile(stream.path, stream.content);
+    if (sandpack.activeFile !== stream.path) sandpack.openFile(stream.path);
     const view = editorRef.current?.getCodemirror();
-    if (!view) return;
-    const applied = appliedLenRef.current;
-    const changes =
-      applied === 0
-        ? { from: 0, to: view.state.doc.length, insert: stream.content }
-        : { from: view.state.doc.length, insert: stream.content.slice(applied) };
-    appliedLenRef.current = stream.content.length;
-    view.dispatch({
-      changes,
-      effects: EditorView.scrollIntoView(stream.content.length, { y: "end" }),
-    });
+    if (view) {
+      view.dispatch({
+        effects: EditorView.scrollIntoView(view.state.doc.length, { y: "end" }),
+      });
+    } else {
+      const el = document.querySelector(
+        ".cm-scroller, .sp-code-editor",
+      ) as HTMLElement | null;
+      if (el) el.scrollTop = el.scrollHeight;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stream, active]);
+  }, [stream]);
 
   return (
     <SandpackCodeEditor
