@@ -285,6 +285,10 @@ const en: Messages = {
   },
   sandpack: {
     appPreview: "App preview",
+    iconSprite: "Icon sprite",
+    iconsOne: "{count} icon",
+    iconsMany: "{count} icons",
+    spriteEmpty: "No symbols in this sprite.",
   },
   fileTree: {
     internal: "internal",

@@ -249,6 +249,18 @@ function CodeArea({
   }
   const svg = files[active];
   if (svg !== undefined && /\.svg$/i.test(active)) {
+    // An icon sprite (e.g. /assets/icons.svg) is a `display:none` collection of
+    // <symbol>s meant to be referenced by <use> — as a standalone <img> it shows
+    // nothing (broken image). Render its symbols as an icon grid instead.
+    if (/<symbol[\s>]/i.test(svg)) {
+      return (
+        <IconSpritePreview
+          path={active}
+          svg={svg}
+          size={new TextEncoder().encode(svg).length}
+        />
+      );
+    }
     return (
       <AssetImageView
         projectId={projectId}
@@ -421,6 +433,89 @@ function AssetImageView({
       </div>
       <div className="shrink-0 border-t border-neutral-200 px-4 py-2 text-xs text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
         {name} · {mimeType} · {formatSize(size)}
+      </div>
+    </div>
+  );
+}
+
+// Pull the symbol ids out of a sprite in document order (cheap string scan, no
+// DOM). Mirrors parseSpriteSymbols in lib/agent/icons.ts, but stays local so the
+// client bundle never pulls in the server-side icon catalog.
+function parseSpriteSymbolIds(svg: string): string[] {
+  const ids: string[] = [];
+  const re = /<symbol\b[^>]*?\bid="([^"]+)"/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(svg)) !== null) ids.push(m[1]);
+  return ids;
+}
+
+// Defense-in-depth before inlining agent-authored SVG into the BUILDER origin
+// (the app preview is sandboxed; this is not). Catalog icons are pure shapes
+// (<path>/<circle>/…), so stripping scripts/handlers never alters a real icon.
+function sanitizeSpriteMarkup(svg: string): string {
+  return svg
+    .replace(/<script\b[\s\S]*?<\/script>/gi, "")
+    .replace(/<(image|foreignObject)\b[\s\S]*?<\/\1>/gi, "")
+    .replace(/<(image|foreignObject)\b[^>]*\/?>/gi, "")
+    .replace(/\son[a-z]+\s*=\s*"[^"]*"/gi, "")
+    .replace(/\son[a-z]+\s*=\s*'[^']*'/gi, "")
+    .replace(/(href|xlink:href)\s*=\s*(["'])\s*javascript:[^"']*\2/gi, "");
+}
+
+// An icon sprite is a hidden <symbol> collection, not a displayable image — as a
+// standalone <img> it renders nothing. Inline the sprite once (exactly as the
+// app does) and render each symbol via a same-document <use>, so the grid shows
+// the real icons with their currentColor theming. Referencing an EXTERNAL sprite
+// url with a #fragment is blocked in browsers, hence the inline-then-<use>.
+function IconSpritePreview({
+  path,
+  svg,
+  size,
+}: {
+  path: string;
+  svg: string;
+  size: number;
+}) {
+  const m = useMessages();
+  const name = path.split("/").pop() ?? path;
+  const ids = useMemo(() => parseSpriteSymbolIds(svg), [svg]);
+  const spriteHtml = useMemo(() => sanitizeSpriteMarkup(svg), [svg]);
+  const countLabel = (
+    ids.length === 1 ? m.sandpack.iconsOne : m.sandpack.iconsMany
+  ).replace("{count}", String(ids.length));
+  return (
+    <div className="flex h-full flex-1 flex-col bg-neutral-50 dark:bg-neutral-950">
+      {/* Hidden <symbol> defs, referenced by the <use>s below. */}
+      <div aria-hidden="true" dangerouslySetInnerHTML={{ __html: spriteHtml }} />
+      <div className="flex-1 overflow-auto p-4">
+        {ids.length === 0 ? (
+          <p className="p-6 text-center text-sm text-neutral-500 dark:text-neutral-400">
+            {m.sandpack.spriteEmpty}
+          </p>
+        ) : (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(88px,1fr))] gap-2">
+            {ids.map((id) => (
+              <div
+                key={id}
+                title={id}
+                className="flex flex-col items-center gap-2 rounded-lg border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900"
+              >
+                <svg
+                  aria-hidden="true"
+                  className="h-7 w-7 text-neutral-800 dark:text-neutral-100"
+                >
+                  <use href={`#${id}`} />
+                </svg>
+                <span className="w-full truncate text-center text-[10px] leading-tight text-neutral-500 dark:text-neutral-400">
+                  {id}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="shrink-0 border-t border-neutral-200 px-4 py-2 text-xs text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
+        {name} · {m.sandpack.iconSprite} · {countLabel} · {formatSize(size)}
       </div>
     </div>
   );

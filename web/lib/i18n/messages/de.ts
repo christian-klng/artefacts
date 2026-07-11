@@ -296,6 +296,10 @@ const de = {
   },
   sandpack: {
     appPreview: "App-Vorschau",
+    iconSprite: "Icon-Sprite",
+    iconsOne: "{count} Icon",
+    iconsMany: "{count} Icons",
+    spriteEmpty: "Keine Symbole in diesem Sprite.",
   },
   fileTree: {
     internal: "intern",

@@ -256,7 +256,7 @@ async function main() {
   // security. Proves per-owner isolation + auto-stamp survive a full restore.
 
   // 1. Dump project A as admin with row_security OFF (all owners' rows).
-  let dumpSql, preTotal, preU1, preU2;
+  let dumpSql, preTotal, preU1, preU2, collideId, collideTitle;
   {
     const c = await su.connect();
     try {
@@ -269,6 +269,12 @@ async function main() {
       preTotal = res.rows.length;
       preU1 = res.rows.filter((r) => r.owner_id === U1).length;
       preU2 = res.rows.filter((r) => r.owner_id === U2).length;
+      // Remember one real row (U2's stable "u2 private") so step 2 can re-seed
+      // its exact primary key — reproducing an app whose /database.sql SEEDS
+      // rows that the dump also captured.
+      const seedRow = res.rows.find((r) => r.owner_id === U2);
+      collideId = seedRow.id;
+      collideTitle = seedRow.title;
     } finally {
       c.release();
     }
@@ -283,6 +289,15 @@ async function main() {
     { schema: SCHEMA_A, role: ROLE_A },
     `CREATE TABLE todos (id uuid primary key default gen_random_uuid(), owner_id uuid, title text)`,
   );
+  // Mirror a real app whose /database.sql SEEDS rows: applyTenantDdl replays
+  // those INSERTs when it re-creates the tables (before owner security), so a
+  // table already holds seed rows before restoreTenantData runs. Reuse a dumped
+  // primary key so the seed row collides with the dump (the safe_spots_pkey bug).
+  await asTenant(
+    app,
+    { schema: SCHEMA_A, role: ROLE_A },
+    `INSERT INTO todos (id, owner_id, title) VALUES ('${collideId}', '${U1}', 'seeded by DDL')`,
+  );
 
   // 3. Restore rows as admin: row_security off + replica + explicit owner_id.
   {
@@ -292,6 +307,11 @@ async function main() {
       await c.query("SET LOCAL row_security = off");
       await c.query("SET LOCAL session_replication_role = replica");
       await c.query(`SET LOCAL search_path TO ${ident(SCHEMA_A)}`);
+      // Clear the DDL's seed rows first so the authoritative dump replays
+      // cleanly — without this, the dump's INSERT for `collideId` hits the
+      // already-seeded primary key and aborts the whole restore. Mirrors
+      // restoreTenantData()'s TRUNCATE.
+      await c.query(`TRUNCATE ${ident(SCHEMA_A)}.todos CASCADE`);
       await c.query(dumpSql);
       await c.query("COMMIT");
     } catch (e) {
@@ -313,6 +333,21 @@ async function main() {
     await su.query(`SELECT count(*)::int n FROM ${ident(SCHEMA_A)}.todos`)
   ).rows[0].n;
   ok("all rows restored (admin count)", totalAfter === preTotal);
+  // The DDL-seeded row shared a primary key with a dumped row: after the
+  // truncate + restore it must carry the DUMP's values, not the seed's — i.e.
+  // the restore neither collided (safe_spots_pkey) nor kept the stale seed.
+  const collideAfter = (
+    await su.query(
+      `SELECT owner_id, title FROM ${ident(SCHEMA_A)}.todos WHERE id = $1`,
+      [collideId],
+    )
+  ).rows[0];
+  ok(
+    "DDL-seeded row overwritten by the dump on restore (no PK collision)",
+    !!collideAfter &&
+      collideAfter.title === collideTitle &&
+      collideAfter.owner_id === U2,
+  );
   const u1Restored = await asTenant(app, { schema: SCHEMA_A, role: ROLE_A, endUserId: U1 }, sel.text, sel.values);
   const u2Restored = await asTenant(app, { schema: SCHEMA_A, role: ROLE_A, endUserId: U2 }, sel.text, sel.values);
   ok(

@@ -410,12 +410,27 @@ export async function restoreTenantData(
 ): Promise<void> {
   if (!dataSql.trim()) return;
   const { schema } = tenantNames(projectId);
+  // The backup's DDL (/database.sql) may SEED rows: applyTenantDdl replays the
+  // whole file when it re-creates the tables, so a table can already hold its
+  // seed rows before we get here. The dump is the authoritative snapshot of the
+  // data at backup time (it captured those seed rows too), so clear every table
+  // first — otherwise re-inserting a seeded row collides with its own primary
+  // key (duplicate key value violates unique constraint "<table>_pkey"), which
+  // aborts the whole restore. Safe: the schema was just dropped + rebuilt from
+  // the backup, so the only rows here are the DDL's own seeds.
+  const tables = await listTenantTables(projectId);
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     await client.query("SET LOCAL row_security = off");
     await client.query("SET LOCAL session_replication_role = replica");
     await client.query(`SET LOCAL search_path TO ${ident(schema)}`);
+    if (tables.length > 0) {
+      const relList = tables
+        .map((t) => `${ident(schema)}.${ident(t)}`)
+        .join(", ");
+      await client.query(`TRUNCATE ${relList} CASCADE`);
+    }
     await client.query(dataSql);
     await client.query("COMMIT");
   } catch (e) {
