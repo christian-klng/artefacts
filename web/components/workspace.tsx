@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
+import { Eye } from "lucide-react";
 import { clearPendingPrompt } from "@/app/actions/start";
 import { ChatPanel, type ChatMessage } from "./chat-panel";
 import { AttachmentsView, type AttachmentMeta } from "./attachments-view";
@@ -131,6 +132,8 @@ export function Workspace({
   initialDatabaseEnabled = false,
   showBadge = true,
   initialPrompt,
+  readOnly = false,
+  ownerLabel,
 }: {
   projectId: string;
   initialFiles: Record<string, string>;
@@ -155,6 +158,12 @@ export function Workspace({
   // Prompt carried over from the landing page (via /start). Fired once on mount
   // as the first agent message, then cleared.
   initialPrompt?: string;
+  // Read-only mode: an ADMIN is viewing someone else's app for support. Disables
+  // the composer + hides publish/export/restore. NOT the security boundary — every
+  // write route is owner-gated server-side; this only avoids offering dead actions.
+  readOnly?: boolean;
+  // Owner's name/email, shown in the read-only admin banner.
+  ownerLabel?: string;
 }) {
   const m = useMessages();
   const router = useRouter();
@@ -901,68 +910,78 @@ export function Workspace({
   }, [initialPrompt, messages.length, onSend, projectId, router]);
 
   return (
-    <div className="grid h-full grid-cols-[minmax(300px,380px)_1fr]">
-      {celebrating && (
-        <ConfettiBurst onDone={() => setCelebrating(false)} />
+    <div className="flex h-full min-h-0 flex-col">
+      {readOnly && (
+        <div className="flex items-center gap-2 border-b border-amber-300 bg-amber-50 px-4 py-1.5 text-xs font-medium text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+          <Eye className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span>
+            {m.workspace.adminViewBanner.replace("{owner}", ownerLabel ?? "—")}
+          </span>
+        </div>
       )}
-      <ChatPanel
-        messages={messages}
-        streaming={streaming}
-        interviewLoading={interviewLoading}
-        projectId={projectId}
-        onSend={onSend}
-        onInterviewSubmit={onInterviewSubmit}
-        onAttachmentsChanged={refreshAttachments}
-        balanceEur={balanceEur}
-      />
-      <div className="flex h-full min-h-0 flex-col overflow-hidden">
-        <WorkspaceToolbar
-          view={effectiveView}
-          onViewChange={handleUserViewChange}
-          device={device}
-          onDeviceChange={setDevice}
-          hasDatabase={hasDatabase}
-          hasFiles={attachments.length > 0}
-          canDownload={!!files["/index.html"]}
-          onDownload={onDownload}
-          siteUrl={siteUrl}
-          versions={versions}
-          onRestore={onRestore}
-          busy={restoring || streaming}
-          publishEnabled={publishEnabled}
-          canPublish={!!files["/index.html"]}
-          publishing={publishing}
-          publishUrl={publishUrl}
-          publishDirty={publishDirty}
-          onPublish={onPublish}
-          onUnpublish={onUnpublish}
-          onSetSlug={onSetSlug}
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(300px,380px)_1fr]">
+        {celebrating && <ConfettiBurst onDone={() => setCelebrating(false)} />}
+        <ChatPanel
+          messages={messages}
+          streaming={streaming}
+          interviewLoading={interviewLoading}
+          projectId={projectId}
+          onSend={onSend}
+          onInterviewSubmit={onInterviewSubmit}
+          onAttachmentsChanged={refreshAttachments}
+          balanceEur={balanceEur}
+          readOnly={readOnly}
         />
-        <div className="min-h-0 flex-1">
-          {effectiveView === "files" ? (
-            <AttachmentsView
-              attachments={attachments}
-              projectId={projectId}
-              onDeleted={refreshAttachments}
-            />
-          ) : effectiveView === "data" ? (
-            <DataView projectId={projectId} refreshKey={dbRefreshKey} />
-          ) : (
-            <SandpackWorkspace
-              files={files}
-              assets={assets}
-              internal={internal}
-              view={effectiveView}
-              device={device}
-              projectId={projectId}
-              previewUrl={preview}
-              showBadge={showBadge}
-              activePath={activePath}
-              doneTicks={doneTicks}
-              highlight={highlight}
-              stream={stream}
-            />
-          )}
+        <div className="flex h-full min-h-0 flex-col overflow-hidden">
+          <WorkspaceToolbar
+            view={effectiveView}
+            onViewChange={handleUserViewChange}
+            device={device}
+            onDeviceChange={setDevice}
+            hasDatabase={hasDatabase && !readOnly}
+            readOnly={readOnly}
+            hasFiles={attachments.length > 0 && !readOnly}
+            canDownload={!!files["/index.html"]}
+            onDownload={onDownload}
+            siteUrl={siteUrl}
+            versions={versions}
+            onRestore={onRestore}
+            busy={restoring || streaming}
+            publishEnabled={publishEnabled}
+            canPublish={!!files["/index.html"]}
+            publishing={publishing}
+            publishUrl={publishUrl}
+            publishDirty={publishDirty}
+            onPublish={onPublish}
+            onUnpublish={onUnpublish}
+            onSetSlug={onSetSlug}
+          />
+          <div className="min-h-0 flex-1">
+            {effectiveView === "files" ? (
+              <AttachmentsView
+                attachments={attachments}
+                projectId={projectId}
+                onDeleted={refreshAttachments}
+              />
+            ) : effectiveView === "data" ? (
+              <DataView projectId={projectId} refreshKey={dbRefreshKey} />
+            ) : (
+              <SandpackWorkspace
+                files={files}
+                assets={assets}
+                internal={internal}
+                view={effectiveView}
+                device={device}
+                projectId={projectId}
+                previewUrl={preview}
+                showBadge={showBadge}
+                activePath={activePath}
+                doneTicks={doneTicks}
+                highlight={highlight}
+                stream={stream}
+              />
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -26,6 +26,8 @@ export type UserRow = {
   balanceEur: number;
   /** One-time free-tier grant, in EUR. */
   freeGrantedEur: number;
+  /** Platform admin flag (user.is_admin) — grants read-only cross-user access. */
+  isAdmin: boolean;
 };
 
 /**
@@ -41,6 +43,7 @@ export async function listUsers(): Promise<UserRow[]> {
         name: users.name,
         email: users.email,
         createdAt: users.createdAt,
+        isAdmin: users.isAdmin,
       })
       .from(users)
       .orderBy(desc(users.createdAt)),
@@ -76,6 +79,7 @@ export async function listUsers(): Promise<UserRow[]> {
     name: u.name,
     email: u.email,
     createdAt: u.createdAt,
+    isAdmin: u.isAdmin,
     appCount: countMap.get(u.id) ?? 0,
     consumedEur: consumedMap.get(u.id) ?? 0,
     balanceEur: Number(creditMap.get(u.id)?.balanceEur ?? 0),

@@ -55,6 +55,9 @@ const de = {
     colApps: "Apps",
     colConsumed: "Verbraucht",
     colBalance: "Guthaben",
+    colAdmin: "Admin",
+    adminHint:
+      "Admins sehen alle Apps und können jede App schreibgeschützt im Builder öffnen.",
     empty: "Noch keine Nutzer.",
   },
   apps: {

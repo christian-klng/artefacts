@@ -151,6 +151,7 @@ export function ChatPanel({
   onInterviewSubmit,
   onAttachmentsChanged,
   balanceEur,
+  readOnly = false,
 }: {
   messages: ChatMessage[];
   streaming: boolean;
@@ -166,6 +167,8 @@ export function ChatPanel({
   onAttachmentsChanged: () => void;
   /** Spendable EUR credit, shown above the composer; null while loading. */
   balanceEur?: number | null;
+  /** Admin read-only view of a foreign app — replaces the composer with a note. */
+  readOnly?: boolean;
 }) {
   const m = useMessages();
   const [input, setInput] = useState("");
@@ -317,6 +320,11 @@ export function ChatPanel({
         <div ref={endRef} />
       </div>
 
+      {readOnly ? (
+        <div className="border-t border-neutral-200 p-3 text-center text-xs text-neutral-500 dark:border-neutral-800">
+          {m.workspace.readOnlyComposer}
+        </div>
+      ) : (
       <div
         className="border-t border-neutral-200 p-3 dark:border-neutral-800"
         onDragOver={(e) => {
@@ -450,6 +458,7 @@ export function ChatPanel({
           </div>
         </div>
       </div>
+      )}
 
       {modalMessage && interviewPending(modalMessage.content) && (
         <InterviewModal

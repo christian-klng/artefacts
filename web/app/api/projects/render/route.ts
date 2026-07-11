@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { getOwnedProject, readFile } from "@/lib/projects";
+import { getAccessibleProject, readFile } from "@/lib/projects";
 import { inlineVfsAssets } from "@/lib/vfs";
 import { injectBadge } from "@/lib/badge";
 import { substituteSiteUrl } from "@/lib/site-url";
@@ -19,7 +19,8 @@ export async function GET(request: Request) {
   if (!projectId) return new Response("projectId is required", { status: 400 });
   let project;
   try {
-    project = await getOwnedProject(projectId, userId);
+    // Owner OR admin (read-only) — the srcDoc preview fallback for admins too.
+    ({ project } = await getAccessibleProject(projectId, userId));
   } catch {
     return new Response("Not found", { status: 404 });
   }

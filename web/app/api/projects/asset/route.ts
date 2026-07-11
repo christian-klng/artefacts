@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { getOwnedProject, readFileRaw } from "@/lib/projects";
+import { getAccessibleProject, readFileRaw } from "@/lib/projects";
 import { contentTypeFor } from "@/lib/vfs";
 
 // Serves the raw bytes of ONE VFS file to the builder UI (ownership-gated), so
@@ -24,7 +24,9 @@ export async function GET(request: Request) {
     return new Response("projectId and path are required", { status: 400 });
   }
   try {
-    await getOwnedProject(projectId, userId); // ownership guard
+    // Owner OR admin (read-only). Admins load cross-user thumbnails in the
+    // "Meine Apps" gallery + the workspace image viewer.
+    await getAccessibleProject(projectId, userId);
   } catch {
     return new Response("Not found", { status: 404 });
   }

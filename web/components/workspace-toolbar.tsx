@@ -48,6 +48,7 @@ export function WorkspaceToolbar({
   onPublish,
   onUnpublish,
   onSetSlug,
+  readOnly = false,
 }: {
   view: ViewMode;
   onViewChange: (view: ViewMode) => void;
@@ -69,6 +70,8 @@ export function WorkspaceToolbar({
   onPublish: () => void;
   onUnpublish: () => void;
   onSetSlug: (desired: string) => Promise<string | undefined>;
+  /** Admin read-only view — hides publish/restore/download (the write actions). */
+  readOnly?: boolean;
 }) {
   const m = useMessages();
   // versions are newest-first; number them oldest=1 for a stable label.
@@ -100,7 +103,7 @@ export function WorkspaceToolbar({
 
       <div className="flex items-center gap-2">
         {/* Preview tab: publishing. Code tab: version history + download. */}
-        {view === "preview" && publishEnabled && (
+        {view === "preview" && publishEnabled && !readOnly && (
           <PublishControls
             canPublish={canPublish}
             publishing={publishing}
@@ -111,7 +114,7 @@ export function WorkspaceToolbar({
             onSetSlug={onSetSlug}
           />
         )}
-        {view === "code" && (
+        {view === "code" && !readOnly && (
           <>
             {total > 0 && (
               <select

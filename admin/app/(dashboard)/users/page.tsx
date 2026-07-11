@@ -2,6 +2,7 @@ import { listUsers } from "@/lib/queries";
 import { formatDate, formatEur } from "@/lib/format";
 import { resolveLocale } from "@/lib/locale";
 import { getMessages } from "@/lib/i18n/messages";
+import { AdminToggle } from "./row-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,7 @@ export default async function UsersPage() {
               <th className="px-4 py-3 text-right font-medium">{m.colApps}</th>
               <th className="px-4 py-3 text-right font-medium">{m.colConsumed}</th>
               <th className="px-4 py-3 text-right font-medium">{m.colBalance}</th>
+              <th className="px-4 py-3 text-center font-medium">{m.colAdmin}</th>
             </tr>
           </thead>
           <tbody>
@@ -55,12 +57,15 @@ export default async function UsersPage() {
                     {formatEur(u.balanceEur, locale)}
                   </span>
                 </td>
+                <td className="px-4 py-3 text-center">
+                  <AdminToggle userId={u.id} isAdmin={u.isAdmin} />
+                </td>
               </tr>
             ))}
             {users.length === 0 && (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={6}
                   className="px-4 py-10 text-center text-foreground/50"
                 >
                   {m.empty}

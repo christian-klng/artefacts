@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { getOwnedProject } from "@/lib/projects";
+import { getAccessibleProject } from "@/lib/projects";
 import { signPreviewToken } from "@/lib/preview-token";
 import { buildAppOrigin } from "@/lib/app-host";
 
@@ -28,7 +28,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    await getOwnedProject(projectId, session.user.id);
+    // Owner OR admin (read-only) — so an admin's preview iframe gets a token too.
+    await getAccessibleProject(projectId, session.user.id);
   } catch {
     return new Response("Not found", { status: 404 });
   }

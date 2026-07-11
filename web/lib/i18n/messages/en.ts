@@ -69,6 +69,19 @@ const en: Messages = {
     delete: "Delete",
     deleteConfirm: "Delete “{name}”? This cannot be undone.",
   },
+  gallery: {
+    title: "My apps",
+    adminAll: "All apps",
+    sort: "Sort",
+    sortRecent: "Recently edited",
+    sortName: "Name (A–Z)",
+    sortCreated: "Recently created",
+    empty: "No apps yet.",
+    newApp: "New app",
+    notPublished: "Not published",
+    owner: "Owner",
+    homeAria: "My apps",
+  },
   account: {
     openLabel: "Account",
     title: "Account",
@@ -301,6 +314,8 @@ const en: Messages = {
     restoreFailed: "Restore failed.",
     creditExhausted: "Your credit is used up. Please top up to continue.",
     agentError: "Agent error",
+    adminViewBanner: "Admin view — {owner}'s app (read-only)",
+    readOnlyComposer: "Read-only — only the owner can make changes.",
   },
 };
 

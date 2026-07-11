@@ -41,6 +41,12 @@ export const users = pgTable(
     // unique INDEX (not .unique()) allows the many NULLs of not-yet-paying users
     // and is migrate-safe on this populated table.
     stripeCustomerId: text("stripe_customer_id"),
+    // Builder-side admin flag. When true, this user may browse ALL projects in
+    // "Meine Apps" and open any user's app in the builder READ-ONLY (for support
+    // / bug reproduction — see getAccessibleProject; every WRITE path stays
+    // strictly owner-scoped). Toggled from the admin panel /users. Plain default
+    // boolean, NO unique → safe for the non-TTY drizzle-kit push migrate container.
+    isAdmin: boolean("is_admin").notNull().default(false),
     createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
   },
   (u) => [uniqueIndex("user_stripe_customer_idx").on(u.stripeCustomerId)],

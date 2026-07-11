@@ -6,6 +6,7 @@ import {
   projects,
   files,
   messages,
+  users,
   artifactVersions,
   projectBackups,
 } from "@/lib/db/schema";
@@ -13,6 +14,7 @@ import { publishSlugFromLabel } from "@/lib/app-host";
 import { canonicalSignatureMap, filesSignature } from "@/lib/files-signature";
 import { isInternalVfsPath } from "@/lib/concept";
 import { THUMBNAIL_PATH } from "@/lib/og-image";
+import { isAdminUser } from "@/lib/admin";
 // NOTE: lib/backup.ts imports helpers from this module; the cycle is safe
 // because neither side calls the other at module top level.
 import { createBackup } from "@/lib/backup";
@@ -62,6 +64,95 @@ export async function listProjects(userId: string) {
     .from(projects)
     .where(eq(projects.userId, userId))
     .orderBy(asc(projects.createdAt));
+}
+
+// One card in the "Meine Apps" gallery. `thumbV` is the og-thumbnail file's
+// updatedAt as epoch ms — used both as the "has a thumbnail" flag and as the
+// `?v=` cache-buster for the asset route (null = no thumbnail yet). `ownerEmail`/
+// `ownerName` are populated only in the admin (all-apps) view.
+export type GalleryProject = {
+  id: string;
+  name: string;
+  publishSlug: string | null;
+  published: boolean;
+  updatedAt: Date;
+  createdAt: Date;
+  thumbV: number | null;
+  ownerEmail: string | null;
+  ownerName: string | null;
+};
+
+/**
+ * Projects for the gallery page. A normal user gets only their own; an admin
+ * gets ALL projects plus each owner's email/name (for support). The og-thumbnail
+ * is LEFT-JOINed in one query — its (projectId, path) row is unique, so at most
+ * one match — instead of a per-project file read.
+ */
+export async function listGalleryProjects(
+  userId: string,
+  opts: { admin: boolean },
+): Promise<GalleryProject[]> {
+  const thumbJoin = and(
+    eq(files.projectId, projects.id),
+    eq(files.path, THUMBNAIL_PATH),
+  );
+  const toEpoch = (d: Date | null) => (d ? d.getTime() : null);
+
+  if (opts.admin) {
+    const rows = await db
+      .select({
+        id: projects.id,
+        name: projects.name,
+        publishSlug: projects.publishSlug,
+        published: projects.published,
+        updatedAt: projects.updatedAt,
+        createdAt: projects.createdAt,
+        thumbUpdatedAt: files.updatedAt,
+        ownerEmail: users.email,
+        ownerName: users.name,
+      })
+      .from(projects)
+      .leftJoin(files, thumbJoin)
+      .leftJoin(users, eq(users.id, projects.userId))
+      .orderBy(desc(projects.updatedAt));
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      publishSlug: r.publishSlug,
+      published: r.published,
+      updatedAt: r.updatedAt,
+      createdAt: r.createdAt,
+      thumbV: toEpoch(r.thumbUpdatedAt),
+      ownerEmail: r.ownerEmail ?? null,
+      ownerName: r.ownerName ?? null,
+    }));
+  }
+
+  const rows = await db
+    .select({
+      id: projects.id,
+      name: projects.name,
+      publishSlug: projects.publishSlug,
+      published: projects.published,
+      updatedAt: projects.updatedAt,
+      createdAt: projects.createdAt,
+      thumbUpdatedAt: files.updatedAt,
+    })
+    .from(projects)
+    .leftJoin(files, thumbJoin)
+    .where(eq(projects.userId, userId))
+    .orderBy(desc(projects.updatedAt));
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    publishSlug: r.publishSlug,
+    published: r.published,
+    updatedAt: r.updatedAt,
+    createdAt: r.createdAt,
+    thumbV: toEpoch(r.thumbUpdatedAt),
+    ownerEmail: null,
+    ownerName: null,
+  }));
 }
 
 /** Returns the user's most recent project, creating an empty one on first use. */
@@ -161,6 +252,44 @@ export async function getOwnedProject(projectId: string, userId: string) {
   });
   if (!project) throw new Error("Project not found");
   return project;
+}
+
+/**
+ * Resolves a project for a VIEW route: returns it if the user owns it, OR if the
+ * user is a platform admin (read-only cross-user access for support). `isOwner`
+ * lets callers render read-only; `ownerEmail`/`ownerName` label whose app it is
+ * in the admin case. Throws "Project not found" for everyone else — identical to
+ * getOwnedProject, so a non-admin can't tell a foreign project exists.
+ *
+ * Use this ONLY on read/view paths. Every write path must keep getOwnedProject
+ * so admin access stays strictly read-only, enforced server-side.
+ */
+export async function getAccessibleProject(projectId: string, userId: string) {
+  const project = await db.query.projects.findFirst({
+    where: eq(projects.id, projectId),
+  });
+  if (!project) throw new Error("Project not found");
+  if (project.userId === userId) {
+    return {
+      project,
+      isOwner: true as const,
+      ownerEmail: null as string | null,
+      ownerName: null as string | null,
+    };
+  }
+  if (await isAdminUser(userId)) {
+    const owner = await db.query.users.findFirst({
+      where: eq(users.id, project.userId),
+      columns: { email: true, name: true },
+    });
+    return {
+      project,
+      isOwner: false as const,
+      ownerEmail: owner?.email ?? null,
+      ownerName: owner?.name ?? null,
+    };
+  }
+  throw new Error("Project not found");
 }
 
 /**

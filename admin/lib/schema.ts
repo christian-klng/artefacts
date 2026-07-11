@@ -16,6 +16,10 @@ export const users = pgTable("user", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name"),
   email: text("email").notNull(),
+  // Builder-side admin flag. The admin panel WRITES this (the /users toggle);
+  // the builder reads it to grant read-only cross-user access. Kept in sync with
+  // web/lib/db/schema.ts.
+  isAdmin: boolean("is_admin").notNull().default(false),
   createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
 });
 

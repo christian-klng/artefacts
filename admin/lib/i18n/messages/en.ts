@@ -55,6 +55,9 @@ const en: Messages = {
     colApps: "Apps",
     colConsumed: "Consumed",
     colBalance: "Balance",
+    colAdmin: "Admin",
+    adminHint:
+      "Admins see all apps and can open any app read-only in the builder.",
     empty: "No users yet.",
   },
   apps: {

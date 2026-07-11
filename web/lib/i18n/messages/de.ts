@@ -76,6 +76,19 @@ const de = {
     delete: "Löschen",
     deleteConfirm: "„{name}“ löschen? Das kann nicht rückgängig gemacht werden.",
   },
+  gallery: {
+    title: "Meine Apps",
+    adminAll: "Alle Apps",
+    sort: "Sortieren",
+    sortRecent: "Zuletzt bearbeitet",
+    sortName: "Name (A–Z)",
+    sortCreated: "Zuletzt erstellt",
+    empty: "Noch keine Apps.",
+    newApp: "Neue App",
+    notPublished: "Nicht veröffentlicht",
+    owner: "Besitzer",
+    homeAria: "Meine Apps",
+  },
   account: {
     openLabel: "Konto",
     title: "Konto",
@@ -313,6 +326,9 @@ const de = {
     creditExhausted:
       "Dein Guthaben ist aufgebraucht. Bitte lade Credits auf, um fortzufahren.",
     agentError: "Agent-Fehler",
+    adminViewBanner: "Admin-Ansicht — App von {owner} (schreibgeschützt)",
+    readOnlyComposer:
+      "Schreibgeschützt – nur der Besitzer kann Änderungen vornehmen.",
   },
 };
 

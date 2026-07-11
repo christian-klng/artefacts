@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import {
-  getOwnedProject,
+  getAccessibleProject,
   getClientFiles,
   getMessages,
   getPublishedSignature,
@@ -28,10 +28,14 @@ export default async function ProjectPage({
 
   const { projectId } = await params;
   const { run } = await searchParams;
-  const project = await getOwnedProject(projectId, session.user.id).catch(
+  // Owner OR admin (read-only). getAccessibleProject throws for anyone else, so
+  // a non-admin visiting a foreign project id is bounced to /app exactly as
+  // before. `isOwner` drives the workspace's read-only mode.
+  const access = await getAccessibleProject(projectId, session.user.id).catch(
     () => null,
   );
-  if (!project) redirect("/app");
+  if (!access) redirect("/app");
+  const { project, isOwner, ownerEmail, ownerName } = access;
 
   const [clientFiles, messageRows, versionRows, attachmentRows, usageRows] =
     await Promise.all([
@@ -139,6 +143,8 @@ export default async function ProjectPage({
         initialDatabaseEnabled={project.databaseEnabled}
         showBadge={!project.badgeHidden}
         initialPrompt={initialPrompt}
+        readOnly={!isOwner}
+        ownerLabel={ownerName ?? ownerEmail ?? undefined}
       />
     </div>
   );
