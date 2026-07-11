@@ -37,6 +37,11 @@ const en: Messages = {
     haveAccount: "Already have an account?",
     needAccount: "Need an account?",
     signUp: "Sign up",
+    dataConsent: {
+      before: "I agree to the ",
+      link: "data processing",
+      after: ".",
+    },
     forgotTitle: "Reset your password",
     forgotSubtitle: "Enter your email and we’ll send you a reset link.",
     sendResetLink: "Send reset link",
@@ -54,6 +59,7 @@ const en: Messages = {
     errPasswordMin: "Password must be at least 8 characters.",
     errInvalidInput: "Invalid input.",
     errAccountExists: "An account with that email already exists.",
+    errConsentRequired: "Please agree to the data processing to continue.",
     errResetInvalid: "This reset link is invalid or has expired.",
   },
   projectSwitcher: {

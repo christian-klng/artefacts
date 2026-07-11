@@ -38,6 +38,13 @@ const de = {
     haveAccount: "Du hast schon ein Konto?",
     needAccount: "Noch kein Konto?",
     signUp: "Registrieren",
+    dataConsent: {
+      // Aufgeteilt, damit das mittlere Wort auf die Datenschutzseite verlinkt.
+      // Die Leerzeichen an den Rändern sind gewollt (sie umschließen den Link).
+      before: "Ich stimme der ",
+      link: "Datenverarbeitung",
+      after: " zu.",
+    },
     forgotTitle: "Passwort zurücksetzen",
     forgotSubtitle:
       "Gib deine E-Mail ein und wir senden dir einen Link zum Zurücksetzen.",
@@ -57,6 +64,8 @@ const de = {
     errPasswordMin: "Das Passwort muss mindestens 8 Zeichen lang sein.",
     errInvalidInput: "Ungültige Eingabe.",
     errAccountExists: "Es existiert bereits ein Konto mit dieser E-Mail.",
+    errConsentRequired:
+      "Bitte stimme der Datenverarbeitung zu, um fortzufahren.",
     errResetInvalid:
       "Dieser Link zum Zurücksetzen ist ungültig oder abgelaufen.",
   },

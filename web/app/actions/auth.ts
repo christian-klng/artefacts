@@ -38,6 +38,10 @@ const signupSchema = (t: AuthMessages) =>
     name: z.string().trim().min(1).optional(),
     email: z.email({ error: t.errEmailInvalid }),
     password: z.string().min(8, { error: t.errPasswordMin }),
+    // Mandatory data-processing consent. An unchecked box submits no value, so
+    // only the checked "on" passes — the server-side backstop for the required
+    // checkbox in the signup form (a raw POST could otherwise skip it).
+    dataConsent: z.literal("on", { error: t.errConsentRequired }),
   });
 
 export async function authenticate(
@@ -70,6 +74,7 @@ export async function signup(
     name: formData.get("name") || undefined,
     email: formData.get("email"),
     password: formData.get("password"),
+    dataConsent: formData.get("dataConsent") ?? "",
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? t.errInvalidInput };

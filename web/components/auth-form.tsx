@@ -7,6 +7,11 @@ import { useMessages } from "@/lib/i18n/provider";
 
 type Mode = "login" | "signup";
 
+// The privacy policy ("Datenschutz") lives on the marketing site, a different
+// origin than the builder (app.<domain>) — so this is an absolute URL to that
+// domain, the same hardcoded root as the attribution badge (lib/badge.ts).
+const PRIVACY_URL = "https://kubikraum.digital/datenschutz";
+
 export function AuthForm({
   mode,
   action,
@@ -60,6 +65,32 @@ export function AuthForm({
           required
           minLength={8}
         />
+
+        {isSignup && (
+          <label className="flex items-start gap-2 text-sm text-neutral-600 dark:text-neutral-300">
+            <input
+              type="checkbox"
+              name="dataConsent"
+              required
+              className="mt-0.5 h-4 w-4 shrink-0 accent-neutral-900 dark:accent-white"
+            />
+            <span>
+              {t.dataConsent.before}
+              {/* External (marketing origin); new tab so the half-filled form
+                  isn't lost. Nested in the label, but per the HTML spec a click
+                  on interactive content doesn't toggle the checkbox. */}
+              <a
+                href={PRIVACY_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                {t.dataConsent.link}
+              </a>
+              {t.dataConsent.after}
+            </span>
+          </label>
+        )}
 
         {!isSignup && (
           <p className="text-right text-sm">
