@@ -17,13 +17,11 @@ const de = {
     titleTail: ".",
     description:
       "Beschreibe, was du brauchst — ein Agent baut es live, Datei für Datei, direkt in deinem Browser. Du schaust live zu und veröffentlichst mit einem Klick.",
-    helper:
-      "Mit „App bauen“ geht es weiter zur Registrierung — dein Prompt wird dort direkt zu deiner ersten App.",
   },
   promptBox: {
     placeholder: "Beschreibe die Web-App, die du bauen willst…",
     hint: "Enter zum Senden · Shift+Enter für neue Zeile",
-    build: "App bauen",
+    build: "Weiter",
     submitting: "Moment…",
     examples: [
       "Eine Landingpage für mein Café mit Speisekarte und Öffnungszeiten",

@@ -18,13 +18,11 @@ const en: Messages = {
     titleTail: ".",
     description:
       "Describe what you need — an agent builds it live, file by file, right in your browser. You watch it happen and publish with one click.",
-    helper:
-      "“Build app” takes you to sign-up — your prompt turns straight into your first app there.",
   },
   promptBox: {
     placeholder: "Describe the web app you want to build…",
     hint: "Enter to send · Shift+Enter for a new line",
-    build: "Build app",
+    build: "Continue",
     submitting: "One sec…",
     examples: [
       "A landing page for my café with menu and opening hours",

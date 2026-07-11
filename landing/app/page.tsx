@@ -27,8 +27,6 @@ export default async function Home() {
         </div>
 
         <PromptBox />
-
-        <p className="text-sm text-neutral-500">{m.hero.helper}</p>
       </main>
 
       <section className="mx-auto w-full max-w-2xl px-6 pb-16">
