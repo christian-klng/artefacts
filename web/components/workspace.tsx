@@ -186,6 +186,12 @@ export function Workspace({
   // Spendable EUR credit. Hydrated on mount and updated after every billed turn.
   const [balanceEur, setBalanceEur] = useState<number | null>(null);
   const [view, setView] = useState<ViewMode>("preview");
+  // Inline text-edit mode (preview tab): click text in the app to change it.
+  const [editMode, setEditMode] = useState(false);
+  // Cache-buster for the preview iframe, bumped whenever /index.html changes from
+  // an agent turn or a restore — but NOT on an inline save (see onInlineSaved), so
+  // a save doesn't reload the app (which would reset its JS state + lose the edit).
+  const [previewVersion, setPreviewVersion] = useState(0);
   // Preview viewport size (desktop/tablet/mobile) for the responsiveness switcher
   // in the toolbar. Only affects the preview iframe's dimensions.
   const [device, setDevice] = useState<DeviceMode>("desktop");
@@ -251,6 +257,12 @@ export function Workspace({
   // go stale — re-uploading a file restores the still-remembered "files" view.
   const effectiveView =
     view === "files" && attachments.length === 0 ? "preview" : view;
+
+  // Inline text editing is offered once there's an entry doc and the viewer can
+  // write (not the admin read-only view). editMode only takes effect under those
+  // same conditions, so a stale flag can never annotate a read-only preview.
+  const canEdit = !!files["/index.html"] && !readOnly;
+  const effectiveEditMode = editMode && canEdit;
 
   // Mirror view + index.html presence into refs so the SSE handler's auto-switch
   // logic reads the current value without re-creating the handler on every change.
@@ -414,6 +426,8 @@ export function Workspace({
           setStream((s) => (s && s.path === event.path ? null : s));
           setFiles((prev) => ({ ...prev, [event.path]: event.content }));
           markFileDone(event.path);
+          // An agent edit to the entry doc should refresh the live preview.
+          if (event.path === "/index.html") setPreviewVersion((v) => v + 1);
           maybeAutoSwitchToCode();
           break;
         }
@@ -455,6 +469,8 @@ export function Workspace({
           setFiles(event.files);
           setAssets(event.assets);
           setInternal(event.internal);
+          // End-of-turn snapshot: refresh the preview to the final built state.
+          setPreviewVersion((v) => v + 1);
           break;
         case "version":
           setVersions((prev) => [
@@ -544,6 +560,19 @@ export function Workspace({
       router,
     ],
   );
+
+  // An inline preview edit was persisted: fold the new /index.html into state so
+  // the code view + publish-dirty signature track it. Deliberately does NOT bump
+  // previewVersion — the iframe already shows the edit; reloading would reset the
+  // app and lose it.
+  const onInlineSaved = useCallback((indexHtml: string) => {
+    setFiles((prev) => ({ ...prev, "/index.html": indexHtml }));
+  }, []);
+
+  // An inline edit failed or was stale (already reverted in the iframe).
+  const onInlineError = useCallback(() => {
+    appendMessage("assistant", m.toolbar.editSaveFailed, { kind: "error" });
+  }, [appendMessage, m]);
 
   // Keep the preview token fresh. The initial token comes from the (cacheable)
   // server render, so it may already be near/after its 1h TTL when a soft
@@ -728,6 +757,8 @@ export function Workspace({
         setDoneTicks({});
         setHighlight(null);
         setStream(null);
+        // Restored /index.html differs from what the iframe shows → reload it.
+        setPreviewVersion((v) => v + 1);
         // A full-backup restore can also change the database + attachments, so
         // refresh the Daten/Dateien tabs to reflect the restored state.
         setHasDatabase(data.databaseEnabled);
@@ -941,6 +972,9 @@ export function Workspace({
             hasDatabase={hasDatabase && !readOnly}
             readOnly={readOnly}
             hasFiles={attachments.length > 0 && !readOnly}
+            editMode={effectiveEditMode}
+            canEdit={canEdit}
+            onToggleEdit={() => setEditMode((e) => !e)}
             canDownload={!!files["/index.html"]}
             onDownload={onDownload}
             siteUrl={siteUrl}
@@ -979,6 +1013,10 @@ export function Workspace({
                 doneTicks={doneTicks}
                 highlight={highlight}
                 stream={stream}
+                editMode={effectiveEditMode}
+                previewVersion={previewVersion}
+                onInlineSaved={onInlineSaved}
+                onInlineError={onInlineError}
               />
             )}
           </div>

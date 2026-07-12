@@ -9,9 +9,6 @@ export const metadata: Metadata = {
   alternates: { canonical: "/impressum" },
 };
 
-// NOTE: Startgerüst mit bekannten Angaben + Platzhaltern (gelb markiert). Bitte
-// juristisch prüfen und die offenen Felder ergänzen — dies ist keine
-// Rechtsberatung.
 export default function ImpressumPage() {
   return (
     <div className="flex min-h-screen flex-col">
@@ -20,7 +17,7 @@ export default function ImpressumPage() {
       <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-16">
         <h1 className="text-3xl font-semibold tracking-tight">Impressum</h1>
         <p className="mt-2 text-sm text-neutral-500">
-          Gilt für die Website kubikraum.digital sowie den Builder unter
+          Gilt für die Website kubikraum.digital sowie den Agenten unter
           app.kubikraum.digital.
         </p>
 
@@ -32,13 +29,11 @@ export default function ImpressumPage() {
             <p>
               Christian Klang
               <br />
-              <Placeholder>[Firmierung / Rechtsform, falls Unternehmen]</Placeholder>
+              Köpenicker Landstr. 262
               <br />
-              <Placeholder>[Straße und Hausnummer]</Placeholder>
+              12437 Berlin
               <br />
-              <Placeholder>[PLZ und Ort]</Placeholder>
-              <br />
-              <Placeholder>[Land]</Placeholder>
+              Deutschland
             </p>
           </section>
 
@@ -49,10 +44,10 @@ export default function ImpressumPage() {
             <p>
               E-Mail:{" "}
               <a
-                href="mailto:christian@kubikraum.digital"
+                href="mailto:christian@ kubikraum.digital"
                 className="text-info underline underline-offset-2 hover:text-info-deep dark:hover:text-info"
               >
-                christian@kubikraum.digital
+                christian@ kubikraum.digital
               </a>
               <br />
               Telefon: <Placeholder>[Telefonnummer]</Placeholder>
@@ -65,7 +60,7 @@ export default function ImpressumPage() {
             </h2>
             <p>
               Umsatzsteuer-Identifikationsnummer gemäß § 27a UStG:{" "}
-              <Placeholder>[USt-IdNr., falls vorhanden]</Placeholder>
+              DE299488482
             </p>
           </section>
 
@@ -74,7 +69,7 @@ export default function ImpressumPage() {
               Redaktionell verantwortlich (§ 18 Abs. 2 MStV)
             </h2>
             <p>
-              Christian Klang, <Placeholder>[Anschrift wie oben]</Placeholder>
+              Christian Klang, Anschrift wie oben
             </p>
           </section>
 
@@ -148,7 +143,7 @@ export default function ImpressumPage() {
           </section>
 
           <p className="text-xs text-neutral-400">
-            Stand: <Placeholder>[Datum]</Placeholder>
+            Stand: 12.06.2026
           </p>
         </div>
       </main>

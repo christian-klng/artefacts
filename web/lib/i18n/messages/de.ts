@@ -166,6 +166,11 @@ const de = {
     deviceDesktop: "Desktop",
     deviceTablet: "Tablet",
     deviceMobile: "Handy",
+    editText: "Text bearbeiten",
+    editTextActive: "Bearbeitung beenden",
+    editTextHint:
+      "Texte direkt in der Vorschau anklicken und ändern — mit Enter speichern, Esc bricht ab.",
+    editSaveFailed: "Änderung konnte nicht gespeichert werden.",
     download: "Download",
     downloadHint:
       "Ziel-URL der Veröffentlichung — wird in SEO-Angaben (Canonical, Open Graph, Sitemap) eingesetzt. Leer lassen für relative Pfade.",

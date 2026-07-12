@@ -8,6 +8,7 @@ import { injectBadge } from "@/lib/badge";
 import { injectOgImage, THUMBNAIL_PATH } from "@/lib/og-image";
 import { substituteSiteUrl, originFromHost } from "@/lib/site-url";
 import { contentTypeFor, embedIconSprite, ICON_SPRITE_PATH } from "@/lib/vfs";
+import { annotateEditableText, injectInlineEditRuntime } from "@/lib/inline-edit";
 import { verifyPreviewToken } from "@/lib/preview-token";
 import {
   parseAppLabel,
@@ -88,6 +89,7 @@ function fileResponse(
   showBadge: boolean,
   hasThumbnail: boolean,
   spriteContent: string | null,
+  editMode: boolean,
 ): Response {
   const contentType = contentTypeFor(path, file.mimeType);
   const isHtml = contentType.startsWith("text/html");
@@ -98,9 +100,14 @@ function fileResponse(
       headers: { "content-type": contentType, "cache-control": "no-store" },
     });
   }
+  // Inline edit mode (preview host only): tag editable leaf text elements over
+  // the RAW stored source — before substituteSiteUrl / any injection — so the
+  // ordinals match a save-time walk over the same stored source.
+  let raw = file.content;
+  if (isHtml && editMode) raw = annotateEditableText(raw);
   // Text: resolve the __SITE_URL__ placeholder to this real origin (so SEO files
   // ship absolute URLs), then inject the bootstrap into the HTML entry document.
-  let body = substituteSiteUrl(file.content, origin);
+  let body = substituteSiteUrl(raw, origin);
   if (isHtml) {
     body = injectBootstrap(body, projectId, dbEnabled);
     // "Erstellt mit Kubikraum" — injected here (not in the VFS) so it shows on
@@ -115,6 +122,8 @@ function fileResponse(
     // at runtime by the app's JS — resolves. External refs still work natively on
     // this real origin; this makes the leaner `#id` form work here too.
     body = embedIconSprite(body, spriteContent);
+    // Ship the inline-edit runtime last, so it sees the fully-injected document.
+    if (editMode) body = injectInlineEditRuntime(body);
   }
   return new Response(body, {
     headers: { "content-type": contentType, "cache-control": "no-store" },
@@ -156,6 +165,10 @@ export async function GET(request: Request) {
     // WITHOUT the query string, so we also accept the token from a cookie that
     // the entry response sets, scoped to this unique preview host.
     const queryToken = new URL(request.url).searchParams.get("pt");
+    // Inline-edit annotation is opt-in per request (?edit=1) and preview-only —
+    // the builder adds it when the user turns on edit mode. Sub-resources are
+    // fetched without the query, so only the entry HTML doc is ever annotated.
+    const editMode = new URL(request.url).searchParams.get("edit") === "1";
     const token = queryToken ?? readCookie(request.headers.get("cookie"), "pt");
     if (verifyPreviewToken(token) !== projectId) {
       return new Response("Forbidden", { status: 403 });
@@ -183,6 +196,7 @@ export async function GET(request: Request) {
       !badgeHidden,
       hasThumbnail,
       spriteContent,
+      editMode,
     );
     // The preview origin is an ephemeral, gated view of the live VFS — never the
     // canonical address — so keep it out of search/answer-engine indexes.
@@ -216,6 +230,7 @@ export async function GET(request: Request) {
         !file.badgeHidden,
         file.hasThumbnail,
         spriteContent,
+        false, // published apps are never inline-editable
       );
     }
   }

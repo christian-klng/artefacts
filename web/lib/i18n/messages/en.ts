@@ -157,6 +157,11 @@ const en: Messages = {
     deviceDesktop: "Desktop",
     deviceTablet: "Tablet",
     deviceMobile: "Mobile",
+    editText: "Edit text",
+    editTextActive: "Finish editing",
+    editTextHint:
+      "Click text directly in the preview to change it — Enter saves, Esc cancels.",
+    editSaveFailed: "Could not save the change.",
     download: "Download",
     downloadHint:
       "Target URL of the publication — used in SEO fields (canonical, Open Graph, sitemap). Leave blank for relative paths.",

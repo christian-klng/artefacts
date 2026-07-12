@@ -62,6 +62,10 @@ export function SandpackWorkspace({
   doneTicks = {},
   highlight = null,
   stream = null,
+  editMode = false,
+  previewVersion = 0,
+  onInlineSaved,
+  onInlineError,
 }: {
   files: Record<string, string>;
   assets: Record<string, AssetMeta>;
@@ -91,6 +95,18 @@ export function SandpackWorkspace({
   // inject it server-side; this flag only drives the single-file srcDoc path
   // below, which never hits the server.
   showBadge?: boolean;
+  // Inline text-edit mode: the preview is served with editable-element markers +
+  // an editor runtime (&edit=1), and edits are relayed here to be persisted.
+  editMode?: boolean;
+  // Cache-buster for the preview iframe. Bumped by the parent on agent/restore
+  // changes to /index.html — but NOT on an inline save, so a save doesn't reload
+  // the iframe (which would reset the app's JS state and lose the edit in view).
+  previewVersion?: number;
+  // A relayed inline edit was persisted; carries the new /index.html so the code
+  // view + publish signature stay in sync (without a preview reload).
+  onInlineSaved?: (indexHtml: string) => void;
+  // A relayed inline edit failed/was stale (the element was reverted in-place).
+  onInlineError?: () => void;
 }) {
   const m = useMessages();
   const indexHtml = files["/index.html"];
@@ -124,6 +140,72 @@ export function SandpackWorkspace({
     return map;
   }, [files, assets, internal, streamPath]);
 
+  // The active preview iframe (subdomain OR srcDoc — only one renders at a time),
+  // so the inline-edit message handler can verify a message came from OUR iframe.
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const previewOrigin = useMemo(() => {
+    if (!previewUrl) return null;
+    try {
+      return new URL(previewUrl).origin;
+    } catch {
+      return null;
+    }
+  }, [previewUrl]);
+
+  // Inline-edit relay. The preview iframe runs on a different origin and can't
+  // carry the builder session, so it postMessages the edit here; we persist it
+  // with the owner's session and bubble the new /index.html up. Validated hard:
+  // the message must come from OUR iframe's window (and, on the subdomain path,
+  // its exact origin). On failure the element is reverted in-place.
+  useEffect(() => {
+    if (!editMode) return;
+    const onMessage = (e: MessageEvent) => {
+      const win = iframeRef.current?.contentWindow;
+      if (!win || e.source !== win) return;
+      const d = e.data as {
+        __afedit?: number;
+        type?: string;
+        ordinal?: number;
+        oldText?: string;
+        newText?: string;
+      } | null;
+      if (!d || d.__afedit !== 1 || d.type !== "save") return;
+      // Origin gate: subdomain must match the preview origin; the sandboxed
+      // srcDoc has an opaque "null" origin.
+      if (previewUrl) {
+        if (previewOrigin && e.origin !== previewOrigin) return;
+      } else if (e.origin !== "null") {
+        return;
+      }
+      const replyTarget = previewOrigin ?? "*";
+      const revert = () => {
+        win.postMessage(
+          { __afedit: 1, type: "revert", ordinal: d.ordinal, text: d.oldText },
+          replyTarget,
+        );
+        onInlineError?.();
+      };
+      fetch("/api/projects/inline-edit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId,
+          ordinal: d.ordinal,
+          oldText: d.oldText,
+          newText: d.newText,
+        }),
+      })
+        .then(async (res) => {
+          if (!res.ok) return revert();
+          const data = (await res.json()) as { content?: string };
+          if (typeof data.content === "string") onInlineSaved?.(data.content);
+        })
+        .catch(revert);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [editMode, previewUrl, previewOrigin, projectId, onInlineSaved, onInlineError]);
+
   if (view === "preview") {
     if (!indexHtml) {
       return (
@@ -150,8 +232,12 @@ export function SandpackWorkspace({
       <DeviceStage device={device}>
         {previewUrl ? (
           <iframe
+            ref={iframeRef}
             title={m.sandpack.appPreview}
-            src={`${previewUrl}${previewUrl.includes("?") ? "&" : "?"}v=${hashContent(indexHtml)}`}
+            // v is the parent-owned previewVersion (NOT a content hash): an inline
+            // save changes the files but not this version, so the iframe keeps the
+            // just-edited DOM instead of reloading. &edit=1 turns on the editor.
+            src={`${previewUrl}${previewUrl.includes("?") ? "&" : "?"}v=${previewVersion}${editMode ? "&edit=1" : ""}`}
             // The app runs on its own origin (a different origin than the builder),
             // so allow-same-origin is safe here — it cannot reach the builder —
             // and is needed for the app's own cookies/storage/auth later.
@@ -165,6 +251,9 @@ export function SandpackWorkspace({
             projectId={projectId}
             showBadge={showBadge}
             style={iframeStyle}
+            editMode={editMode}
+            previewVersion={previewVersion}
+            iframeRef={iframeRef}
           />
         )}
       </DeviceStage>
@@ -597,42 +686,55 @@ function SrcDocPreview({
   projectId,
   showBadge,
   style,
+  editMode,
+  previewVersion,
+  iframeRef,
 }: {
   indexHtml: string;
   multiFile: boolean;
   projectId: string;
   showBadge: boolean;
   style: React.CSSProperties;
+  editMode: boolean;
+  previewVersion: number;
+  iframeRef: React.RefObject<HTMLIFrameElement | null>;
 }) {
   const m = useMessages();
-  // Keyed by content hash so a stale render from older HTML is ignored.
+  // Edit mode needs the server render even for a single file (that's where the
+  // element markers + editor runtime are injected), so route through it too.
+  const useServer = multiFile || editMode;
+  // Keyed by previewVersion (parent-owned), NOT the content hash — so an inline
+  // save (which doesn't bump the version) never re-fetches / reloads the iframe.
   const [rendered, setRendered] = useState<{ key: number; html: string } | null>(
     null,
   );
-  const key = hashContent(indexHtml);
 
   useEffect(() => {
-    if (!multiFile) return;
+    if (!useServer) return;
     let cancelled = false;
-    fetch(`/api/projects/render?projectId=${encodeURIComponent(projectId)}`)
+    const url =
+      `/api/projects/render?projectId=${encodeURIComponent(projectId)}` +
+      (editMode ? "&edit=1" : "");
+    fetch(url)
       .then((res) => (res.ok ? res.text() : Promise.reject(res.status)))
       .then((html) => {
-        if (!cancelled) setRendered({ key, html });
+        if (!cancelled) setRendered({ key: previewVersion, html });
       })
       .catch(() => {
         // Fall back to the raw HTML (relative assets show as broken links).
-        if (!cancelled) setRendered({ key, html: indexHtml });
+        if (!cancelled) setRendered({ key: previewVersion, html: indexHtml });
       });
     return () => {
       cancelled = true;
     };
-    // Re-fetch whenever the HTML content changes (keyed by its hash).
+    // Re-fetch on version bumps + edit-mode toggles only (indexHtml intentionally
+    // excluded: an inline save mutates it without bumping previewVersion).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, multiFile, projectId]);
+  }, [previewVersion, useServer, editMode, projectId]);
 
-  const renderedHtml = rendered?.key === key ? rendered.html : null;
+  const renderedHtml = rendered?.key === previewVersion ? rendered.html : null;
 
-  if (multiFile && renderedHtml === null) {
+  if (useServer && renderedHtml === null) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-neutral-500">
         Vorschau wird vorbereitet…
@@ -640,12 +742,13 @@ function SrcDocPreview({
     );
   }
 
-  // multiFile HTML comes from /api/projects/render, which already injected the
-  // badge — injectBadge is idempotent, so wrapping is a no-op there and only
-  // adds it to the single-file / render-failure path.
-  const src = multiFile ? (renderedHtml ?? indexHtml) : indexHtml;
+  // Server HTML comes from /api/projects/render, which already injected the badge
+  // (and, in edit mode, the markers + runtime) — injectBadge is idempotent, so
+  // wrapping is a no-op there and only adds it to the single-file offline path.
+  const src = useServer ? (renderedHtml ?? indexHtml) : indexHtml;
   return (
     <iframe
+      ref={iframeRef}
       title={m.sandpack.appPreview}
       srcDoc={showBadge ? injectBadge(src) : src}
       // No allow-same-origin: the preview cannot reach our app's origin,

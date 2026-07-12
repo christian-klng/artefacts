@@ -3,24 +3,24 @@
 // missing or renamed key fails the build typecheck.
 const de = {
   meta: {
-    tagline: "Aus einem Satz wird deine Web-App.",
+    tagline: "In 4 Minuten zur Business-App",
     description:
-      "Beschreibe eine Web-App in einem Satz — ein KI-Agent baut sie live in deinem Browser und veröffentlicht sie per Klick. Datenschutzkonform, Hosting in Deutschland.",
+      "Beschreibe deine App in einem Satz — der Kubikraum-Agent baut sie live in deinem Browser. Veröffentliche oder exportiere mit einem Klick.",
     ogLocale: "de_DE",
   },
   nav: {
     login: "Anmelden",
   },
   hero: {
-    titleLead: "Aus einem Satz wird deine ",
-    titleHighlight: "Web-App",
+    titleLead: "In 4 Minuten zur ",
+    titleHighlight: "Business-App",
     titleTail: ".",
     description:
-      "Beschreibe, was du brauchst — ein Agent baut es live, Datei für Datei, direkt in deinem Browser. Du schaust live zu und veröffentlichst mit einem Klick.",
+      "Beschreibe deine App in einem Satz — der Kubikraum-Agent baut sie live in deinem Browser. Veröffentliche oder exportiere mit einem Klick.",
   },
   promptBox: {
-    placeholder: "Beschreibe die Web-App, die du bauen willst…",
-    hint: "Enter zum Senden · Shift+Enter für neue Zeile",
+    placeholder: "Erstelle meine Business App…",
+    hint: "Enter zum Senden",
     build: "Weiter",
     submitting: "Moment…",
     examples: [
@@ -34,15 +34,15 @@ const de = {
     items: [
       {
         title: "Viel Raum für deine Kreativität",
-        description: "Erhalte Design-Konzepte für deine neue App.",
+        description: "Erhalte kreative Design-Konzepte auf Knopfdruck.",
       },
       {
         title: "Datenschutz-konform",
-        description: "Das Hosting findet komplett in Deutschland statt.",
+        description: "Das Hosting und die KI sind DSGVO-konform.",
       },
       {
         title: "Profi-Werkzeuge",
-        description: "Icons, Bilder und Schriftarten direkt in deiner App.",
+        description: "Icons, Bilder und Schriftarten werden direkt geladen.",
       },
       {
         title: "Stelle es direkt online",
@@ -50,12 +50,12 @@ const de = {
       },
       {
         title: "Du hast schon einen Server?",
-        description: "Dann exportiere deine App-Dateien und veröffentliche selbst.",
+        description: "Dann exportiere die App-Dateien und veröffentliche selbst.",
       },
       {
         title: "Faires Preismodell",
         description:
-          "Bezahle per Guthaben-Aufladung nur für die erstellten Leistungen.",
+          "Bezahle per Guthaben-Aufladung nur für das was du brauchst.",
       },
     ],
   },
@@ -85,7 +85,7 @@ const de = {
     ],
   },
   footer: {
-    text: "Kubikraum · self-hosted App-Builder",
+    text: "Kubikraum · Professionelle Business-Apps für alle.",
     badgeEu: "DSGVO-konform und in der EU gehostet",
     badgeDe: "Entwickelt in Deutschland",
     terms: "AGB",
@@ -93,7 +93,7 @@ const de = {
     imprint: "Impressum",
   },
   themeToggle: {
-    label: "Theme umschalten",
+    label: "Hell & dunkel umschalten",
   },
   localeToggle: {
     label: "Sprache wechseln",

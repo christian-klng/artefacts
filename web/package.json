@@ -18,6 +18,7 @@
     "check:badge": "node scripts/check-badge.mjs",
     "check:thumbnail": "node scripts/check-thumbnail.mjs",
     "check:seo": "node scripts/check-seo.mjs",
+    "check:inline-edit": "node scripts/inline-edit-check.mjs",
     "canary:thinking": "node scripts/cortecs-thinking-canary.mjs",
     "canary:partial": "node scripts/partial-stream-canary.mjs"
   },

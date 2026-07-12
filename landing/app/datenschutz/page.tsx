@@ -36,22 +36,22 @@ export default function DatenschutzPage() {
               Verantwortlich für die Datenverarbeitung auf dieser Website und im
               Builder ist:
               <br />
-              Christian Klang, <Placeholder>[Anschrift]</Placeholder>, E-Mail:{" "}
+              Christian Klang, Köpenicker Landstr. 262, 12437 Berlin, E-Mail:{" "}
               <a
-                href="mailto:christian@kubikraum.digital"
+                href="mailto:christian@ kubikraum.digital"
                 className="text-info underline underline-offset-2 hover:text-info-deep dark:hover:text-info"
               >
-                christian@kubikraum.digital
+                christian@ kubikraum.digital
               </a>
-              , Telefon: <Placeholder>[Telefonnummer]</Placeholder>.
+              , Telefon: 
             </p>
-            <p>
+            <!-- <p>
               Datenschutzbeauftragte/r:{" "}
               <Placeholder>
                 [falls bestellt, hier angeben — für viele kleine Anbieter nicht
                 erforderlich]
               </Placeholder>
-            </p>
+            </p> -->
           </section>
 
           <section className="space-y-2">

@@ -35,6 +35,9 @@ export function WorkspaceToolbar({
   hasDatabase,
   hasFiles,
   canDownload,
+  editMode,
+  canEdit,
+  onToggleEdit,
   onDownload,
   siteUrl,
   versions,
@@ -57,6 +60,11 @@ export function WorkspaceToolbar({
   hasDatabase: boolean;
   hasFiles: boolean;
   canDownload: boolean;
+  /** Inline text-edit mode is on (preview only). */
+  editMode: boolean;
+  /** Whether the inline-edit toggle is offered (has /index.html, not read-only). */
+  canEdit: boolean;
+  onToggleEdit: () => void;
   onDownload: (rawSiteUrl: string) => void | Promise<void>;
   siteUrl?: string;
   versions: Version[];
@@ -102,7 +110,23 @@ export function WorkspaceToolbar({
       )}
 
       <div className="flex items-center gap-2">
-        {/* Preview tab: publishing. Code tab: version history + download. */}
+        {/* Preview tab: inline text editing + publishing. Code tab: history. */}
+        {view === "preview" && canEdit && (
+          <button
+            type="button"
+            onClick={onToggleEdit}
+            aria-pressed={editMode}
+            title={m.toolbar.editTextHint}
+            className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1 text-xs font-medium transition ${
+              editMode
+                ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
+                : "border-neutral-300 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+            }`}
+          >
+            <Pencil className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            {editMode ? m.toolbar.editTextActive : m.toolbar.editText}
+          </button>
+        )}
         {view === "preview" && publishEnabled && !readOnly && (
           <PublishControls
             canPublish={canPublish}

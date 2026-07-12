@@ -4,24 +4,24 @@ import type { Messages } from "./de";
 // compile error (`npm run build` typechecks).
 const en: Messages = {
   meta: {
-    tagline: "Turn a sentence into your web app.",
+    tagline: "Create your business app in 4 minutes",
     description:
-      "Describe a web app in one sentence — an AI agent builds it live in your browser and publishes it with one click. Privacy-compliant, hosted in Germany.",
+      "Describe your app in one sentence — the Kubikraum agent builds it live in your browser.  Publishing and export with one click.",
     ogLocale: "en_US",
   },
   nav: {
     login: "Sign in",
   },
   hero: {
-    titleLead: "Turn a sentence into your ",
-    titleHighlight: "web app",
+    titleLead: "Create your business app ",
+    titleHighlight: "in 4 minutes",
     titleTail: ".",
     description:
-      "Describe what you need — an agent builds it live, file by file, right in your browser. You watch it happen and publish with one click.",
+      "Describe your app in one sentence — the Kubikraum agent builds it live in your browser.  Publishing and export with one click.",
   },
   promptBox: {
-    placeholder: "Describe the web app you want to build…",
-    hint: "Enter to send · Shift+Enter for a new line",
+    placeholder: "Create a business app..",
+    hint: "Enter to send",
     build: "Continue",
     submitting: "One sec…",
     examples: [
@@ -34,15 +34,15 @@ const en: Messages = {
     items: [
       {
         title: "Room for your creativity",
-        description: "Get design concepts for your new app.",
+        description: "Get creative design concepts at the push of a button.",
       },
       {
-        title: "GDPR-compliant",
-        description: "Hosting takes place entirely in Germany.",
+        title: "Data compliance",
+        description: "Hosting and AI are GDPR-compliant.",
       },
       {
         title: "Pro tools",
-        description: "Icons, images, and fonts right inside your app.",
+        description: "Icons, images, and fonts are added to your app.",
       },
       {
         title: "Publish in one click",
@@ -84,7 +84,7 @@ const en: Messages = {
     ],
   },
   footer: {
-    text: "Kubikraum · self-hosted app builder",
+    text: "Kubikraum · Professional business apps for everybody",
     badgeEu: "GDPR-compliant and hosted in the EU",
     badgeDe: "Developed in Germany",
     terms: "Terms",
@@ -92,7 +92,7 @@ const en: Messages = {
     imprint: "Imprint",
   },
   themeToggle: {
-    label: "Toggle theme",
+    label: "Toggle bright and dark",
   },
   localeToggle: {
     label: "Switch language",
