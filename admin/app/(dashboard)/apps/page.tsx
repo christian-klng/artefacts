@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { listApps } from "@/lib/queries";
+import { publishedAppUrl } from "@/lib/app-url";
 import { formatDate } from "@/lib/format";
 import { resolveLocale } from "@/lib/locale";
 import { getMessages } from "@/lib/i18n/messages";
@@ -36,7 +37,9 @@ export default async function AppsPage() {
             </tr>
           </thead>
           <tbody>
-            {apps.map((a) => (
+            {apps.map((a) => {
+              const appUrl = a.published ? publishedAppUrl(a.publishSlug) : null;
+              return (
               <tr
                 key={a.id}
                 className="border-b border-black/5 last:border-0 dark:border-white/5"
@@ -64,10 +67,24 @@ export default async function AppsPage() {
                 </td>
                 <td className="px-4 py-3">
                   {a.published ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">
-                      {m.statusPublished}
-                      {a.publishSlug ? ` · ${a.publishSlug}` : ""}
-                    </span>
+                    appUrl ? (
+                      <a
+                        href={appUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={appUrl}
+                        className="inline-flex max-w-64 items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-700 hover:bg-green-500/20 dark:text-green-400 dark:hover:bg-green-500/20"
+                      >
+                        <span className="shrink-0">{m.statusPublished}</span>
+                        <span className="truncate">· {a.publishSlug}</span>
+                        <span aria-hidden className="shrink-0">↗</span>
+                      </a>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">
+                        {m.statusPublished}
+                        {a.publishSlug ? ` · ${a.publishSlug}` : ""}
+                      </span>
+                    )
                   ) : (
                     <span className="inline-flex items-center rounded-full bg-foreground/5 px-2 py-0.5 text-xs font-medium text-foreground/50">
                       {m.statusDraft}
@@ -87,7 +104,8 @@ export default async function AppsPage() {
                   <PublishButton projectId={a.id} published={a.published} />
                 </td>
               </tr>
-            ))}
+              );
+            })}
             {apps.length === 0 && (
               <tr>
                 <td

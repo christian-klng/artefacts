@@ -160,6 +160,9 @@ services:
       # network (default http://web:3000); override only for a non-standard setup.
       ADMIN_API_SECRET: ${ADMIN_API_SECRET}
       WEB_INTERNAL_URL: ${WEB_INTERNAL_URL:-http://web:3000}
+      # Same value as web's APPS_DOMAIN — the /apps list links published apps to
+      # their public <slug>.<APPS_DOMAIN> URL. Unset → plain badge, no link.
+      APPS_DOMAIN: ${APPS_DOMAIN}
     depends_on:
       db:
         condition: service_healthy
