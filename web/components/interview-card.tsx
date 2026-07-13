@@ -95,8 +95,9 @@ export function InterviewCard({
 /**
  * The interactive interview, shown in a centered modal with room to breathe.
  * Renders nothing unless the row is still pending. Picking a style tile (after
- * all questions are answered) or skipping CONFIRMS the interview, starts the
- * build, and closes the modal.
+ * all questions are answered) only SELECTS it — the user can read the
+ * direction in peace; the explicit "Create app" button (or skipping) CONFIRMS
+ * the interview, starts the build, and closes the modal.
  */
 export function InterviewModal({
   messageId,
@@ -236,6 +237,7 @@ function PaletteChoice({
   onPick: (paletteId: string) => void;
 }) {
   const t = useMessages().interview;
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   return (
     <div className="space-y-2">
       <p className="font-medium">{spec.paletteQuestion}</p>
@@ -243,21 +245,34 @@ function PaletteChoice({
         {allAnswered ? t.paletteConfirmHint : t.paletteAnswerFirst}
       </p>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {spec.palettes.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            disabled={locked || !allAnswered}
-            onClick={() => onPick(p.id)}
-            className="rounded-xl border border-neutral-300 p-2 text-left transition enabled:hover:border-neutral-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-700 dark:enabled:hover:border-white"
-          >
-            <ColorSwatches colors={p.colors} className="h-8" />
-            <span className="mt-1.5 block truncate text-xs text-neutral-600 dark:text-neutral-400">
-              {p.name}
-            </span>
-          </button>
-        ))}
+        {spec.palettes.map((p) => {
+          const selected = selectedId === p.id;
+          return (
+            <button
+              key={p.id}
+              type="button"
+              disabled={locked || !allAnswered}
+              aria-pressed={selected}
+              onClick={() => setSelectedId(p.id)}
+              className={`rounded-xl border p-2 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                selected
+                  ? "border-neutral-900 ring-1 ring-neutral-900 dark:border-white dark:ring-white"
+                  : "border-neutral-300 enabled:hover:border-neutral-900 dark:border-neutral-700 dark:enabled:hover:border-white"
+              }`}
+            >
+              <ColorSwatches colors={p.colors} className="h-8" />
+              <span className="mt-1.5 block truncate text-xs text-neutral-600 dark:text-neutral-400">
+                {p.name}
+              </span>
+            </button>
+          );
+        })}
       </div>
+      <CreateAppButton
+        visible={selectedId !== null}
+        disabled={locked}
+        onClick={() => selectedId && onPick(selectedId)}
+      />
     </div>
   );
 }
@@ -297,6 +312,7 @@ function StyleChoice({
   onPick: (styleId: string) => void;
 }) {
   const t = useMessages().interview;
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   // Real specimens: one @font-face per distinct heading font, served by the
   // public catalog route. ~15 KB each, cached immutable; the catalog fallback
   // stack shows until (or if never) loaded.
@@ -329,10 +345,16 @@ function StyleChoice({
             key={s.id}
             style={s}
             disabled={locked || !allAnswered}
-            onPick={() => onPick(s.id)}
+            selected={selectedId === s.id}
+            onPick={() => setSelectedId(s.id)}
           />
         ))}
       </div>
+      <CreateAppButton
+        visible={selectedId !== null}
+        disabled={locked}
+        onClick={() => selectedId && onPick(selectedId)}
+      />
     </div>
   );
 }
@@ -340,10 +362,12 @@ function StyleChoice({
 function StyleTile({
   style,
   disabled,
+  selected,
   onPick,
 }: {
   style: StyleDirection;
   disabled: boolean;
+  selected: boolean;
   onPick: () => void;
 }) {
   const heading = fontMeta(style.headingFontId);
@@ -354,8 +378,13 @@ function StyleTile({
     <button
       type="button"
       disabled={disabled}
+      aria-pressed={selected}
       onClick={onPick}
-      className="group rounded-xl border border-neutral-300 p-3 text-left transition enabled:hover:border-neutral-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-700 dark:enabled:hover:border-white"
+      className={`group rounded-xl border p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${
+        selected
+          ? "border-neutral-900 ring-1 ring-neutral-900 dark:border-white dark:ring-white"
+          : "border-neutral-300 enabled:hover:border-neutral-900 dark:border-neutral-700 dark:enabled:hover:border-white"
+      }`}
     >
       {/* Specimen in the direction's own world: its colors, its heading font. */}
       <div
@@ -398,6 +427,35 @@ function StyleTile({
         className="mt-2.5 h-4"
       />
     </button>
+  );
+}
+
+/**
+ * The explicit confirm step shared by both choice variants: appears once a
+ * tile is selected, so the user can read the direction before committing.
+ */
+function CreateAppButton({
+  visible,
+  disabled,
+  onClick,
+}: {
+  visible: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  const t = useMessages().interview;
+  if (!visible) return null;
+  return (
+    <div className="pt-2">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={onClick}
+        className="w-full rounded-xl bg-neutral-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200 sm:w-auto"
+      >
+        {t.createApp}
+      </button>
+    </div>
   );
 }
 

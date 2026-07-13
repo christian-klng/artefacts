@@ -251,12 +251,13 @@ const en: Messages = {
     openCard: "View design suggestions",
     close: "Close",
     skipAndBuild: "Skip the questions and build directly",
+    createApp: "Create app",
     paletteConfirmHint:
-      "Clicking a palette confirms your choice and starts the build.",
+      "Pick a palette and take your time reading it — “Create app” then starts the build.",
     paletteAnswerFirst:
       "Answer the three questions first, then pick your colour scheme here.",
     styleConfirmHint:
-      "Clicking a style confirms your choice and starts the build.",
+      "Pick a style and take your time reading it — “Create app” then starts the build.",
     styleAnswerFirst:
       "Answer the three questions first, then pick your style here.",
   },

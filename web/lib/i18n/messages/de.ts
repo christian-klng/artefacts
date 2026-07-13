@@ -262,12 +262,13 @@ const de = {
     openCard: "Design-Vorschläge ansehen",
     close: "Schließen",
     skipAndBuild: "Fragen überspringen und direkt bauen",
+    createApp: "App erstellen",
     paletteConfirmHint:
-      "Klick auf eine Palette bestätigt deine Auswahl und startet den Bau.",
+      "Wähle eine Palette aus und schau sie dir in Ruhe an — „App erstellen“ startet dann den Bau.",
     paletteAnswerFirst:
       "Beantworte zuerst die drei Fragen, dann wähle hier dein Farbschema.",
     styleConfirmHint:
-      "Klick auf eine Stilrichtung bestätigt deine Auswahl und startet den Bau.",
+      "Wähle eine Stilrichtung aus und schau sie dir in Ruhe an — „App erstellen“ startet dann den Bau.",
     styleAnswerFirst:
       "Beantworte zuerst die drei Fragen, dann wähle hier deine Stilrichtung.",
   },
