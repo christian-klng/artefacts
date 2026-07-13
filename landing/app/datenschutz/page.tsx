@@ -45,13 +45,13 @@ export default function DatenschutzPage() {
               </a>
               , Telefon: 
             </p>
-            <!-- <p>
+            {/* <p>
               Datenschutzbeauftragte/r:{" "}
               <Placeholder>
                 [falls bestellt, hier angeben — für viele kleine Anbieter nicht
                 erforderlich]
               </Placeholder>
-            </p> -->
+            </p> */}
           </section>
 
           <section className="space-y-2">
